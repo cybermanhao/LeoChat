@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm --filter @ai-chatbox/shared build:*)",
+      "Bash(pnpm --filter @ai-chatbox/ui build:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm dev:web:*)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(pnpm dev:server:*)",
+      "Bash(dir /b /ad C:code)",
+      "Bash(npx kill-port 3001)",
+      "Bash(taskkill /F /FI \"WINDOWTITLE eq node*\")",
+      "Bash(netstat:*)",
+      "Bash(tree:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm dev)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm --filter @ai-chatbox/electron add:*)",
+      "Bash(pnpm run build:packages:*)",
+      "Skill(dev)",
+      "Bash(pnpm --version:*)",
+      "Bash(npm:*)",
+      "Bash(taskkill //F //PID 23148)",
+      "Bash(taskkill //F //PID 32984)",
+      "Bash(taskkill:*)",
+      "Bash(grep:*)",
+      "Bash(pnpm run build:css:*)",
+      "Bash(pnpm --filter @ai-chatbox/mcp-core build:*)"
+    ]
+  }
+}

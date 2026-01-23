@@ -1,0 +1,30 @@
+{
+  "name": "ai-chatbox-mcp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "AI-Driven Multi-Modal Chatbox with MCP (Model Context Protocol)",
+  "scripts": {
+    "dev": "pnpm run build:packages && pnpm -r --parallel run dev",
+    "build:packages": "pnpm --filter @ai-chatbox/shared --filter @ai-chatbox/ui --filter @ai-chatbox/mcp-core run build",
+    "dev:web": "pnpm --filter @ai-chatbox/web dev",
+    "dev:electron": "pnpm --filter @ai-chatbox/electron dev",
+    "dev:server": "pnpm --filter @ai-chatbox/server dev",
+    "build": "pnpm -r run build",
+    "build:web": "pnpm --filter @ai-chatbox/web build",
+    "build:electron": "pnpm --filter @ai-chatbox/electron build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r run clean && rimraf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

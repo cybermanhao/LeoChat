@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Electron
+release/
+*.asar
+
+# Test
+coverage/
+.nyc_output/
+
+# Temp & Cache
+.tmp/
+.cache/
+*.tmp
+*.temp
+
+# Lock files (keep pnpm-lock.yaml)
+package-lock.json
+yarn.lock
