@@ -1,4 +1,10 @@
-import type { ChatMessage } from "@ai-chatbox/shared";
+import type {
+  ChatMessage,
+  MCPServerConfig,
+  MCPSession,
+  MCPResource,
+  MCPPrompt,
+} from "@ai-chatbox/shared";
 
 const API_BASE = "/api";
 
@@ -130,6 +136,101 @@ export const chatApi = {
     backendConfigured: boolean;
   }> {
     const response = await fetch(`${API_BASE}/llm/config`);
+    return response.json();
+  },
+};
+
+// MCP API
+export const mcpApi = {
+  // Server management
+  async getServers(): Promise<MCPServerConfig[]> {
+    const response = await fetch(`${API_BASE}/mcp/servers`);
+    return response.json();
+  },
+
+  async addServer(config: MCPServerConfig): Promise<{ success: boolean; serverId: string }> {
+    const response = await fetch(`${API_BASE}/mcp/servers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    return response.json();
+  },
+
+  async removeServer(serverId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}`, {
+      method: "DELETE",
+    });
+    return response.json();
+  },
+
+  // Connection control
+  async connect(serverId: string): Promise<MCPSession> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/connect`, {
+      method: "POST",
+    });
+    return response.json();
+  },
+
+  async disconnect(serverId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/disconnect`, {
+      method: "POST",
+    });
+    return response.json();
+  },
+
+  async getSessions(): Promise<MCPSession[]> {
+    const response = await fetch(`${API_BASE}/mcp/sessions`);
+    return response.json();
+  },
+
+  // Server details (config + session + resources + prompts)
+  async getServerDetails(serverId: string): Promise<{
+    config: MCPServerConfig;
+    session?: MCPSession;
+    resources: MCPResource[];
+    prompts: MCPPrompt[];
+  }> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/details`);
+    return response.json();
+  },
+
+  // Resources
+  async readResource(serverId: string, uri: string): Promise<unknown> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/resources/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uri }),
+    });
+    return response.json();
+  },
+
+  // Prompts
+  async getPrompt(
+    serverId: string,
+    name: string,
+    args?: Record<string, string>
+  ): Promise<unknown> {
+    const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/prompts/get`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, args }),
+    });
+    return response.json();
+  },
+
+  // Tools
+  async getTools(): Promise<unknown[]> {
+    const response = await fetch(`${API_BASE}/mcp/tools`);
+    return response.json();
+  },
+
+  async callTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown }> {
+    const response = await fetch(`${API_BASE}/mcp/tools/${name}/call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+    });
     return response.json();
   },
 };

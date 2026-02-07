@@ -34,6 +34,7 @@ export type TaskLoopStatus =
 export interface MessageDelta {
   content_delta?: string;
   reasoning_delta?: string;
+  followup_content_delta?: string;
   tool_calls?: ToolCall[];
 }
 
@@ -68,6 +69,8 @@ export interface TaskLoopToolCallEvent {
   type: "toolcall";
   toolCall: ToolCall;
   messageId: string;
+  /** 工具调用前的累积内容（用于日志） */
+  contentBeforeToolCall?: string;
 }
 
 export interface TaskLoopToolResultEvent {
@@ -96,6 +99,8 @@ export interface TaskLoopDoneEvent {
     input: number;
     output: number;
   };
+  /** 完整的内部消息历史（用于下次发送给 LLM） */
+  internalMessages?: ChatMessage[];
 }
 
 export interface TaskLoopRetryEvent {

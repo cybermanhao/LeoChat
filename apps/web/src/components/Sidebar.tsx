@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Button,
-  ScrollArea,
   Separator,
   Tooltip,
   TooltipContent,
@@ -19,7 +18,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex h-full flex-col border-r bg-muted/30 transition-all duration-300",
+        "flex h-full flex-shrink-0 flex-col border-r bg-muted/30 transition-all duration-300 overflow-hidden",
         collapsed ? "w-14" : "w-64"
       )}
     >
@@ -66,7 +65,7 @@ export function Sidebar() {
       <Separator />
 
       {/* Conversation List */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="p-2 space-y-1">
           {conversations.map((conv) => (
             <div
@@ -119,7 +118,7 @@ export function Sidebar() {
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* MCP Status */}
       {!collapsed && (

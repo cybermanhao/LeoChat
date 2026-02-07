@@ -5,7 +5,7 @@ import type {
   MCPTool,
   MCPCapabilities,
 } from "@ai-chatbox/shared";
-import { createTransport, type MCPTransport } from "./transports";
+import { createTransportAsync, type MCPTransport } from "./transports";
 
 export interface MCPClientOptions {
   config: MCPServerConfig;
@@ -66,13 +66,26 @@ export class MCPClient {
     try {
       this.setStatus("connecting");
 
-      // Create transport based on config
-      this.transport = createTransport(this.config);
+      // Create transport based on config (async)
+      const transportResult = await createTransportAsync(this.config, {
+        hostMode: typeof process !== "undefined" ? "electron" : "web",
+        onStatusChange: (status) => {
+          if (status === "error") {
+            this.setStatus("error");
+          }
+        },
+      });
+
+      if (!transportResult.transport) {
+        throw new Error(transportResult.error || "Failed to create transport");
+      }
+
+      this.transport = transportResult.transport;
 
       // Create MCP client
       this.client = new Client(
         {
-          name: "ai-chatbox",
+          name: "leochat",
           version: "0.0.1",
         },
         {
@@ -92,12 +105,13 @@ export class MCPClient {
         sampling: !!serverCapabilities?.sampling,
       };
 
+      // Mark as connected before refreshing tools
+      this.setStatus("connected");
+
       // List available tools if supported
       if (this.capabilities.tools) {
         await this.refreshTools();
       }
-
-      this.setStatus("connected");
     } catch (error) {
       this.setStatus("error");
       this.onError?.(error instanceof Error ? error : new Error(String(error)));

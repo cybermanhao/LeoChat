@@ -31,6 +31,10 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  /* Popover colors */
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
   /* Border and input */
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -83,6 +87,8 @@
     --app-primary: 222.2 47.4% 11.2%;
   }
 
+  /* Dark mode - apply to :root when .dark class is present on html element */
+  :root.dark,
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -117,10 +123,65 @@
     border-color: theme(colors.border);
   }
 
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     background-color: theme(colors.background);
     color: theme(colors.foreground);
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* 主题切换过渡动画 */
+  :root {
+    --theme-transition-duration: 300ms;
+  }
+
+  /* 应用过渡到所有颜色相关属性 */
+  html,
+  body,
+  * {
+    transition:
+      background-color var(--theme-transition-duration) ease-in-out,
+      border-color var(--theme-transition-duration) ease-in-out,
+      color var(--theme-transition-duration) ease-in-out,
+      fill var(--theme-transition-duration) ease-in-out,
+      stroke var(--theme-transition-duration) ease-in-out,
+      box-shadow var(--theme-transition-duration) ease-in-out;
+  }
+
+  /* 禁用某些元素的过渡（如需要即时响应的元素） */
+  .no-theme-transition,
+  .no-theme-transition * {
+    transition: none !important;
+  }
+
+  /* 主题切换时的全局遮罩动画（可选） */
+  .theme-transitioning::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at center, transparent 0%, hsl(var(--background) / 0.3) 100%);
+    pointer-events: none;
+    z-index: 9999;
+    animation: theme-fade 300ms ease-out forwards;
+  }
+
+  @keyframes theme-fade {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
   }
 }
 

@@ -166,6 +166,13 @@ export class SessionManager {
   }
 
   /**
+   * Get a specific client (for direct access to resources/prompts)
+   */
+  getClient(serverId: string): MCPClient | undefined {
+    return this.clients.get(serverId);
+  }
+
+  /**
    * Check if connected to a server
    */
   isConnected(serverId: string): boolean {

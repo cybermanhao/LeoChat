@@ -3,14 +3,14 @@ import { streamSSE } from "hono/streaming";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
-import type { ChatMessage, MCPServerConfig } from "@ai-chatbox/shared";
+import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
 
 export function createRoutes(context: ServerContext) {
   const app = new Hono();
   const llmService = new LLMService();
   const imageProxy = new ImageProxyService();
 
-  // Chat endpoint with streaming
+  // Chat endpoint with streaming - supports full tool loop
   app.post("/chat", async (c) => {
     const body = await c.req.json<{
       messages: ChatMessage[];
@@ -19,7 +19,7 @@ export function createRoutes(context: ServerContext) {
       stream?: boolean;
     }>();
 
-    const { messages, model, provider, stream = true } = body;
+    const { messages: inputMessages, model, provider, stream = true } = body;
 
     // Get available tools from MCP
     const tools = context.sessionManager.getToolsForLLM();
@@ -27,7 +27,7 @@ export function createRoutes(context: ServerContext) {
     if (!stream) {
       // Non-streaming response
       const response = await llmService.chat({
-        messages,
+        messages: inputMessages,
         model,
         provider,
         tools: tools.length > 0 ? tools : undefined,
@@ -35,66 +35,141 @@ export function createRoutes(context: ServerContext) {
       return c.json(response);
     }
 
-    // Streaming response using SSE
-    return streamSSE(c, async (stream) => {
-      try {
-        await llmService.streamChat(
-          {
-            messages,
-            model,
-            provider,
-            tools: tools.length > 0 ? tools : undefined,
-          },
-          {
-            onChunk: async (chunk) => {
-              await stream.writeSSE({
-                event: "chunk",
-                data: JSON.stringify(chunk),
-              });
-            },
-            onToolCall: async (toolCall) => {
-              await stream.writeSSE({
-                event: "tool_call",
-                data: JSON.stringify(toolCall),
-              });
+    // Streaming response with full tool loop
+    const MAX_TOOL_ROUNDS = 10;
 
-              // Execute tool
-              try {
-                const result = await context.sessionManager.callTool(
-                  toolCall.name,
-                  toolCall.arguments as Record<string, unknown>
-                );
+    return streamSSE(c, async (stream) => {
+      // Internal message history for tool loop
+      let internalMessages = [...inputMessages];
+      let toolRound = 0;
+
+      try {
+        while (toolRound < MAX_TOOL_ROUNDS) {
+          let currentToolCalls: ToolCall[] = [];
+          let hasToolCalls = false;
+          let completedMessage: ChatMessage | null = null;
+
+          await llmService.streamChat(
+            {
+              messages: internalMessages,
+              model,
+              provider,
+              tools: tools.length > 0 ? tools : undefined,
+            },
+            {
+              onChunk: async (chunk) => {
                 await stream.writeSSE({
-                  event: "tool_result",
+                  event: "chunk",
                   data: JSON.stringify({
-                    id: toolCall.id,
-                    result,
+                    ...chunk,
+                    index: Date.now(),
                   }),
                 });
-              } catch (error) {
+              },
+              onToolCall: async (toolCall) => {
+                hasToolCalls = true;
+                currentToolCalls.push(toolCall);
+
                 await stream.writeSSE({
-                  event: "tool_error",
-                  data: JSON.stringify({
-                    id: toolCall.id,
-                    error: error instanceof Error ? error.message : String(error),
-                  }),
+                  event: "tool_call",
+                  data: JSON.stringify(toolCall),
                 });
-              }
-            },
-            onComplete: async (message) => {
-              await stream.writeSSE({
-                event: "complete",
-                data: JSON.stringify(message),
-              });
-            },
-            onError: async (error) => {
-              await stream.writeSSE({
-                event: "error",
-                data: JSON.stringify({ error: error.message }),
-              });
-            },
+
+                // Execute tool
+                try {
+                  const result = await context.sessionManager.callTool(
+                    toolCall.name,
+                    toolCall.arguments as Record<string, unknown>
+                  );
+                  await stream.writeSSE({
+                    event: "tool_result",
+                    data: JSON.stringify({
+                      id: toolCall.id,
+                      result,
+                    }),
+                  });
+
+                  // Update tool call with result for message history
+                  toolCall.status = "completed";
+                  toolCall.result = result;
+                } catch (error) {
+                  const errorMsg = error instanceof Error ? error.message : String(error);
+                  await stream.writeSSE({
+                    event: "tool_error",
+                    data: JSON.stringify({
+                      id: toolCall.id,
+                      error: errorMsg,
+                    }),
+                  });
+
+                  // Update tool call with error
+                  toolCall.status = "error";
+                  toolCall.result = { error: errorMsg };
+                }
+              },
+              onComplete: async (message) => {
+                completedMessage = message;
+                // Don't send complete event here if we have tool calls
+                // We'll send it after the loop finishes
+                if (!hasToolCalls) {
+                  await stream.writeSSE({
+                    event: "complete",
+                    data: JSON.stringify(message),
+                  });
+                }
+              },
+              onError: async (error) => {
+                await stream.writeSSE({
+                  event: "error",
+                  data: JSON.stringify({ error: error.message }),
+                });
+              },
+            }
+          );
+
+          // If no tool calls, we're done
+          if (!hasToolCalls) {
+            break;
           }
-        );
+
+          // Add assistant message with tool calls to history
+          // Capture content from the completed message (text before tool calls)
+          const assistantMessage: ChatMessage = {
+            id: `assistant-${Date.now()}-${toolRound}`,
+            role: "assistant",
+            content: completedMessage?.content || "",
+            tool_calls: currentToolCalls,
+            timestamp: Date.now(),
+          };
+          internalMessages.push(assistantMessage);
+
+          // Add tool result messages to history
+          for (const toolCall of currentToolCalls) {
+            const toolResultMessage: ChatMessage = {
+              id: `tool-${toolCall.id}`,
+              role: "tool",
+              content: typeof toolCall.result === "string"
+                ? toolCall.result
+                : JSON.stringify(toolCall.result),
+              tool_call_id: toolCall.id,
+              timestamp: Date.now(),
+            };
+            internalMessages.push(toolResultMessage);
+          }
+
+          toolRound++;
+        }
+
+        // Send final event with complete message history (only when tool calls happened)
+        if (toolRound > 0) {
+          await stream.writeSSE({
+            event: "final",
+            data: JSON.stringify({
+              toolRounds: toolRound,
+              internalMessages,
+            }),
+          });
+        }
       } catch (error) {
         await stream.writeSSE({
           event: "error",
@@ -156,6 +231,87 @@ export function createRoutes(context: ServerContext) {
 
   app.get("/mcp/tools", (c) => {
     return c.json(context.sessionManager.getAllTools());
+  });
+
+  // Get all server configs
+  app.get("/mcp/servers", (c) => {
+    return c.json(context.sessionManager.getConfigs());
+  });
+
+  // Get server details (session + resources + prompts)
+  app.get("/mcp/servers/:id/details", async (c) => {
+    const serverId = c.req.param("id");
+    const session = context.sessionManager.getSession(serverId);
+    const config = context.sessionManager.getConfig(serverId);
+    const client = context.sessionManager.getClient(serverId);
+
+    if (!config) {
+      return c.json({ error: "Server not found" }, 404);
+    }
+
+    let resources: unknown[] = [];
+    let prompts: unknown[] = [];
+
+    if (client && session?.status === "connected") {
+      try {
+        [resources, prompts] = await Promise.all([
+          client.listResources(),
+          client.listPrompts(),
+        ]);
+      } catch (error) {
+        console.error("Error fetching server details:", error);
+      }
+    }
+
+    return c.json({
+      config,
+      session,
+      resources,
+      prompts,
+    });
+  });
+
+  // Read a resource
+  app.post("/mcp/servers/:id/resources/read", async (c) => {
+    const serverId = c.req.param("id");
+    const { uri } = await c.req.json<{ uri: string }>();
+    const client = context.sessionManager.getClient(serverId);
+
+    if (!client) {
+      return c.json({ error: "Server not connected" }, 400);
+    }
+
+    try {
+      const content = await client.readResource(uri);
+      return c.json(content);
+    } catch (error) {
+      return c.json({
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Get a prompt
+  app.post("/mcp/servers/:id/prompts/get", async (c) => {
+    const serverId = c.req.param("id");
+    const { name, args } = await c.req.json<{
+      name: string;
+      args?: Record<string, string>;
+    }>();
+    const client = context.sessionManager.getClient(serverId);
+
+    if (!client) {
+      return c.json({ error: "Server not connected" }, 400);
+    }
+
+    try {
+      const prompt = await client.getPrompt(name, args);
+      return c.json(prompt);
+    } catch (error) {
+      return c.json({
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
   });
 
   // Tool execution

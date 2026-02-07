@@ -15,6 +15,7 @@ import type {
   CheckpointStorage,
   CheckpointReason,
   ResumeOptions,
+  MessageContentItem,
 } from "@ai-chatbox/shared";
 
 /**
@@ -214,8 +215,15 @@ export class TaskLoop {
       this.messages.push(userMessage);
       this.emit({ type: "add", message: userMessage });
 
-      // 2. 多轮循环
+      // 2. 多轮循环 - 使用同一个 UI 消息 ID，所有内容合并显示
       let epochCount = 0;
+      const uiMessageId = `assistant-${Date.now()}`;
+      let uiMessageCreated = false;
+
+      // 追踪合并后的 UI 消息内容
+      let mergedContent = "";
+      let mergedToolCalls: ToolCall[] = [];
+
       for (let epoch = 0; epoch < this.maxEpochs; epoch++) {
         this.currentEpoch = epoch;
         epochCount = epoch + 1;
@@ -226,28 +234,92 @@ export class TaskLoop {
           return;
         }
 
-        // 2.1 创建 UI 占位消息
-        const uiAssistantMessage: ChatMessage = {
-          id: `assistant-${Date.now()}-${epoch}`,
-          role: "assistant",
-          content: "",
-          timestamp: Date.now(),
-        };
-        this.emit({ type: "add", message: uiAssistantMessage, cardStatus: "connecting" });
+        // 2.1 第一轮创建 UI 占位消息，后续轮次复用
+        if (!uiMessageCreated) {
+          const uiAssistantMessage: ChatMessage = {
+            id: uiMessageId,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+          };
+          this.emit({ type: "add", message: uiAssistantMessage, cardStatus: "connecting" });
+          uiMessageCreated = true;
+        } else {
+          // 后续轮次，发送状态更新
+          this.setStatus("connecting", "connecting");
+        }
 
-        // 2.2 调用 LLM
+        // 2.2 调用 LLM（传入已累积的工具调用，用于 UI 合并显示）
         this.setStatus("connecting", "connecting");
-        const { assistantMessage, needToolCall } = await this.callLLM(uiAssistantMessage.id);
+
+        const { assistantMessage, needToolCall, finalMessages } = await this.callLLM(uiMessageId, mergedToolCalls);
+
+        // 如果后端返回了 finalMessages，表示后端已完成完整的工具调用循环
+        // 直接使用后端的消息历史，跳过前端循环
+        if (finalMessages) {
+          // 使用后端的完整消息历史
+          this.messages = finalMessages;
+
+          // 完成
+          this.setStatus("completed", "stable");
+          this.emit({
+            type: "done",
+            epochCount: 1, // 后端处理所有轮次
+            internalMessages: finalMessages,
+          });
+          return;
+        }
 
         // 2.3 添加完整的 assistant 消息到内部历史
         this.messages.push(assistantMessage);
 
-        // 2.4 检查工具调用
+        // 2.4 合并内容到 UI 消息
+        if (assistantMessage.content) {
+          // 如果已有内容，添加分隔
+          if (mergedContent) {
+            mergedContent += "\n\n";
+          }
+          mergedContent += assistantMessage.content;
+        }
+
+        // 合并工具调用
+        if (assistantMessage.tool_calls?.length) {
+          mergedToolCalls = [...mergedToolCalls, ...assistantMessage.tool_calls];
+        }
+
+        // 2.5 检查工具调用
         if (needToolCall && assistantMessage.tool_calls?.length) {
           this.setStatus("tool_calling", "tool_calling");
 
-          // 执行工具调用
-          await this.executeToolCalls(assistantMessage.tool_calls);
+          // 检查工具是否已由后端执行
+          const allToolsCompleted = assistantMessage.tool_calls.every(
+            tc => tc.status === "completed" || tc.status === "error"
+          );
+
+          if (allToolsCompleted) {
+            // 后端已执行工具，直接添加工具结果消息到历史
+            for (const toolCall of assistantMessage.tool_calls) {
+              const resultContent = toolCall.result
+                ? (typeof toolCall.result === "string"
+                    ? toolCall.result
+                    : JSON.stringify(toolCall.result))
+                : "";
+              const toolResultMessage: ChatMessage = {
+                id: generateId(),
+                role: "tool",
+                content: truncateToolResult(resultContent),
+                tool_call_id: toolCall.id,
+                timestamp: Date.now(),
+              };
+              this.messages.push(toolResultMessage);
+              // 发射 add 事件，将 tool result 消息保存到 conversation 中
+              // UI 中 ChatMessage 组件会过滤掉 role="tool" 的消息，不会显示
+              this.emit({ type: "add", message: toolResultMessage });
+            }
+          } else {
+            // 需要前端执行工具调用
+            await this.executeToolCalls(assistantMessage.tool_calls);
+          }
 
           // 自动检查点（每轮完成后）
           if (this.enableCheckpoints) {
@@ -268,6 +340,8 @@ export class TaskLoop {
       this.emit({
         type: "done",
         epochCount,
+        // 发送完整的内部消息历史，用于前端保存以便下次正确发送给 LLM
+        internalMessages: [...this.messages],
       });
     } catch (error) {
       if ((error as Error).name === "AbortError") {
@@ -293,13 +367,16 @@ export class TaskLoop {
 
   /**
    * 调用 LLM 并流式处理响应（带重试机制）
+   * @param uiMessageId - UI 消息 ID
+   * @param previousToolCalls - 之前轮次已累积的工具调用（用于 UI 合并显示）
    */
-  private async callLLM(uiMessageId: string): Promise<{
+  private async callLLM(uiMessageId: string, previousToolCalls: ToolCall[] = []): Promise<{
     assistantMessage: ChatMessage;
     needToolCall: boolean;
+    finalMessages?: ChatMessage[];
   }> {
     return withRetry(
-      (signal) => this.executeLLMRequest(uiMessageId, signal),
+      (signal) => this.executeLLMRequest(uiMessageId, signal, previousToolCalls),
       this.retryConfig,
       this.circuitBreaker,
       (event) => {
@@ -318,14 +395,16 @@ export class TaskLoop {
 
   /**
    * 实际执行 LLM 请求
+   * @param previousToolCalls - 之前轮次已累积的工具调用
    */
   private async executeLLMRequest(
     uiMessageId: string,
-    signal: AbortSignal
-  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean }> {
+    signal: AbortSignal,
+    previousToolCalls: ToolCall[] = []
+  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean; finalMessages?: ChatMessage[] }> {
     // 使用后端代理模式
     if (this.useBackendProxy) {
-      return this.executeBackendProxyRequest(uiMessageId, signal);
+      return this.executeBackendProxyRequest(uiMessageId, signal, previousToolCalls);
     }
 
     // 直连模式
@@ -363,11 +442,13 @@ export class TaskLoop {
 
   /**
    * 通过后端代理执行 LLM 请求
+   * @param previousToolCalls - 之前轮次已累积的工具调用（用于 UI 合并显示）
    */
   private async executeBackendProxyRequest(
     uiMessageId: string,
-    signal: AbortSignal
-  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean }> {
+    signal: AbortSignal,
+    previousToolCalls: ToolCall[] = []
+  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean; finalMessages?: ChatMessage[] }> {
     const response = await fetch(`${this.backendURL}/api/chat`, {
       method: "POST",
       headers: {
@@ -388,17 +469,20 @@ export class TaskLoop {
     }
 
     // 处理后端 SSE 响应
-    return this.processBackendSSEResponse(response, uiMessageId);
+    return this.processBackendSSEResponse(response, uiMessageId, previousToolCalls);
   }
 
   /**
    * 处理后端 SSE 响应格式
-   * 后端使用的事件: chunk, tool_call, tool_result, complete, error
+   * 后端使用的事件: chunk, tool_call, tool_result, complete, final, error
+   * 后端现在处理完整的工具调用循环，前端只需要一次请求
+   * @param previousToolCalls - 之前轮次已累积的工具调用（用于 UI 合并显示）
    */
   private async processBackendSSEResponse(
     response: Response,
-    uiMessageId: string
-  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean }> {
+    uiMessageId: string,
+    previousToolCalls: ToolCall[] = []
+  ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean; finalMessages?: ChatMessage[] }> {
     const reader = response.body?.getReader();
     if (!reader) {
       throw new Error("No response body");
@@ -408,8 +492,11 @@ export class TaskLoop {
     let buffer = "";
     let content = "";
     let reasoning_content = "";
+    let currentTextContent = "";  // 当前文本段（用于增量构建 contentItems）
+    const contentItems: MessageContentItem[] = [];  // 增量构建，保持时序
     const toolCalls: ToolCall[] = [];
     let hasEmittedThinking = false;
+    let finalMessages: ChatMessage[] | undefined;
 
     try {
       while (true) {
@@ -433,6 +520,13 @@ export class TaskLoop {
           try {
             const parsed = JSON.parse(data);
 
+            // 处理 final 事件 - 后端完成完整的工具调用循环后发送
+            if (parsed.internalMessages !== undefined) {
+              // final 事件，包含完整的内部消息历史
+              finalMessages = parsed.internalMessages;
+              continue;
+            }
+
             // 通过 index 字段区分 chunk 和 complete 事件
             // chunk 事件有 index 字段，complete 事件没有
             if ((parsed.content !== undefined || parsed.reasoning !== undefined) && parsed.index !== undefined) {
@@ -442,9 +536,10 @@ export class TaskLoop {
                 hasEmittedThinking = true;
               }
 
-              // 处理 content
+              // 处理 content - 累积到 content（LLM上下文）和 currentTextContent（当前文本段）
               if (parsed.content) {
                 content += parsed.content;
+                currentTextContent += parsed.content;
               }
 
               // 处理 reasoning
@@ -457,23 +552,97 @@ export class TaskLoop {
                 messageId: uiMessageId,
                 delta: {
                   content_delta: parsed.content,
-                  reasoning_delta: parsed.reasoning
+                  reasoning_delta: parsed.reasoning,
                 },
               });
-            } else if (parsed.id && parsed.name && parsed.arguments !== undefined) {
-              // tool_call 事件
-              toolCalls.push({
-                id: parsed.id,
-                name: parsed.name,
-                arguments: parsed.arguments,
-                status: "pending",
-              });
+            } else if (parsed.id && parsed.name && parsed.arguments !== undefined && parsed.result === undefined) {
+              // tool_call 事件（有 id, name, arguments 但没有 result）
+
+              // 检查是否已存在相同ID的工具调用，避免重复添加
+              const existingToolCall = toolCalls.find(tc => tc.id === parsed.id);
+              if (!existingToolCall) {
+                // Flush 当前文本段到 contentItems（保持时序）
+                if (currentTextContent) {
+                  contentItems.push({
+                    id: generateId(),
+                    type: 'text',
+                    content: currentTextContent,
+                    timestamp: Date.now(),
+                  });
+                  currentTextContent = "";
+                }
+
+                const toolCall: ToolCall = {
+                  id: parsed.id,
+                  name: parsed.name,
+                  arguments: parsed.arguments,
+                  status: "pending", // 初始状态为 pending
+                };
+                toolCalls.push(toolCall);
+
+                // 添加 tool-call 到 contentItems
+                contentItems.push({
+                  id: generateId(),
+                  type: 'tool-call',
+                  content: toolCall,
+                  timestamp: Date.now(),
+                  status: 'pending',
+                });
+
+                // 立即更新消息的 tool_calls，合并之前轮次的工具调用
+                this.emit({
+                  type: "update",
+                  messageId: uiMessageId,
+                  delta: { tool_calls: [...previousToolCalls, ...toolCalls] },
+                });
+
+                // 发送工具调用事件（用于更新 toolCallStates）
+                this.emit({
+                  type: "toolcall",
+                  messageId: uiMessageId,
+                  toolCall,
+                  contentBeforeToolCall: content,  // 携带工具调用前的累积内容
+                });
+              }
+            } else if (parsed.id && parsed.result !== undefined) {
+              // tool_result 事件
+              // 更新工具调用状态
+              const toolCall = toolCalls.find((tc) => tc.id === parsed.id);
+              if (toolCall) {
+                toolCall.status = "completed";
+                toolCall.result = parsed.result;
+
+                this.emit({
+                  type: "toolresult",
+                  toolCallId: parsed.id,
+                  result: parsed.result,
+                });
+              }
+            } else if (parsed.id && parsed.error !== undefined) {
+              // tool_error 事件
+              // 更新工具调用状态
+              const toolCall = toolCalls.find((tc) => tc.id === parsed.id);
+              if (toolCall) {
+                toolCall.status = "error";
+                toolCall.result = { error: parsed.error };
+
+                // 发送 toolresult 事件带上 error，让前端更新状态
+                this.emit({
+                  type: "toolresult",
+                  toolCallId: parsed.id,
+                  result: null,
+                  error: parsed.error,
+                });
+              }
             } else if (parsed.error) {
               // error 事件
               throw new Error(parsed.error);
             } else if (parsed.role === "assistant") {
               // complete 事件（完整的消息对象）
-              // 已在循环中处理，这里可以忽略
+              // 使用 complete 事件的 content（如果有的话）
+              if (parsed.content && !content) {
+                content = parsed.content;
+              }
             }
           } catch (e) {
             if (e instanceof SyntaxError) {
@@ -488,31 +657,52 @@ export class TaskLoop {
       reader.releaseLock();
     }
 
-    // 如果有工具调用，发送更新
+    // 如果有工具调用，发送更新（合并之前轮次的工具调用用于 UI 显示）
     if (toolCalls.length > 0) {
       this.emit({
         type: "update",
         messageId: uiMessageId,
-        delta: { tool_calls: toolCalls },
+        delta: { tool_calls: [...previousToolCalls, ...toolCalls] },
       });
     }
 
-    // 构建完整的 assistant 消息
+    // Flush 剩余文本到 contentItems
+    if (currentTextContent) {
+      contentItems.push({
+        id: generateId(),
+        type: 'text',
+        content: currentTextContent,
+        timestamp: Date.now(),
+      });
+    }
+
     const assistantMessage: ChatMessage = {
-      id: uiMessageId,
+      id: generateId(), // 使用唯一 ID，避免内部消息历史中的 ID 冲突
       role: "assistant",
-      content,
+      content: content || '',  // 保持 content 字段用于 LLM 上下文
+      contentItems,  // 用于 UI 显示
+      tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       reasoning_content: reasoning_content || undefined,
       timestamp: Date.now(),
-      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       metadata: {
         model: this.llmConfig.model,
       },
     };
 
+    // 如果收到 final 事件，表示后端已完成完整的工具调用循环
+    // 前端不需要再循环，直接返回 needToolCall: false
+    if (finalMessages) {
+      return {
+        assistantMessage,
+        needToolCall: false,  // 后端已完成所有工具调用，无需前端继续循环
+        finalMessages,  // 返回完整的消息历史
+      };
+    }
+
+    // 没有 final 事件，可能是旧版后端或无工具调用
     return {
       assistantMessage,
-      needToolCall: toolCalls.length > 0,
+      needToolCall: false,  // 后端代理模式下默认不需要前端循环
     };
   }
 
@@ -739,7 +929,9 @@ export class TaskLoop {
       }
     }
 
-    // 将工具结果添加到消息历史
+    // 将工具结果添加到内部消息历史并发射 add 事件
+    // UI 中 ChatMessage 组件会过滤掉 role="tool" 的消息，不会显示
+    // 但 tool result 消息必须保存到 conversation 中，以便下次对话时发送给 LLM
     for (const result of toolResults) {
       this.messages.push(result);
       this.emit({ type: "add", message: result });

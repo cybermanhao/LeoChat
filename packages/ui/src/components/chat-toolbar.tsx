@@ -9,6 +9,7 @@ import {
   Code2,
   Globe,
   FileText,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./button";
@@ -41,9 +42,11 @@ export interface ChatToolbarProps {
   onImageGenClick?: () => void;
   onCodeClick?: () => void;
   onMarkdownClick?: () => void;
+  onPromptClick?: () => void;
   mcpServerCount?: number;
   currentModel?: string;
   currentProvider?: string;
+  currentPrompt?: string;
   webSearchEnabled?: boolean;
   imageGenEnabled?: boolean;
   codeEnabled?: boolean;
@@ -65,9 +68,11 @@ const ChatToolbar = React.forwardRef<HTMLDivElement, ChatToolbarProps>(
       onImageGenClick,
       onCodeClick,
       onMarkdownClick,
+      onPromptClick,
       mcpServerCount = 0,
       currentModel,
       currentProvider,
+      currentPrompt,
       webSearchEnabled = false,
       imageGenEnabled = false,
       codeEnabled = false,
@@ -98,6 +103,17 @@ const ChatToolbar = React.forwardRef<HTMLDivElement, ChatToolbarProps>(
                 ? `${currentProvider}/${currentModel || "模型"}`
                 : (currentModel || "选择模型"),
               onClick: onProviderClick || onModelClick,
+            },
+          ]
+        : []),
+      ...(onPromptClick
+        ? [
+            {
+              id: "prompt",
+              icon: <MessageSquareText className="h-4 w-4" />,
+              label: currentPrompt || "系统提示",
+              onClick: onPromptClick,
+              active: !!currentPrompt,
             },
           ]
         : []),

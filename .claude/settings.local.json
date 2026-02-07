@@ -27,7 +27,31 @@
       "Bash(taskkill:*)",
       "Bash(grep:*)",
       "Bash(pnpm run build:css:*)",
-      "Bash(pnpm --filter @ai-chatbox/mcp-core build:*)"
+      "Bash(pnpm --filter @ai-chatbox/mcp-core build:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(pnpm --filter @ai-chatbox/ui add @radix-ui/react-switch)",
+      "Bash(cd:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd.exe //c \"taskkill /PID 16540 /F\")",
+      "Bash(pnpm --filter @ai-chatbox/mcp-ui-control build:*)",
+      "Bash(pnpm dev:backend:*)",
+      "Bash(powershell -Command \"Rename-Item -Path ''C:\\\\code\\\\LeoChat\\\\packages\\\\mcp-ui-control'' -NewName ''leochat-mcp''\")",
+      "Bash(dir \"C:\\\\code\\\\LeoChat\\\\packages\")",
+      "Bash(pnpm --filter leochat-mcp build)",
+      "Bash(timeout /t 3)",
+      "Bash(xargs:*)",
+      "Bash(pnpm build:packages:*)",
+      "Bash(pnpm --filter @ai-chatbox/mcp-core run build)",
+      "Bash(timeout:*)",
+      "Bash(ping -n 3 127.0.0.)",
+      "Bash(echo.)",
+      "Bash(ping:*)",
+      "Bash(cmd //c \"taskkill /PID 25120 /F\")",
+      "Bash(pnpm:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 19732 -Force\")",
+      "mcp__claude_ai_Mermaid_Chart__validate_and_render_mermaid_diagram",
+      "Bash(curl:*)"
     ]
   }
 }

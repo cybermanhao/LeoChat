@@ -7,8 +7,10 @@ export * from "./dropdown-menu";
 export * from "./scroll-area";
 export * from "./separator";
 export * from "./skeleton";
+export * from "./switch";
 export * from "./toast";
 export * from "./tooltip";
+export * from "./popover";
 
 // Custom Chat Components
 export * from "./chat-message";
@@ -16,4 +18,9 @@ export * from "./chat-input";
 export * from "./chat-toolbar";
 export * from "./streaming-content";
 export * from "./action-button";
+export * from "./action-card";
 export * from "./code-block";
+export * from "./message-actions";
+export * from "./mcp-quick-panel";
+export * from "./prompt-panel";
+export * from "./tool-call-block";
