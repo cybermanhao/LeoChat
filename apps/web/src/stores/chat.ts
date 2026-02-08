@@ -50,6 +50,8 @@ export interface ToolCallState {
   uiCommandExecuted?: boolean;
   startTime: number;
   endTime?: number;
+  /** Tool execution duration in ms (from TaskLoop) */
+  duration?: number;
 }
 
 // TaskLoop 实例接口（最小化，避免导入依赖）
@@ -428,6 +430,7 @@ export const useChatStore = create<ChatState>()(
                     result: event.error ? undefined : rawResult,
                     error: event.error,
                     endTime,
+                    duration: event.duration,
                   },
                 },
               };

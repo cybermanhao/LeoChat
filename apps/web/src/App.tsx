@@ -10,6 +10,7 @@ export function App() {
   const { currentTheme, applyTheme } = useThemeStore();
   const initFromBackendConfig = useChatStore((s) => s.initFromBackendConfig);
   const initBuiltinServers = useMCPStore((s) => s.initBuiltinServers);
+  const autoConnectAll = useMCPStore((s) => s.autoConnectAll);
 
   useEffect(() => {
     applyTheme(currentTheme);
@@ -19,6 +20,14 @@ export function App() {
   useEffect(() => {
     initBuiltinServers();
   }, [initBuiltinServers]);
+
+  // 延迟自动连接 MCP 服务器，确保 GUI 已渲染
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      autoConnectAll();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoConnectAll]);
 
   // 启动时从后端获取 LLM 配置
   useEffect(() => {

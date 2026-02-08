@@ -83,6 +83,24 @@ export class TaskLoop {
   private useBackendProxy: boolean;
   private backendURL: string;
 
+  // 上下文与容错
+  private contextLength: number;
+  private maxJsonParseRetry: number;
+
+  // Token 消费统计
+  private totalInputTokens: number = 0;
+  private totalOutputTokens: number = 0;
+
+  // 工具调用拦截钩子
+  private onToolCallHooks: Array<{
+    id: string;
+    handler: (toolCall: ToolCall) => ToolCall;
+  }> = [];
+  private onToolCalledHooks: Array<{
+    id: string;
+    handler: (toolCallId: string, result: unknown) => unknown;
+  }> = [];
+
   constructor(opts: TaskLoopOptions) {
     this.chatId = opts.chatId;
     // 深拷贝历史消息，避免外部状态干扰
@@ -123,6 +141,10 @@ export class TaskLoop {
     this.useBackendProxy = opts.useBackendProxy ?? false;
     this.backendURL = opts.backendURL ?? DEFAULT_BACKEND_URL;
 
+    // 上下文与容错
+    this.contextLength = opts.contextLength ?? 0;
+    this.maxJsonParseRetry = opts.maxJsonParseRetry ?? 3;
+
     // 确保包含 system 消息
     if (opts.systemPrompt) {
       this.ensureSystemMessage(opts.systemPrompt);
@@ -151,6 +173,28 @@ export class TaskLoop {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * 注册工具调用前拦截钩子（可修改参数）
+   */
+  registerOnToolCall(handler: (toolCall: ToolCall) => ToolCall): () => void {
+    const id = generateId();
+    this.onToolCallHooks.push({ id, handler });
+    return () => {
+      this.onToolCallHooks = this.onToolCallHooks.filter(h => h.id !== id);
+    };
+  }
+
+  /**
+   * 注册工具调用后拦截钩子（可修改结果）
+   */
+  registerOnToolCalled(handler: (toolCallId: string, result: unknown) => unknown): () => void {
+    const id = generateId();
+    this.onToolCalledHooks.push({ id, handler });
+    return () => {
+      this.onToolCalledHooks = this.onToolCalledHooks.filter(h => h.id !== id);
     };
   }
 
@@ -224,6 +268,9 @@ export class TaskLoop {
       let mergedContent = "";
       let mergedToolCalls: ToolCall[] = [];
 
+      // JSON 解析错误重试计数
+      let jsonParseErrorCount = 0;
+
       for (let epoch = 0; epoch < this.maxEpochs; epoch++) {
         this.currentEpoch = epoch;
         epochCount = epoch + 1;
@@ -289,6 +336,36 @@ export class TaskLoop {
 
         // 2.5 检查工具调用
         if (needToolCall && assistantMessage.tool_calls?.length) {
+          // JSON 解析错误检测 - 检查是否有工具参数包含 raw 字段（解析失败的标志）
+          const parseErrorTools = assistantMessage.tool_calls.filter(
+            tc => tc.arguments && typeof tc.arguments === "object" && "raw" in tc.arguments && Object.keys(tc.arguments).length === 1
+          );
+          if (parseErrorTools.length > 0) {
+            jsonParseErrorCount++;
+            if (jsonParseErrorCount >= this.maxJsonParseRetry) {
+              // 超过最大重试次数，终止
+              const errorMsg: ChatMessage = {
+                id: generateId(),
+                role: "assistant",
+                content: `工具参数 JSON 解析错误，已重试 ${this.maxJsonParseRetry} 次仍然失败，无法继续调用工具。`,
+                timestamp: Date.now(),
+              };
+              this.messages.push(errorMsg);
+              this.emit({ type: "update", messageId: uiMessageId, delta: { content_delta: errorMsg.content } });
+              break;
+            }
+            // 向 LLM 发送纠错消息，要求重新生成合法 JSON
+            const toolNames = parseErrorTools.map(tc => tc.name).join(", ");
+            const retryMsg: ChatMessage = {
+              id: generateId(),
+              role: "user",
+              content: `你调用 ${toolNames} 提供的参数解析 JSON 错误，请重新生成合法 JSON 作为参数。(累计错误次数: ${jsonParseErrorCount})`,
+              timestamp: Date.now(),
+            };
+            this.messages.push(retryMsg);
+            continue;
+          }
+
           this.setStatus("tool_calling", "tool_calling");
 
           // 检查工具是否已由后端执行
@@ -340,6 +417,9 @@ export class TaskLoop {
       this.emit({
         type: "done",
         epochCount,
+        totalTokens: (this.totalInputTokens > 0 || this.totalOutputTokens > 0)
+          ? { input: this.totalInputTokens, output: this.totalOutputTokens }
+          : undefined,
         // 发送完整的内部消息历史，用于前端保存以便下次正确发送给 LLM
         internalMessages: [...this.messages],
       });
@@ -394,6 +474,19 @@ export class TaskLoop {
   }
 
   /**
+   * 获取上下文截断后的消息列表
+   */
+  private getContextMessages(): ChatMessage[] {
+    if (!this.contextLength || this.contextLength <= 0) {
+      return this.messages;
+    }
+    const systemMessages = this.messages.filter(m => m.role === "system");
+    const nonSystemMessages = this.messages.filter(m => m.role !== "system");
+    const truncated = nonSystemMessages.slice(-this.contextLength);
+    return [...systemMessages, ...truncated];
+  }
+
+  /**
    * 实际执行 LLM 请求
    * @param previousToolCalls - 之前轮次已累积的工具调用
    */
@@ -414,8 +507,9 @@ export class TaskLoop {
       ? this.adapter.convertTools(this.mcpTools, this.llmConfig.model)
       : undefined;
 
+    const messagesToSend = this.getContextMessages();
     const body = this.adapter.buildRequestBody(
-      this.messages,
+      messagesToSend,
       tools,
       this.llmConfig
     );
@@ -449,13 +543,14 @@ export class TaskLoop {
     signal: AbortSignal,
     previousToolCalls: ToolCall[] = []
   ): Promise<{ assistantMessage: ChatMessage; needToolCall: boolean; finalMessages?: ChatMessage[] }> {
+    const messagesToSend = this.getContextMessages();
     const response = await fetch(`${this.backendURL}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        messages: this.messages,
+        messages: messagesToSend,
         model: this.llmConfig.model,
         provider: this.llmConfig.provider,
         stream: true,
@@ -725,6 +820,7 @@ export class TaskLoop {
     const toolCallsMap = new Map<number, { id?: string; name?: string; arguments?: string | Record<string, unknown> }>();
     let finishReason: string | undefined;
     let hasEmittedThinking = false;
+    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
 
     try {
       while (true) {
@@ -797,6 +893,11 @@ export class TaskLoop {
             if (parsed.finish_reason) {
               finishReason = parsed.finish_reason;
             }
+
+            // 提取 usage（通常在最后一个 chunk 中）
+            if (parsed.usage) {
+              usage = parsed.usage;
+            }
           } catch {
             // 忽略解析错误
           }
@@ -849,8 +950,18 @@ export class TaskLoop {
       metadata: {
         model: this.llmConfig.model,
         finishReason,
+        tokens: usage ? {
+          input: usage.prompt_tokens || 0,
+          output: usage.completion_tokens || 0,
+        } : undefined,
       },
     };
+
+    // 累积 token 消费
+    if (usage) {
+      this.totalInputTokens += usage.prompt_tokens || 0;
+      this.totalOutputTokens += usage.completion_tokens || 0;
+    }
 
     return {
       assistantMessage,
@@ -867,25 +978,40 @@ export class TaskLoop {
     }
 
     const executeOne = async (toolCall: ToolCall): Promise<ChatMessage> => {
+      // 应用 pre-call 钩子（可修改参数）
+      let modifiedToolCall = { ...toolCall };
+      for (const hook of this.onToolCallHooks) {
+        modifiedToolCall = hook.handler(modifiedToolCall);
+      }
+
       // 发出工具调用开始事件
       this.emit({
         type: "toolcall",
-        toolCall: { ...toolCall, status: "running" },
-        messageId: toolCall.id,
+        toolCall: { ...modifiedToolCall, status: "running" },
+        messageId: modifiedToolCall.id,
       });
 
       try {
-        const result = await this.onToolCall!(toolCall.name, toolCall.arguments);
+        const startTime = Date.now();
+        let result = await this.onToolCall!(modifiedToolCall.name, modifiedToolCall.arguments);
+        const duration = Date.now() - startTime;
+
+        // 应用 post-call 钩子（可修改结果）
+        for (const hook of this.onToolCalledHooks) {
+          result = hook.handler(modifiedToolCall.id, result);
+        }
+
         const resultStr = typeof result === "string"
           ? result
           : JSON.stringify(result, null, 2);
         const truncatedResult = truncateToolResult(resultStr);
 
-        // 发出工具结果事件
+        // 发出工具结果事件（包含耗时）
         this.emit({
           type: "toolresult",
-          toolCallId: toolCall.id,
+          toolCallId: modifiedToolCall.id,
           result: truncatedResult,
+          duration,
         });
 
         // 构建工具结果消息
@@ -893,7 +1019,7 @@ export class TaskLoop {
           id: generateId(),
           role: "tool",
           content: truncatedResult,
-          tool_call_id: toolCall.id,
+          tool_call_id: modifiedToolCall.id,
           timestamp: Date.now(),
         };
       } catch (error) {
@@ -902,7 +1028,7 @@ export class TaskLoop {
         // 发出工具错误事件
         this.emit({
           type: "toolresult",
-          toolCallId: toolCall.id,
+          toolCallId: modifiedToolCall.id,
           result: null,
           error: errorMessage,
         });
@@ -912,7 +1038,7 @@ export class TaskLoop {
           id: generateId(),
           role: "tool",
           content: `Error: ${errorMessage}`,
-          tool_call_id: toolCall.id,
+          tool_call_id: modifiedToolCall.id,
           timestamp: Date.now(),
         };
       }

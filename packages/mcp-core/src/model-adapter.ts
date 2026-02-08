@@ -104,6 +104,7 @@ class OpenAIAdapter implements ModelAdapterInstance {
       arguments_delta?: string;
     }>;
     finish_reason?: string;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   } {
     try {
       const parsed = JSON.parse(chunk);
@@ -120,6 +121,7 @@ class OpenAIAdapter implements ModelAdapterInstance {
           arguments_delta?: string;
         }>;
         finish_reason?: string;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       } = {};
 
       if (delta?.content) {
@@ -143,6 +145,14 @@ class OpenAIAdapter implements ModelAdapterInstance {
 
       if (finish_reason) {
         result.finish_reason = finish_reason;
+      }
+
+      // 提取 usage（通常在最后一个 chunk 中）
+      if (parsed.usage) {
+        result.usage = {
+          prompt_tokens: parsed.usage.prompt_tokens,
+          completion_tokens: parsed.usage.completion_tokens,
+        };
       }
 
       return result;

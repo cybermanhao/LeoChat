@@ -49,6 +49,7 @@ interface MCPState {
   sources: MCPSource[];
   serverStates: Record<string, MCPServerState>;
   enabledServerIds: string[];
+  autoConnectServerIds: string[];
 
   // 运行时状态
   quickPanelOpen: boolean;
@@ -83,6 +84,10 @@ interface MCPState {
   // 数据获取
   fetchServerDetails: (serverId: string) => Promise<void>;
 
+  // 自动连接
+  setAutoConnect: (serverId: string, enabled: boolean) => void;
+  autoConnectAll: () => Promise<void>;
+
   // 初始化
   initBuiltinServers: () => void;
   syncWithBackend: () => Promise<void>;
@@ -108,6 +113,7 @@ export const useMCPStore = create<MCPState>()(
       ],
       serverStates: {},
       enabledServerIds: [],
+      autoConnectServerIds: [],
 
       // 运行时状态
       quickPanelOpen: false,
@@ -173,6 +179,7 @@ export const useMCPStore = create<MCPState>()(
             servers: source.servers.filter((s) => s.id !== serverId),
           })),
           enabledServerIds: state.enabledServerIds.filter((id) => id !== serverId),
+          autoConnectServerIds: state.autoConnectServerIds.filter((id) => id !== serverId),
           serverStates: Object.fromEntries(
             Object.entries(state.serverStates).filter(([id]) => id !== serverId)
           ),
@@ -308,6 +315,38 @@ export const useMCPStore = create<MCPState>()(
         }
       },
 
+      // 自动连接
+      setAutoConnect: (serverId, enabled) => {
+        set((state) => ({
+          autoConnectServerIds: enabled
+            ? [...state.autoConnectServerIds.filter(id => id !== serverId), serverId]
+            : state.autoConnectServerIds.filter(id => id !== serverId),
+        }));
+      },
+
+      autoConnectAll: async () => {
+        const { autoConnectServerIds, enabledServerIds, connectServer } = get();
+        // 只连接尚未连接的服务器
+        const toConnect = autoConnectServerIds.filter(id => !enabledServerIds.includes(id));
+        if (toConnect.length === 0) return;
+
+        console.log("[MCP] Auto-connect starting:", toConnect.length, "servers");
+
+        for (const serverId of toConnect) {
+          try {
+            await connectServer(serverId);
+            console.log("[MCP] Auto-connected:", serverId);
+          } catch (error) {
+            console.warn("[MCP] Auto-connect failed:", serverId, error);
+            // 继续连接下一个，不阻塞
+          }
+          // 每个连接之间延迟 500ms，避免同时 spawn 多个进程
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        console.log("[MCP] Auto-connect complete");
+      },
+
       // 初始化
       initBuiltinServers: () => {
         // 重置内置服务列表为最新的 BUILTIN_SERVERS，清理废弃的服务
@@ -383,10 +422,11 @@ export const useMCPStore = create<MCPState>()(
         // 内置服务器列表始终从 BUILTIN_SERVERS 常量获取
         customServers: state.sources.find((s) => s.id === "custom")?.servers || [],
         enabledServerIds: state.enabledServerIds,
+        autoConnectServerIds: state.autoConnectServerIds,
       }),
       // 从持久化数据恢复时，重建完整的 sources
       merge: (persisted, current) => {
-        const persistedData = persisted as { customServers?: MCPServerConfig[]; enabledServerIds?: string[] };
+        const persistedData = persisted as { customServers?: MCPServerConfig[]; enabledServerIds?: string[]; autoConnectServerIds?: string[] };
         return {
           ...current,
           sources: [
@@ -404,6 +444,7 @@ export const useMCPStore = create<MCPState>()(
             },
           ],
           enabledServerIds: persistedData.enabledServerIds || [],
+          autoConnectServerIds: persistedData.autoConnectServerIds || [],
         };
       },
     }

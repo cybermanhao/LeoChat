@@ -78,6 +78,8 @@ export interface TaskLoopToolResultEvent {
   toolCallId: string;
   result: unknown;
   error?: string;
+  /** Tool execution duration in ms */
+  duration?: number;
 }
 
 export interface TaskLoopStatusEvent {
@@ -164,6 +166,10 @@ export interface TaskLoopOptions {
   // 后端代理模式配置
   useBackendProxy?: boolean;           // 是否使用后端代理（API 密钥在服务端）
   backendURL?: string;                 // 后端 URL，默认 http://localhost:3001
+
+  // 上下文与容错
+  contextLength?: number;              // 发送给 LLM 的最大消息数（0=不限制）
+  maxJsonParseRetry?: number;          // 工具参数 JSON 解析失败最大重试次数，默认 3
 }
 
 /**
@@ -228,6 +234,10 @@ export interface ModelAdapter {
     reasoning_delta?: string;
     tool_calls?: Partial<ToolCall>[];
     finish_reason?: string;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+    };
   };
 
   /**

@@ -51,7 +51,12 @@
       "Bash(pnpm:*)",
       "Bash(powershell -Command \"Stop-Process -Id 19732 -Force\")",
       "mcp__claude_ai_Mermaid_Chart__validate_and_render_mermaid_diagram",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npx tsc:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\code\\ai\\openmcp-client",
+      "C:\\code\\zz-ai-chat"
     ]
   }
 }
