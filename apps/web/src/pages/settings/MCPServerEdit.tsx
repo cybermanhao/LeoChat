@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Server, Wrench, FileText, Zap } from "lucide-react";
+import { ArrowLeft, Server, Wrench, FileText, Zap, Check, AlertCircle, RefreshCw } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
@@ -10,6 +10,8 @@ import { MCPPromptsTab } from "../../components/mcp/MCPPromptsTab";
 import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
 
 type TabValue = "settings" | "tools" | "resources" | "prompts";
+
+type SaveStatus = null | "saved" | "restarting" | "restarted" | "error";
 
 export function MCPServerEditPage() {
   const { serverId } = useParams<{ serverId: string }>();
@@ -24,6 +26,7 @@ export function MCPServerEditPage() {
 
   const [activeTab, setActiveTab] = useState<TabValue>("settings");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(null);
 
   // 查找服务器配置
   const server = useMemo(() => {
@@ -57,19 +60,24 @@ export function MCPServerEditPage() {
 
   const handleSave = async (data: MCPServerConfigValidated) => {
     setIsSaving(true);
+    setSaveStatus(null);
     try {
-      // 更新服务器配置
       updateServer(serverId, data);
+      setSaveStatus("saved");
 
-      // 如果服务器已连接，重启连接以应用新配置
+      // 如果服务器已连接，自动重启以应用新配置
       if (isConnected) {
+        setSaveStatus("restarting");
         await refreshServer(serverId);
+        setSaveStatus("restarted");
       }
 
-      // 提示成功（可以添加 toast）
-      console.log("Server configuration saved successfully");
+      // 3 秒后隐藏提示
+      setTimeout(() => setSaveStatus(null), 3000);
     } catch (error) {
       console.error("Failed to save server configuration:", error);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus(null), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -180,9 +188,9 @@ export function MCPServerEditPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 max-w-5xl mx-auto px-6 py-6 w-full">
+      <div className="flex-1 min-h-0 max-w-5xl mx-auto px-6 py-6 w-full flex flex-col">
         {activeTab === "settings" && (
-          <div className="bg-card rounded-lg border p-6">
+          <div className="bg-card rounded-lg border p-6 overflow-y-auto">
             <ServerForm
               defaultValues={server as any}
               onSubmit={handleSave}
@@ -192,19 +200,19 @@ export function MCPServerEditPage() {
         )}
 
         {activeTab === "tools" && isConnected && (
-          <div className="bg-card rounded-lg border h-[600px] flex flex-col">
+          <div className="bg-card rounded-lg border flex-1 min-h-0 flex flex-col overflow-hidden">
             <MCPToolsTab />
           </div>
         )}
 
         {activeTab === "resources" && isConnected && (
-          <div className="bg-card rounded-lg border h-[600px] flex flex-col">
+          <div className="bg-card rounded-lg border flex-1 min-h-0 flex flex-col overflow-hidden">
             <MCPResourcesTab />
           </div>
         )}
 
         {activeTab === "prompts" && isConnected && (
-          <div className="bg-card rounded-lg border">
+          <div className="bg-card rounded-lg border flex-1 min-h-0 flex flex-col overflow-hidden">
             <MCPPromptsTab />
           </div>
         )}
@@ -221,6 +229,43 @@ export function MCPServerEditPage() {
           </div>
         )}
       </div>
+
+      {/* Save Status Toast */}
+      {saveStatus && (
+        <div
+          className={cn(
+            "fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium transition-all",
+            saveStatus === "error"
+              ? "bg-red-500 text-white"
+              : "bg-card border text-foreground"
+          )}
+        >
+          {saveStatus === "saved" && (
+            <>
+              <Check className="h-4 w-4 text-green-500" />
+              配置已保存
+            </>
+          )}
+          {saveStatus === "restarting" && (
+            <>
+              <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              正在重启服务器以应用新配置...
+            </>
+          )}
+          {saveStatus === "restarted" && (
+            <>
+              <Check className="h-4 w-4 text-green-500" />
+              配置已保存，服务器已重启
+            </>
+          )}
+          {saveStatus === "error" && (
+            <>
+              <AlertCircle className="h-4 w-4" />
+              保存失败，请重试
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

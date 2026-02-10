@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -6,11 +6,282 @@ import {
   type MCPServerConfigValidated,
 } from "@ai-chatbox/shared";
 import { Button, cn } from "@ai-chatbox/ui";
-import { Terminal, Globe, ChevronDown, ChevronRight } from "lucide-react";
+import { Terminal, Globe, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { RegistrySelector } from "./RegistrySelector";
 
 function Label({ children, className, htmlFor }: { children: React.ReactNode; className?: string; htmlFor?: string }) {
   return <label htmlFor={htmlFor} className={className}>{children}</label>;
+}
+
+/** 已知 MCP 服务器的参数提示 */
+interface MCPArgHint {
+  /** 包名关键词匹配 */
+  match: string;
+  /** 固定参数部分（包名前缀等），用于识别"额外参数"起始位置 */
+  fixedArgs: string[];
+  /** 额外参数的提示 */
+  extraArgs: {
+    placeholder: string;
+    description: string;
+    required?: boolean;
+    multiple?: boolean;
+  }[];
+  /** 环境变量提示 */
+  envHints?: { key: string; description: string }[];
+}
+
+const MCP_ARG_HINTS: MCPArgHint[] = [
+  {
+    match: "server-filesystem",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-filesystem"],
+    extraArgs: [
+      {
+        placeholder: "C:\\Users\\docs 或 /home/user/docs",
+        description: "允许访问的目录路径（可添加多个）",
+        required: true,
+        multiple: true,
+      },
+    ],
+  },
+  {
+    match: "server-github",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-github"],
+    extraArgs: [],
+    envHints: [
+      { key: "GITHUB_PERSONAL_ACCESS_TOKEN", description: "GitHub 个人访问令牌" },
+    ],
+  },
+  {
+    match: "server-gitlab",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-gitlab"],
+    extraArgs: [],
+    envHints: [
+      { key: "GITLAB_PERSONAL_ACCESS_TOKEN", description: "GitLab 个人访问令牌" },
+      { key: "GITLAB_API_URL", description: "GitLab API 地址（默认 https://gitlab.com/api/v4）" },
+    ],
+  },
+  {
+    match: "server-postgres",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-postgres"],
+    extraArgs: [
+      {
+        placeholder: "postgresql://user:pass@localhost:5432/dbname",
+        description: "PostgreSQL 连接字符串",
+        required: true,
+      },
+    ],
+  },
+  {
+    match: "server-sqlite",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-sqlite"],
+    extraArgs: [
+      {
+        placeholder: "C:\\data\\my-database.db",
+        description: "SQLite 数据库文件路径",
+        required: true,
+      },
+    ],
+  },
+  {
+    match: "server-puppeteer",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-puppeteer"],
+    extraArgs: [],
+  },
+  {
+    match: "server-brave-search",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-brave-search"],
+    extraArgs: [],
+    envHints: [
+      { key: "BRAVE_API_KEY", description: "Brave Search API 密钥" },
+    ],
+  },
+  {
+    match: "server-google-maps",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-google-maps"],
+    extraArgs: [],
+    envHints: [
+      { key: "GOOGLE_MAPS_API_KEY", description: "Google Maps API 密钥" },
+    ],
+  },
+  {
+    match: "server-fetch",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-fetch"],
+    extraArgs: [],
+  },
+  {
+    match: "server-memory",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-memory"],
+    extraArgs: [],
+  },
+  {
+    match: "server-everything",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-everything"],
+    extraArgs: [],
+  },
+  {
+    match: "server-sequential-thinking",
+    fixedArgs: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    extraArgs: [],
+  },
+];
+
+function detectMCPHint(args: string[]): MCPArgHint | null {
+  const joined = args.join(" ").toLowerCase();
+  return MCP_ARG_HINTS.find((h) => joined.includes(h.match)) || null;
+}
+
+/** 动态增减参数列表 */
+function ArgsInput({
+  defaultValue,
+  onChange,
+}: {
+  defaultValue?: string[];
+  onChange: (args: string[]) => void;
+}) {
+  const [items, setItems] = useState<string[]>(
+    defaultValue && defaultValue.length > 0 ? defaultValue : [""]
+  );
+
+  const hint = useMemo(() => detectMCPHint(items), [items]);
+
+  const update = useCallback(
+    (newItems: string[]) => {
+      setItems(newItems);
+      onChange(newItems.filter((v) => v.trim() !== ""));
+    },
+    [onChange]
+  );
+
+  const handleChange = (index: number, value: string) => {
+    const next = [...items];
+    next[index] = value;
+    update(next);
+  };
+
+  const handleAdd = () => {
+    update([...items, ""]);
+  };
+
+  const handleRemove = (index: number) => {
+    if (items.length <= 1) {
+      update([""]);
+      return;
+    }
+    update(items.filter((_, i) => i !== index));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+    // Enter 在当前行后新增一行
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const next = [...items];
+      next.splice(index + 1, 0, "");
+      setItems(next);
+      // 聚焦新行（下一个 tick）
+      setTimeout(() => {
+        const el = document.getElementById(`arg-${index + 1}`);
+        el?.focus();
+      }, 0);
+    }
+    // Backspace 在空行时删除并聚焦上一行
+    if (e.key === "Backspace" && items[index] === "" && items.length > 1) {
+      e.preventDefault();
+      handleRemove(index);
+      setTimeout(() => {
+        const target = Math.max(0, index - 1);
+        const el = document.getElementById(`arg-${target}`);
+        el?.focus();
+      }, 0);
+    }
+  };
+
+  // 计算每行的 placeholder
+  const getPlaceholder = (index: number): string => {
+    if (hint) {
+      // 固定参数区域：显示预期值
+      if (index < hint.fixedArgs.length) {
+        return hint.fixedArgs[index];
+      }
+      // 额外参数区域：显示提示
+      const extraIndex = index - hint.fixedArgs.length;
+      if (hint.extraArgs.length > 0) {
+        const extra = hint.extraArgs[Math.min(extraIndex, hint.extraArgs.length - 1)];
+        return extra.placeholder;
+      }
+      return "参数值...";
+    }
+    // 无匹配时的通用提示
+    if (index === 0) return "例如: -y";
+    if (index === 1) return "例如: @modelcontextprotocol/server-memory";
+    return "参数值...";
+  };
+
+  // 额外参数是否需要添加提示
+  const needsExtraArgs = hint?.extraArgs.some((e) => e.required) && items.length <= (hint?.fixedArgs.length ?? 0);
+
+  return (
+    <div>
+      <Label className="text-sm font-medium">参数</Label>
+      <div className="mt-1.5 space-y-2">
+        {items.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
+              {index + 1}
+            </span>
+            <input
+              id={`arg-${index}`}
+              value={item}
+              onChange={(e) => handleChange(index, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, index)}
+              placeholder={getPlaceholder(index)}
+              className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <button
+              type="button"
+              onClick={() => handleRemove(index)}
+              className="shrink-0 p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+              title="删除此参数"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleAdd}
+        className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        添加参数
+      </button>
+
+      {/* 知名 MCP 参数提示 */}
+      {hint && (needsExtraArgs || (hint.envHints && hint.envHints.length > 0)) && (
+        <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs space-y-2">
+          {needsExtraArgs && hint.extraArgs.map((extra, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="text-blue-500 mt-0.5">*</span>
+              <span className="text-blue-700">
+                {extra.description}
+                {extra.multiple && " — 可添加多行"}
+              </span>
+            </div>
+          ))}
+          {hint.envHints?.map((env) => (
+            <div key={env.key} className="flex items-start gap-2">
+              <span className="text-blue-500 mt-0.5">*</span>
+              <span className="text-blue-700">
+                需要环境变量 <code className="px-1 py-0.5 rounded bg-blue-100 font-mono text-[11px]">{env.key}</code>
+                {" — "}{env.description}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface ServerFormProps {
@@ -224,29 +495,14 @@ export function ServerForm({
           )}
 
           {/* 参数 */}
-          <div>
-            <Label htmlFor="args" className="text-sm font-medium">
-              参数
-            </Label>
-            <input
-              id="args"
-              {...register("args")}
-              placeholder="例如: -y @modelcontextprotocol/server-memory"
-              className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-              onChange={(e) => {
-                const args = e.target.value
-                  .split(/\s+/)
-                  .filter((arg) => arg.trim() !== "");
-                setValue("args", args.length > 0 ? args : undefined, {
-                  shouldDirty: true,
-                });
-              }}
-              defaultValue={defaultValues?.args?.join(" ") || ""}
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              用空格分隔多个参数
-            </p>
-          </div>
+          <ArgsInput
+            defaultValue={defaultValues?.args}
+            onChange={(args) => {
+              setValue("args", args.length > 0 ? args : undefined, {
+                shouldDirty: true,
+              });
+            }}
+          />
 
           {/* 环境变量 */}
           <div>

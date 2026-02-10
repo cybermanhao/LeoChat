@@ -87,10 +87,32 @@ export class ToolDispatcher {
   }
 
   /**
+   * Resolve tool name, handling hyphen/underscore normalization
+   * Some LLM APIs (OpenAI) convert hyphens to underscores in function names
+   */
+  private resolveToolName(toolName: string): { serverId: string; resolvedName: string } | null {
+    // 精确匹配
+    const exact = this.toolServerMap.get(toolName);
+    if (exact) return { serverId: exact, resolvedName: toolName };
+
+    // 尝试 underscore -> hyphen (get_sum -> get-sum)
+    const hyphenated = toolName.replace(/_/g, "-");
+    const hyphenMatch = this.toolServerMap.get(hyphenated);
+    if (hyphenMatch) return { serverId: hyphenMatch, resolvedName: hyphenated };
+
+    // 尝试 hyphen -> underscore (get-sum -> get_sum)
+    const underscored = toolName.replace(/-/g, "_");
+    const underscoreMatch = this.toolServerMap.get(underscored);
+    if (underscoreMatch) return { serverId: underscoreMatch, resolvedName: underscored };
+
+    return null;
+  }
+
+  /**
    * Find which server handles a specific tool
    */
   findServerForTool(toolName: string): string | undefined {
-    return this.toolServerMap.get(toolName);
+    return this.resolveToolName(toolName)?.serverId;
   }
 
   /**
@@ -100,6 +122,8 @@ export class ToolDispatcher {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<DispatchResult> {
+    const resolved = this.resolveToolName(toolName);
+
     const toolCall: ToolCall = {
       id: generateId(),
       name: toolName,
@@ -107,13 +131,16 @@ export class ToolDispatcher {
       status: "pending",
     };
 
-    const serverId = this.toolServerMap.get(toolName);
-    if (!serverId) {
+    if (!resolved) {
       toolCall.status = "error";
       const error = new Error(`No server found for tool: ${toolName}`);
       this.options.onToolError?.(toolCall, error);
       throw error;
     }
+
+    const serverId = resolved.serverId;
+    // 使用解析后的真实工具名
+    const actualToolName = resolved.resolvedName;
 
     const client = this.clients.get(serverId);
     if (!client) {
@@ -127,7 +154,7 @@ export class ToolDispatcher {
       toolCall.status = "running";
       this.options.onToolStart?.(toolCall);
 
-      const result = await client.callTool(toolName, args);
+      const result = await client.callTool(actualToolName, args);
 
       toolCall.status = "completed";
       toolCall.result = result;

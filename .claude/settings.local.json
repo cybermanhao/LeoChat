@@ -53,7 +53,8 @@
       "mcp__claude_ai_Mermaid_Chart__validate_and_render_mermaid_diagram",
       "Bash(curl:*)",
       "Bash(npx tsc:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(python:*)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

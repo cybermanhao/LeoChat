@@ -451,9 +451,16 @@ export const useMCPStore = create<MCPState>()(
 
       autoConnectAll: async () => {
         const { autoConnectServerIds, enabledServerIds, connectServer } = get();
-        // 只连接尚未连接的服务器
-        const toConnect = autoConnectServerIds.filter(id => !enabledServerIds.includes(id));
+
+        // 合并：之前启用的 + 自动连接的（去重）
+        const toConnect = [...new Set([...enabledServerIds, ...autoConnectServerIds])];
         if (toConnect.length === 0) return;
+
+        // 先清除陈旧的连接状态（持久化恢复的，实际并未连接）
+        set({
+          enabledServerIds: [],
+          serverStates: {},
+        });
 
         console.log("[MCP] Auto-connect starting:", toConnect.length, "servers");
 
