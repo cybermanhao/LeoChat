@@ -300,6 +300,8 @@ export interface ThemeConfig {
   accent: string;
   background: string;
   foreground: string;
+  card?: string;              // 卡片背景色（可选，默认使用 background）
+  cardForeground?: string;    // 卡片前景色（可选，默认使用 foreground）
   muted: string;
   mutedForeground: string;
   border: string;

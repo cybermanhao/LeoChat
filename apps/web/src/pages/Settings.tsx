@@ -7,6 +7,7 @@ import {
   LeftDrawerHeader,
   LeftDrawerContent,
 } from "../components/layout";
+import { AppearanceSettings } from "./settings/AppearanceSettings";
 
 interface SettingCategory {
   id: string;
@@ -63,12 +64,7 @@ export function SettingsPage() {
   const getCategoryContent = () => {
     switch (currentCategory) {
       case "appearance":
-        return (
-          <div>
-            <h2 className="text-xl font-bold mb-4">外观</h2>
-            <p className="text-muted-foreground">主题、字体、颜色等外观设置</p>
-          </div>
-        );
+        return <AppearanceSettings />;
       case "model":
         return (
           <div>
@@ -107,20 +103,22 @@ export function SettingsPage() {
         <div className="max-w-3xl">
           {getCategoryContent()}
 
-          {/* Coming Soon Notice */}
-          <div className="mt-8 p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
-            <div className="flex items-start gap-3">
-              <SettingsIcon className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">
-                  更多设置正在开发中
-                </h4>
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  完整的设置面板将在后续版本中提供，敬请期待。
-                </p>
+          {/* Coming Soon Notice - 仅在非外观页面显示 */}
+          {currentCategory !== "appearance" && (
+            <div className="mt-8 p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
+              <div className="flex items-start gap-3">
+                <SettingsIcon className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">
+                    更多设置正在开发中
+                  </h4>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    完整的设置面板将在后续版本中提供，敬请期待。
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </ThreeColumnLayout>

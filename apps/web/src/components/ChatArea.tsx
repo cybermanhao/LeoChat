@@ -109,6 +109,11 @@ export function ChatArea() {
   const mcpConnectingServerIds = useMCPStore((s) => s.connectingServerIds);
   const mcpEnabledServerIds = useMCPStore((s) => s.enabledServerIds);
   const toggleMCPServer = useMCPStore((s) => s.toggleServer);
+  const getEnabledTools = useMCPStore((s) => s.getEnabledTools);
+  const disabledToolIds = useMCPStore((s) => s.disabledToolIds);
+
+  // Chat Store - MCP Tools
+  const setMCPTools = useChatStore((s) => s.setMCPTools);
 
   // 将 connectingServerIds Set 转换为 Record<string, boolean>
   const mcpIsConnecting = useMemo(() => {
@@ -118,6 +123,12 @@ export function ChatArea() {
     });
     return record;
   }, [mcpConnectingServerIds]);
+
+  // 同步 MCP 工具到 Chat Store（过滤禁用的工具）
+  useEffect(() => {
+    const enabledTools = getEnabledTools();
+    setMCPTools(enabledTools);
+  }, [getEnabledTools, disabledToolIds, setMCPTools]);
 
   // 对话框状态
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -336,7 +347,10 @@ export function ChatArea() {
           <div className="w-full">{inputElement}</div>
 
           {/* 快捷提示 */}
-          <div className="flex flex-wrap justify-center gap-2">
+          <div
+            className="flex flex-wrap justify-center gap-2"
+            style={{ marginTop: '32px' }}
+          >
             {[
               "帮我写一段代码",
               "解释这个概念",

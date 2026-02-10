@@ -70,8 +70,14 @@ interface MCPState {
   setSearchText: (text: string) => void;
   getFilteredServers: () => MCPServerConfig[];
 
+  // 新增：工具启用/禁用控制
+  disabledToolIds: Set<string>; // Format: "${serverId}:${toolName}"
+  toggleTool: (serverId: string, toolName: string) => void;
+  isToolEnabled: (serverId: string, toolName: string) => boolean;
+
   // Computed getter
   getAllTools: () => MCPTool[];
+  getEnabledTools: () => MCPTool[];  // Get all enabled tools (filtering out disabled ones)
   getEnabledServers: () => MCPServerConfig[];
 
   // 快捷面板
@@ -138,6 +144,7 @@ export const useMCPStore = create<MCPState>()(
       connectingServerIds: new Set<string>(),
       serverVersions: {},
       searchText: "",
+      disabledToolIds: new Set<string>(),
 
       // 新增方法：连接状态管理
       setConnecting: (serverId, connecting) => {
@@ -201,6 +208,27 @@ export const useMCPStore = create<MCPState>()(
         });
       },
 
+      // 新增方法：切换工具启用状态
+      toggleTool: (serverId, toolName) => {
+        set((state) => {
+          const toolId = `${serverId}:${toolName}`;
+          const newSet = new Set(state.disabledToolIds);
+          if (newSet.has(toolId)) {
+            newSet.delete(toolId);
+          } else {
+            newSet.add(toolId);
+          }
+          return { disabledToolIds: newSet };
+        });
+      },
+
+      // 新增方法：检查工具是否启用
+      isToolEnabled: (serverId, toolName) => {
+        const { disabledToolIds } = get();
+        const toolId = `${serverId}:${toolName}`;
+        return !disabledToolIds.has(toolId);
+      },
+
       // Computed
       getAllTools: () => {
         const { serverStates, enabledServerIds } = get();
@@ -209,6 +237,23 @@ export const useMCPStore = create<MCPState>()(
           const state = serverStates[serverId];
           if (state?.session?.tools) {
             tools.push(...state.session.tools);
+          }
+        }
+        return tools;
+      },
+
+      getEnabledTools: () => {
+        const { serverStates, enabledServerIds, disabledToolIds } = get();
+        const tools: MCPTool[] = [];
+        for (const serverId of enabledServerIds) {
+          const state = serverStates[serverId];
+          if (state?.session?.tools) {
+            for (const tool of state.session.tools) {
+              const toolId = `${serverId}:${tool.name}`;
+              if (!disabledToolIds.has(toolId)) {
+                tools.push(tool);
+              }
+            }
           }
         }
         return tools;
@@ -503,10 +548,16 @@ export const useMCPStore = create<MCPState>()(
         customServers: state.sources.find((s) => s.id === "custom")?.servers || [],
         enabledServerIds: state.enabledServerIds,
         autoConnectServerIds: state.autoConnectServerIds,
+        disabledToolIds: Array.from(state.disabledToolIds), // Convert Set to Array for persistence
       }),
       // 从持久化数据恢复时，重建完整的 sources
       merge: (persisted, current) => {
-        const persistedData = persisted as { customServers?: MCPServerConfig[]; enabledServerIds?: string[]; autoConnectServerIds?: string[] };
+        const persistedData = persisted as {
+          customServers?: MCPServerConfig[];
+          enabledServerIds?: string[];
+          autoConnectServerIds?: string[];
+          disabledToolIds?: string[];
+        };
         return {
           ...current,
           sources: [
@@ -525,6 +576,7 @@ export const useMCPStore = create<MCPState>()(
           ],
           enabledServerIds: persistedData.enabledServerIds || [],
           autoConnectServerIds: persistedData.autoConnectServerIds || [],
+          disabledToolIds: new Set(persistedData.disabledToolIds || []), // Convert Array back to Set
         };
       },
     }

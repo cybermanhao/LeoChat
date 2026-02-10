@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { cn } from "@ai-chatbox/ui";
+import { cn, Switch } from "@ai-chatbox/ui";
 import { Wrench, Search, Server } from "lucide-react";
 import { useMCPStore } from "../../stores/mcp";
 import type { MCPTool } from "@ai-chatbox/shared";
@@ -13,8 +13,16 @@ interface ToolWithServer {
 export function MCPToolsTab() {
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
+  const toggleTool = useMCPStore((s) => s.toggleTool);
+  const disabledToolIds = useMCPStore((s) => s.disabledToolIds);
   const [search, setSearch] = useState("");
   const [selectedTool, setSelectedTool] = useState<ToolWithServer | null>(null);
+
+  // 检查工具是否启用（基于响应式状态）
+  const isToolEnabled = (serverId: string, toolName: string) => {
+    const toolId = `${serverId}:${toolName}`;
+    return !disabledToolIds.has(toolId);
+  };
 
   const allServers = sources.flatMap((source) => source.servers);
 
@@ -81,18 +89,30 @@ export function MCPToolsTab() {
         <div className="flex-1 overflow-y-auto">
           {filteredTools.map((item) => {
             const isSelected = selectedTool?.tool.name === item.tool.name && selectedTool?.serverId === item.serverId;
+            const enabled = isToolEnabled(item.serverId, item.tool.name);
             return (
               <div
                 key={`${item.serverId}-${item.tool.name}`}
                 className={cn(
-                  "px-3 py-1.5 cursor-pointer border-b border-transparent",
-                  isSelected ? "bg-primary/10" : "hover:bg-muted/50"
+                  "px-3 py-1.5 border-b border-transparent",
+                  isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+                  !enabled && "opacity-50"
                 )}
-                onClick={() => setSelectedTool(item)}
               >
-                <div className="flex items-center gap-1.5">
+                <div
+                  className="flex items-center gap-1.5 cursor-pointer"
+                  onClick={() => setSelectedTool(item)}
+                >
                   <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-                  <span className="text-xs font-medium truncate">{item.tool.name}</span>
+                  <span className="text-xs font-medium truncate flex-1">{item.tool.name}</span>
+                  <Switch
+                    checked={enabled}
+                    onCheckedChange={(checked) => {
+                      toggleTool(item.serverId, item.tool.name);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="scale-75"
+                  />
                 </div>
                 <div className="flex items-center gap-1 mt-0.5 ml-4.5">
                   <Server className="h-2.5 w-2.5 text-muted-foreground" />
@@ -109,9 +129,22 @@ export function MCPToolsTab() {
         {selectedTool ? (
           <div className="p-3 space-y-3">
             <div>
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <Wrench className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">{selectedTool.tool.name}</span>
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">{selectedTool.tool.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {isToolEnabled(selectedTool.serverId, selectedTool.tool.name) ? "已启用" : "已禁用"}
+                  </span>
+                  <Switch
+                    checked={isToolEnabled(selectedTool.serverId, selectedTool.tool.name)}
+                    onCheckedChange={() => {
+                      toggleTool(selectedTool.serverId, selectedTool.tool.name);
+                    }}
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-1 mt-0.5">
                 <Server className="h-3 w-3 text-muted-foreground" />

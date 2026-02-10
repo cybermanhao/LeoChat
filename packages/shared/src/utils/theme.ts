@@ -19,6 +19,8 @@ export const defaultTheme: ThemeConfig = {
   accent: "210 40% 96.1%",
   background: "0 0% 100%",
   foreground: "222.2 47.4% 11.2%",
+  card: "0 0% 98%",              // 卡片稍暗于背景（浅灰）
+  cardForeground: "222.2 47.4% 11.2%",
   muted: "210 40% 96.1%",
   mutedForeground: "215.4 16.3% 46.9%",
   border: "214.3 31.8% 91.4%",
@@ -34,6 +36,8 @@ export const darkTheme: ThemeConfig = {
   accent: "217.2 32.6% 17.5%",
   background: "222.2 84% 4.9%",
   foreground: "210 40% 98%",
+  card: "222.2 84% 7%",         // 卡片稍亮于背景
+  cardForeground: "210 40% 98%",
   muted: "217.2 32.6% 17.5%",
   mutedForeground: "215 20.2% 65.1%",
   border: "217.2 32.6% 17.5%",
@@ -49,6 +53,8 @@ export const lightPurpleTheme: ThemeConfig = {
   accent: "270 40% 94%",
   background: "0 0% 100%",
   foreground: "270 50% 10%",
+  card: "270 30% 98%",           // 卡片带紫色调
+  cardForeground: "270 50% 10%",
   muted: "270 20% 95%",
   mutedForeground: "270 10% 45%",
   border: "270 20% 90%",
@@ -64,6 +70,8 @@ export const darkGreenTheme: ThemeConfig = {
   accent: "142 40% 20%",
   background: "150 30% 6%",
   foreground: "142 40% 95%",
+  card: "150 30% 8%",           // 卡片使用稍亮的绿色调
+  cardForeground: "142 40% 95%",
   muted: "142 20% 15%",
   mutedForeground: "142 15% 60%",
   border: "142 25% 18%",
@@ -79,6 +87,8 @@ export const darkPurpleTheme: ThemeConfig = {
   accent: "270 35% 20%",
   background: "270 40% 6%",
   foreground: "270 20% 95%",
+  card: "270 40% 8%",           // 卡片使用稍亮的紫色调
+  cardForeground: "270 20% 95%",
   muted: "270 25% 15%",
   mutedForeground: "270 15% 60%",
   border: "270 25% 18%",
@@ -94,6 +104,8 @@ export const lightGreenTheme: ThemeConfig = {
   accent: "142 35% 92%",
   background: "0 0% 100%",
   foreground: "142 50% 10%",
+  card: "142 30% 98%",           // 卡片带绿色调
+  cardForeground: "142 50% 10%",
   muted: "142 20% 95%",
   mutedForeground: "142 10% 45%",
   border: "142 20% 88%",
