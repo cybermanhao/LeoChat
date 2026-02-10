@@ -57,6 +57,19 @@ interface MCPState {
   selectedServerId: string | null;
   isConnecting: Record<string, boolean>;
 
+  // 新增：连接状态管理（使用 Set 避免重复）
+  connectingServerIds: Set<string>;
+  setConnecting: (serverId: string, connecting: boolean) => void;
+
+  // 新增：服务器版本信息
+  serverVersions: Record<string, string | null>;
+  fetchServerVersion: (serverId: string) => Promise<void>;
+
+  // 新增：搜索和过滤
+  searchText: string;
+  setSearchText: (text: string) => void;
+  getFilteredServers: () => MCPServerConfig[];
+
   // Computed getter
   getAllTools: () => MCPTool[];
   getEnabledServers: () => MCPServerConfig[];
@@ -120,6 +133,73 @@ export const useMCPStore = create<MCPState>()(
       detailDialogOpen: false,
       selectedServerId: null,
       isConnecting: {},
+
+      // 新增状态
+      connectingServerIds: new Set<string>(),
+      serverVersions: {},
+      searchText: "",
+
+      // 新增方法：连接状态管理
+      setConnecting: (serverId, connecting) => {
+        set((state) => {
+          const newSet = new Set(state.connectingServerIds);
+          if (connecting) {
+            newSet.add(serverId);
+          } else {
+            newSet.delete(serverId);
+          }
+          return { connectingServerIds: newSet };
+        });
+      },
+
+      // 新增方法：获取服务器版本
+      fetchServerVersion: async (serverId) => {
+        try {
+          // 调用后端 API 获取版本（需要后端支持）
+          // 目前先使用占位逻辑
+          const serverInfo = await mcpApi.getServerDetails(serverId);
+          const version = (serverInfo as any).version || null;
+
+          set((state) => ({
+            serverVersions: {
+              ...state.serverVersions,
+              [serverId]: version,
+            },
+          }));
+        } catch (error) {
+          console.error("Failed to fetch server version:", error);
+          set((state) => ({
+            serverVersions: {
+              ...state.serverVersions,
+              [serverId]: null,
+            },
+          }));
+        }
+      },
+
+      // 新增方法：设置搜索文本
+      setSearchText: (text) => {
+        set({ searchText: text });
+      },
+
+      // 新增方法：获取过滤后的服务器列表
+      getFilteredServers: () => {
+        const { sources, searchText } = get();
+        const allServers = sources.flatMap((source) => source.servers);
+
+        if (!searchText) {
+          return allServers;
+        }
+
+        const lowerSearch = searchText.toLowerCase();
+        return allServers.filter((server) => {
+          const nameMatch = server.name.toLowerCase().includes(lowerSearch);
+          const commandMatch = server.command?.toLowerCase().includes(lowerSearch);
+          const urlMatch = server.url?.toLowerCase().includes(lowerSearch);
+
+          return nameMatch || commandMatch || urlMatch;
+        });
+      },
 
       // Computed
       getAllTools: () => {
@@ -208,7 +288,7 @@ export const useMCPStore = create<MCPState>()(
       },
 
       connectServer: async (serverId) => {
-        const { sources } = get();
+        const { sources, setConnecting, fetchServerVersion } = get();
 
         // 找到服务配置
         let serverConfig: MCPServerConfig | undefined;
@@ -222,9 +302,8 @@ export const useMCPStore = create<MCPState>()(
           return;
         }
 
-        set((state) => ({
-          isConnecting: { ...state.isConnecting, [serverId]: true },
-        }));
+        // 使用新的 setConnecting 方法
+        setConnecting(serverId, true);
 
         try {
           // 先添加服务器配置到后端
@@ -244,11 +323,11 @@ export const useMCPStore = create<MCPState>()(
                 lastConnected: Date.now(),
               },
             },
-            isConnecting: { ...state.isConnecting, [serverId]: false },
           }));
 
-          // 获取详细信息
+          // 获取详细信息和版本
           await get().fetchServerDetails(serverId);
+          await fetchServerVersion(serverId);
         } catch (error) {
           console.error("Failed to connect server:", error);
           set((state) => ({
@@ -260,8 +339,9 @@ export const useMCPStore = create<MCPState>()(
                 error: error instanceof Error ? error.message : String(error),
               },
             },
-            isConnecting: { ...state.isConnecting, [serverId]: false },
           }));
+        } finally {
+          setConnecting(serverId, false);
         }
       },
 

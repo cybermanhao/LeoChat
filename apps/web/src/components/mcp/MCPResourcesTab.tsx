@@ -1,7 +1,9 @@
-import { useState, useMemo } from "react";
-import { cn } from "@ai-chatbox/ui";
-import { FileText, Server } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { cn, Button } from "@ai-chatbox/ui";
+import { FileText, Server, Download, Image as ImageIcon } from "lucide-react";
 import { useMCPStore } from "../../stores/mcp";
+import { mcpApi } from "../../lib/api";
+import ReactMarkdown from "react-markdown";
 
 interface ResourceWithServer {
   resource: { uri: string; name?: string; description?: string; mimeType?: string };
@@ -13,6 +15,9 @@ export function MCPResourcesTab() {
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const [selectedResource, setSelectedResource] = useState<ResourceWithServer | null>(null);
+  const [resourceContent, setResourceContent] = useState<string | null>(null);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
 
   const allServers = sources.flatMap((source) => source.servers);
 
@@ -32,6 +37,39 @@ export function MCPResourcesTab() {
     }
     return result;
   }, [allServers, serverStates]);
+
+  // 获取资源内容
+  useEffect(() => {
+    if (!selectedResource) {
+      setResourceContent(null);
+      return;
+    }
+
+    const fetchContent = async () => {
+      setIsLoadingContent(true);
+      setContentError(null);
+      try {
+        const response = await mcpApi.readResource(
+          selectedResource.serverId,
+          selectedResource.resource.uri
+        );
+        // 假设 API 返回 { contents: [{ text: string }] }
+        if (response.contents && response.contents[0]) {
+          setResourceContent(response.contents[0].text || response.contents[0].blob);
+        } else {
+          setResourceContent(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch resource:", error);
+        setContentError("加载资源内容失败");
+        setResourceContent(null);
+      } finally {
+        setIsLoadingContent(false);
+      }
+    };
+
+    fetchContent();
+  }, [selectedResource]);
 
   if (resourcesWithServer.length === 0) {
     return (
@@ -109,6 +147,47 @@ export function MCPResourcesTab() {
                 <p className="text-xs leading-relaxed">{selectedResource.resource.description}</p>
               </div>
             )}
+
+            {/* 内容预览 */}
+            <div>
+              <div className="text-[11px] font-medium text-muted-foreground mb-1">内容预览</div>
+              {isLoadingContent ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <span className="text-xs">加载中...</span>
+                </div>
+              ) : contentError ? (
+                <div className="flex items-center justify-center py-8 text-red-600">
+                  <span className="text-xs">{contentError}</span>
+                </div>
+              ) : resourceContent ? (
+                <div className="rounded border bg-muted/30 p-3 max-h-96 overflow-y-auto">
+                  {selectedResource.resource.mimeType?.startsWith("image/") ? (
+                    // 图片预览
+                    <div className="flex flex-col items-center gap-2">
+                      <ImageIcon className="h-12 w-12 text-muted-foreground/40" />
+                      <img
+                        src={`data:${selectedResource.resource.mimeType};base64,${resourceContent}`}
+                        alt={selectedResource.resource.name || "Resource"}
+                        className="max-w-full rounded"
+                      />
+                    </div>
+                  ) : selectedResource.resource.mimeType?.includes("markdown") ||
+                    selectedResource.resource.uri.endsWith(".md") ? (
+                    // Markdown 预览
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown>{resourceContent}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    // 纯文本
+                    <pre className="text-xs whitespace-pre-wrap break-words">{resourceContent}</pre>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <span className="text-xs">暂无内容</span>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

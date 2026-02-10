@@ -128,10 +128,11 @@ export function MCPQuickPanel({
                           <div
                             className={cn(
                               "w-1.5 h-1.5 rounded-full shrink-0",
-                              connecting && "bg-yellow-500 animate-pulse",
-                              connected && "bg-green-500",
-                              hasError && "bg-red-500",
-                              !connecting && !connected && !hasError && "bg-gray-400"
+                              // 优先级：连接中 > 已连接 > 错误 > 默认
+                              !connecting && !connected && hasError && "bg-red-500",
+                              !connecting && !connected && !hasError && "bg-gray-400",
+                              !connecting && connected && "bg-green-500",
+                              connecting && "bg-yellow-500 animate-pulse"
                             )}
                           />
 

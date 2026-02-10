@@ -56,7 +56,8 @@
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",
-      "C:\\code\\zz-ai-chat"
+      "C:\\code\\zz-ai-chat",
+      "C:\\code\\ai\\cherry-studio"
     ]
   }
 }

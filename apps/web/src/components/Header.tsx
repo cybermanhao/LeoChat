@@ -1,4 +1,5 @@
-import { Settings, Sun, Moon, Palette } from "lucide-react";
+import { Settings, Sun, Moon, Palette, Server } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   DropdownMenu,
@@ -13,6 +14,7 @@ import { themePresets } from "@ai-chatbox/shared";
 import { useThemeStore } from "../stores/theme";
 
 export function Header() {
+  const navigate = useNavigate();
   const { currentTheme, setTheme, themeJustChanged } = useThemeStore();
 
   return (
@@ -76,11 +78,26 @@ export function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Settings */}
-        <Button variant="ghost" size="icon">
-          <Settings className="h-5 w-5" />
-          <span className="sr-only">Settings</span>
-        </Button>
+        {/* Settings Menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Settings className="h-5 w-5" />
+              <span className="sr-only">Settings</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>设置</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => navigate("/mcp/servers")}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <Server className="h-4 w-4" />
+              <span>MCP 服务器</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

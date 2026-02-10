@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ChatInput,
   ChatMessage as ChatMessageComponent,
@@ -23,11 +24,11 @@ import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
 import { Sparkles, Globe, FileText, Trash2 } from "lucide-react";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
-import { MCPDialog } from "./MCPDialog";
 import { ModelSelector } from "./ModelSelector";
 import { mcpApi } from "../lib/api";
 
 export function ChatArea() {
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const conversations = useChatStore((s) => s.conversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -105,13 +106,20 @@ export function ChatArea() {
   // MCP Store
   const mcpSources = useMCPStore((s) => s.sources);
   const mcpServerStates = useMCPStore((s) => s.serverStates);
-  const mcpIsConnecting = useMCPStore((s) => s.isConnecting);
+  const mcpConnectingServerIds = useMCPStore((s) => s.connectingServerIds);
   const mcpEnabledServerIds = useMCPStore((s) => s.enabledServerIds);
   const toggleMCPServer = useMCPStore((s) => s.toggleServer);
-  const openMCPDetailDialog = useMCPStore((s) => s.openDetailDialog);
+
+  // 将 connectingServerIds Set 转换为 Record<string, boolean>
+  const mcpIsConnecting = useMemo(() => {
+    const record: Record<string, boolean> = {};
+    mcpConnectingServerIds.forEach(id => {
+      record[id] = true;
+    });
+    return record;
+  }, [mcpConnectingServerIds]);
 
   // 对话框状态
-  const [mcpDialogOpen, setMcpDialogOpen] = useState(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<string | undefined>();
   const [selectedPromptContent, setSelectedPromptContent] = useState<string | undefined>();
@@ -201,11 +209,10 @@ export function ChatArea() {
           mcpServerCount={mcpEnabledServerIds.length}
           onToggleServer={toggleMCPServer}
           onServerClick={(serverId) => {
-            openMCPDetailDialog(serverId);
-            setMcpDialogOpen(true);
+            navigate(`/mcp/servers/${serverId}/edit`);
           }}
-          onSettingsClick={() => setMcpDialogOpen(true)}
-          onAddServer={() => setMcpDialogOpen(true)}
+          onSettingsClick={() => navigate("/mcp/servers")}
+          onAddServer={() => navigate("/mcp/servers/add")}
         />
 
         {/* 模型选择 */}
@@ -348,7 +355,6 @@ export function ChatArea() {
         </div>
 
         {/* Dialogs */}
-        <MCPDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} />
         <ModelSelector
           open={modelSelectorOpen}
           onOpenChange={setModelSelectorOpen}
@@ -439,7 +445,6 @@ export function ChatArea() {
       </div>
 
       {/* Dialogs */}
-      <MCPDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} />
       <ModelSelector
         open={modelSelectorOpen}
         onOpenChange={setModelSelectorOpen}
