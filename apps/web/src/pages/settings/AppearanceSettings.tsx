@@ -1,6 +1,7 @@
 import { useThemeStore, getThemePresets } from "../../stores/theme";
 import { Check } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 
 export function AppearanceSettings() {
   const currentTheme = useThemeStore((s) => s.currentTheme);
@@ -82,7 +83,7 @@ export function AppearanceSettings() {
               : "text-muted-foreground opacity-0 group-hover:opacity-100"
           )}
         >
-          {isSelected ? "当前主题" : "点击切换"}
+          {isSelected ? t("settings.appearance.currentTheme") : t("settings.appearance.clickToSwitch")}
         </div>
       </button>
     );
@@ -91,16 +92,16 @@ export function AppearanceSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold mb-2">外观</h2>
+        <h2 className="text-xl font-bold mb-2">{t("settings.appearance.title")}</h2>
         <p className="text-sm text-muted-foreground">
-          自定义应用的主题和颜色方案
+          {t("settings.appearance.description")}
         </p>
       </div>
 
       {/* 浅色主题 */}
       <div>
         <h3 className="text-sm font-semibold mb-3 text-muted-foreground">
-          浅色主题
+          {t("settings.appearance.lightThemes")}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {lightThemes.map(renderThemeCard)}
@@ -110,7 +111,7 @@ export function AppearanceSettings() {
       {/* 深色主题 */}
       <div>
         <h3 className="text-sm font-semibold mb-3 text-muted-foreground">
-          深色主题
+          {t("settings.appearance.darkThemes")}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {darkThemes.map(renderThemeCard)}
@@ -119,11 +120,11 @@ export function AppearanceSettings() {
 
       {/* 提示信息 */}
       <div className="mt-8 p-4 rounded-lg border bg-muted/30">
-        <h4 className="text-sm font-medium mb-2">关于主题</h4>
+        <h4 className="text-sm font-medium mb-2">{t("settings.appearance.title")}</h4>
         <ul className="text-sm text-muted-foreground space-y-1">
-          <li>• 主题设置会自动保存并在下次启动时应用</li>
-          <li>• 可以通过 MCP 工具动态切换明暗模式</li>
-          <li>• 每个主题都包含精心调配的颜色方案</li>
+          <li>• {t("settings.appearance.description")}</li>
+          <li>• {t("settings.appearance.clickToSwitch")}</li>
+          <li>• {t("settings.appearance.currentTheme")}</li>
         </ul>
       </div>
     </div>

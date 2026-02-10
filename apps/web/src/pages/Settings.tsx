@@ -8,6 +8,7 @@ import {
   LeftDrawerContent,
 } from "../components/layout";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { t } from "../i18n";
 
 interface SettingCategory {
   id: string;
@@ -16,12 +17,12 @@ interface SettingCategory {
 }
 
 const settingCategories: SettingCategory[] = [
-  { id: "appearance", label: "外观", icon: Palette },
-  { id: "model", label: "语言模型", icon: Globe },
-  { id: "api", label: "API 密钥", icon: Key },
-  { id: "notifications", label: "通知", icon: Bell },
-  { id: "privacy", label: "隐私与安全", icon: Shield },
-  { id: "advanced", label: "高级", icon: Zap },
+  { id: "appearance", label: t("common.appearance"), icon: Palette },
+  { id: "model", label: t("settings.model.title"), icon: Globe },
+  { id: "api", label: t("settings.api.title"), icon: Key },
+  { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
+  { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
+  { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
 ];
 
 // 设置侧边栏
@@ -31,7 +32,7 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
 }) {
   return (
     <LeftDrawer>
-      <LeftDrawerHeader title="设置" />
+      <LeftDrawerHeader title={t("common.settings")} />
       <LeftDrawerContent>
         <div className="p-2 space-y-1">
           {settingCategories.map((category) => {
@@ -68,22 +69,22 @@ export function SettingsPage() {
       case "model":
         return (
           <div>
-            <h2 className="text-xl font-bold mb-4">语言模型</h2>
-            <p className="text-muted-foreground">配置 API 密钥和模型参数</p>
+            <h2 className="text-xl font-bold mb-4">{t("settings.model.title")}</h2>
+            <p className="text-muted-foreground">{t("settings.model.description")}</p>
           </div>
         );
       case "api":
         return (
           <div>
-            <h2 className="text-xl font-bold mb-4">API 密钥</h2>
-            <p className="text-muted-foreground">管理 OpenAI、Anthropic 等 API 密钥</p>
+            <h2 className="text-xl font-bold mb-4">{t("settings.api.title")}</h2>
+            <p className="text-muted-foreground">{t("settings.api.description")}</p>
           </div>
         );
       default:
         return (
           <div>
             <h2 className="text-xl font-bold mb-4">{settingCategories.find(c => c.id === currentCategory)?.label}</h2>
-            <p className="text-muted-foreground">该设置面板正在开发中</p>
+            <p className="text-muted-foreground">{t("error.notImplemented")}</p>
           </div>
         );
     }
@@ -110,10 +111,10 @@ export function SettingsPage() {
                 <SettingsIcon className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
                 <div>
                   <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">
-                    更多设置正在开发中
+                    {t("settings.developmentNotice")}
                   </h4>
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    完整的设置面板将在后续版本中提供，敬请期待。
+                    {t("settings.developmentNoticeDesc")}
                   </p>
                 </div>
               </div>

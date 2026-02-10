@@ -6,6 +6,7 @@ import { useChatStore } from "./stores/chat";
 import { useMCPStore } from "./stores/mcp";
 import { TooltipProvider } from "@ai-chatbox/ui";
 import { chatApi } from "./lib/api";
+import { initializeI18n } from "./i18n";
 
 // Layout
 import { AppLayout } from "./components/layout/AppLayout";
@@ -33,6 +34,11 @@ function AppInit({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyTheme(currentTheme);
   }, [currentTheme, applyTheme]);
+
+  // 初始化国际化系统
+  useEffect(() => {
+    initializeI18n();
+  }, []);
 
   // 初始化内置 MCP 服务
   useEffect(() => {

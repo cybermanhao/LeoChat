@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { setLocaleTranslations } from "../lib/i18n";
 
 export type Locale = "en" | "zh" | "ja" | "es" | "fr" | "de";
 
@@ -30,8 +31,10 @@ export const useI18nStore = create<I18nState>()(
     (set, get) => ({
       currentLocale: "zh", // 默认中文
 
-      setLocale: (locale) => {
+      setLocale: async (locale) => {
         set({ currentLocale: locale });
+        // 更新翻译
+        await setLocaleTranslations(locale);
       },
 
       getCurrentLocaleOption: () => {

@@ -3,6 +3,7 @@ import { Mail, Github } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
 import { useI18nStore, LOCALES, type LocaleOption } from "../stores/i18n";
 import { cn } from "@ai-chatbox/ui";
+import { t } from "../i18n";
 
 export function QuickAccess() {
   const currentLocale = useI18nStore((s) => s.currentLocale);
@@ -53,7 +54,7 @@ export function QuickAccess() {
           size="icon"
           className="h-8 w-8 hover:bg-muted text-muted-foreground hover:text-foreground rounded-none"
           onClick={() => setLanguageMenuOpen(!languageMenuOpen)}
-          title={`${currentLocaleOption.nativeName} / Language`}
+          title={t("quickAccess.language")}
         >
           <span className="text-base leading-none">{currentLocaleOption.flag}</span>
         </Button>
@@ -87,7 +88,7 @@ export function QuickAccess() {
         size="icon"
         className="h-8 w-8 hover:bg-muted text-muted-foreground hover:text-foreground rounded-none"
         onClick={handleEmailClick}
-        title="发送邮件 / Email"
+        title={t("quickAccess.email")}
       >
         <Mail className="h-3.5 w-3.5" />
       </Button>
@@ -98,7 +99,7 @@ export function QuickAccess() {
         size="icon"
         className="h-8 w-8 hover:bg-muted text-muted-foreground hover:text-foreground rounded-none"
         onClick={handleGithubClick}
-        title="GitHub 仓库"
+        title={t("quickAccess.github")}
       >
         <Github className="h-3.5 w-3.5" />
       </Button>

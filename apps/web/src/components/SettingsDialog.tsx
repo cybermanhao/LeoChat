@@ -9,6 +9,7 @@ import {
 } from "@ai-chatbox/ui";
 import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
+import { t } from "../i18n";
 
 type LLMProvider = "deepseek" | "openrouter" | "openai";
 
@@ -23,24 +24,24 @@ interface ProviderConfig {
 const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
   deepseek: {
     name: "DeepSeek",
-    placeholder: "sk-...",
-    description: "高性价比的国产大模型，支持 DeepSeek-Chat 和 DeepSeek-R1 推理模型",
+    placeholder: t("settings.api.keyPlaceholder"),
+    description: t("settings.api.descriptionDeepSeek"),
     link: "https://platform.deepseek.com/api_keys",
-    linkText: "前往 DeepSeek 获取",
+    linkText: t("settings.api.linkTextDeepSeek"),
   },
   openrouter: {
     name: "OpenRouter",
-    placeholder: "sk-or-v1-...",
-    description: "通过 OpenRouter 访问多种 AI 模型，包括 GPT-4、Claude、Gemini 等",
+    placeholder: t("settings.api.keyPlaceholder"),
+    description: t("settings.api.descriptionOpenRouter"),
     link: "https://openrouter.ai/keys",
-    linkText: "前往 OpenRouter 获取",
+    linkText: t("settings.api.linkTextOpenRouter"),
   },
   openai: {
     name: "OpenAI",
-    placeholder: "sk-...",
-    description: "OpenAI 官方 API，支持 GPT-4o、GPT-4 等模型",
+    placeholder: t("settings.api.keyPlaceholder"),
+    description: t("settings.api.descriptionOpenAI"),
     link: "https://platform.openai.com/api-keys",
-    linkText: "前往 OpenAI 获取",
+    linkText: t("settings.api.linkTextOpenAI"),
   },
 };
 
@@ -110,17 +111,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            API 设置
+            {t("settings.api.title")}
           </DialogTitle>
           <DialogDescription>
-            配置 LLM 服务商的 API 密钥
+            {t("settings.api.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* 当前提供商选择 */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">默认服务商</label>
+            <label className="text-sm font-medium">{t("settings.model.defaultProvider")}</label>
             <div className="flex gap-2">
               {(Object.keys(PROVIDER_CONFIGS) as LLMProvider[]).map((provider) => (
                 <button
@@ -143,9 +144,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             ([provider, config]) => (
               <div key={provider} className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
-                  {config.name} API Key
+                  {provider === 'deepseek' ? t("settings.api.descriptionDeepSeek") : 
+                   provider === 'openrouter' ? t("settings.api.descriptionOpenRouter") : 
+                   t("settings.api.descriptionOpenAI")} API Key
                   {localKeys[provider]?.trim() && (
-                    <span className="text-xs text-green-500">✓ 已配置</span>
+                    <span className="text-xs text-green-500">✓ {t("settings.api.getConfigured")}</span>
                   )}
                 </label>
                 <div className="relative">
@@ -166,7 +169,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     {showKeys[provider] ? (
                       <EyeOff className="h-4 w-4" />
                     ) : (
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h4 w-4" />
                     )}
                   </button>
                 </div>
@@ -187,16 +190,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {/* 保存按钮 */}
           <div className="flex justify-end gap-2 pt-2 border-t">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button onClick={handleSave} disabled={!hasAnyKey}>
               {saved ? (
                 <>
                   <Check className="mr-1 h-4 w-4" />
-                  已保存
+                  {t("settings.api.saveSuccess")}
                 </>
               ) : (
-                "保存"
+                t("common.save")
               )}
             </Button>
           </div>
