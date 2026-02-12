@@ -54,7 +54,14 @@
       "Bash(curl:*)",
       "Bash(npx tsc:*)",
       "Bash(wc:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:webmcp.dev)",
+      "Bash(npx -y @jason.today/webmcp@latest --help)",
+      "Bash(cmd /c \"start cmd /k npx -y @jason.today/webmcp@latest\")",
+      "Bash(cmd /c \"start cmd /k npx -y @jason.today/webmcp@latest --foreground\")",
+      "Bash(node -e:*)",
+      "Bash(git -C \"C:\\\\code\\\\LeoChat\" log --all --oneline -20 -- apps/web/src/stores/mcp.ts apps/web/src/App.tsx)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

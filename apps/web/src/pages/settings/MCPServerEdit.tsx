@@ -7,9 +7,33 @@ import { ServerForm } from "../../components/mcp/ServerForm";
 import { MCPToolsTab } from "../../components/mcp/MCPToolsTab";
 import { MCPResourcesTab } from "../../components/mcp/MCPResourcesTab";
 import { MCPPromptsTab } from "../../components/mcp/MCPPromptsTab";
-import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
+import type { MCPServerConfig, MCPServerConfigValidated } from "@ai-chatbox/shared";
 
 type TabValue = "settings" | "tools" | "resources" | "prompts";
+
+/** 影响 transport/连接的字段，变更后需要重启 */
+const TRANSPORT_CRITICAL_FIELDS: (keyof MCPServerConfig)[] = [
+  "transport",
+  "command",
+  "args",
+  "url",
+  "env",
+  "timeout",
+];
+
+function needsRestart(
+  oldConfig: MCPServerConfig,
+  newData: MCPServerConfigValidated
+): boolean {
+  for (const field of TRANSPORT_CRITICAL_FIELDS) {
+    const oldVal = (oldConfig as any)[field];
+    const newVal = (newData as any)[field];
+    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 type SaveStatus = null | "saved" | "restarting" | "restarted" | "error";
 
@@ -20,7 +44,9 @@ export function MCPServerEditPage() {
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const enabledServerIds = useMCPStore((s) => s.enabledServerIds);
+  const autoConnectServerIds = useMCPStore((s) => s.autoConnectServerIds);
   const updateServer = useMCPStore((s) => s.updateServer);
+  const setAutoConnect = useMCPStore((s) => s.setAutoConnect);
   const toggleServer = useMCPStore((s) => s.toggleServer);
   const refreshServer = useMCPStore((s) => s.refreshServer);
 
@@ -62,17 +88,19 @@ export function MCPServerEditPage() {
     setIsSaving(true);
     setSaveStatus(null);
     try {
+      const shouldRestart = isConnected && needsRestart(server, data);
+
       updateServer(serverId, data);
+      setAutoConnect(serverId, !!data.autoConnect);
       setSaveStatus("saved");
 
-      // 如果服务器已连接，自动重启以应用新配置
-      if (isConnected) {
+      // 仅在 transport-critical 字段变更时重启
+      if (shouldRestart) {
         setSaveStatus("restarting");
         await refreshServer(serverId);
         setSaveStatus("restarted");
       }
 
-      // 3 秒后隐藏提示
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (error) {
       console.error("Failed to save server configuration:", error);
@@ -192,7 +220,10 @@ export function MCPServerEditPage() {
         {activeTab === "settings" && (
           <div className="bg-card rounded-lg border p-6 overflow-y-auto">
             <ServerForm
-              defaultValues={server as any}
+              defaultValues={{
+                ...(server as any),
+                autoConnect: serverId ? autoConnectServerIds.includes(serverId) : false,
+              }}
               onSubmit={handleSave}
               submitLabel={isSaving ? "保存中..." : "保存"}
             />

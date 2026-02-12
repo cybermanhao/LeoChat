@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -7,7 +7,6 @@ import {
 } from "@ai-chatbox/shared";
 import { Button, cn } from "@ai-chatbox/ui";
 import { Terminal, Globe, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
-import { RegistrySelector } from "./RegistrySelector";
 
 function Label({ children, className, htmlFor }: { children: React.ReactNode; className?: string; htmlFor?: string }) {
   return <label htmlFor={htmlFor} className={className}>{children}</label>;
@@ -171,19 +170,16 @@ function ArgsInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
-    // Enter 在当前行后新增一行
     if (e.key === "Enter") {
       e.preventDefault();
       const next = [...items];
       next.splice(index + 1, 0, "");
       setItems(next);
-      // 聚焦新行（下一个 tick）
       setTimeout(() => {
         const el = document.getElementById(`arg-${index + 1}`);
         el?.focus();
       }, 0);
     }
-    // Backspace 在空行时删除并聚焦上一行
     if (e.key === "Backspace" && items[index] === "" && items.length > 1) {
       e.preventDefault();
       handleRemove(index);
@@ -195,14 +191,11 @@ function ArgsInput({
     }
   };
 
-  // 计算每行的 placeholder
   const getPlaceholder = (index: number): string => {
     if (hint) {
-      // 固定参数区域：显示预期值
       if (index < hint.fixedArgs.length) {
         return hint.fixedArgs[index];
       }
-      // 额外参数区域：显示提示
       const extraIndex = index - hint.fixedArgs.length;
       if (hint.extraArgs.length > 0) {
         const extra = hint.extraArgs[Math.min(extraIndex, hint.extraArgs.length - 1)];
@@ -210,13 +203,11 @@ function ArgsInput({
       }
       return "参数值...";
     }
-    // 无匹配时的通用提示
     if (index === 0) return "例如: -y";
     if (index === 1) return "例如: @modelcontextprotocol/server-memory";
     return "参数值...";
   };
 
-  // 额外参数是否需要添加提示
   const needsExtraArgs = hint?.extraArgs.some((e) => e.required) && items.length <= (hint?.fixedArgs.length ?? 0);
 
   return (
@@ -251,7 +242,8 @@ function ArgsInput({
       <button
         type="button"
         onClick={handleAdd}
-        className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+        className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:bg-primary/10 rounded-md px-2 py-1.5 transition-colors"
+        title="添加新参数行（也可在输入框中按 Enter）"
       >
         <Plus className="h-3.5 w-3.5" />
         添加参数
@@ -284,6 +276,142 @@ function ArgsInput({
   );
 }
 
+/** 环境变量 key-value 编辑器 */
+function EnvInput({
+  defaultValue,
+  onChange,
+}: {
+  defaultValue?: Record<string, string>;
+  onChange: (env: Record<string, string> | undefined) => void;
+}) {
+  const [items, setItems] = useState<{ key: string; value: string }[]>(
+    defaultValue
+      ? Object.entries(defaultValue).map(([key, value]) => ({ key, value }))
+      : []
+  );
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+
+  const syncToForm = useCallback(
+    (updated: { key: string; value: string }[]) => {
+      setItems(updated);
+      const env: Record<string, string> = {};
+      updated.forEach((item) => {
+        if (item.key.trim()) {
+          env[item.key.trim()] = item.value;
+        }
+      });
+      onChange(Object.keys(env).length > 0 ? env : undefined);
+    },
+    [onChange]
+  );
+
+  const handleAdd = () => {
+    if (!newKey.trim()) return;
+    // 重复 key 则更新 value
+    const existing = items.findIndex((item) => item.key === newKey.trim());
+    if (existing >= 0) {
+      const updated = [...items];
+      updated[existing] = { key: newKey.trim(), value: newValue };
+      syncToForm(updated);
+    } else {
+      syncToForm([...items, { key: newKey.trim(), value: newValue }]);
+    }
+    setNewKey("");
+    setNewValue("");
+    // 聚焦回 key 输入框
+    setTimeout(() => document.getElementById("env-new-key")?.focus(), 0);
+  };
+
+  const handleRemove = (index: number) => {
+    syncToForm(items.filter((_, i) => i !== index));
+  };
+
+  const handleItemChange = (index: number, field: "key" | "value", val: string) => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], [field]: val };
+    syncToForm(updated);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAdd();
+    }
+  };
+
+  return (
+    <div>
+      <Label className="text-sm font-medium">环境变量</Label>
+
+      {/* 已有条目 */}
+      {items.length > 0 && (
+        <div className="mt-1.5 space-y-2">
+          {items.map((item, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                value={item.key}
+                onChange={(e) => handleItemChange(index, "key", e.target.value)}
+                placeholder="变量名"
+                className="w-[40%] rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <span className="text-muted-foreground">=</span>
+              <input
+                value={item.value}
+                onChange={(e) => handleItemChange(index, "value", e.target.value)}
+                placeholder="值"
+                className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <button
+                type="button"
+                onClick={() => handleRemove(index)}
+                className="shrink-0 p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                title="删除此环境变量"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 添加行 */}
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          id="env-new-key"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="变量名"
+          className="w-[40%] rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
+        />
+        <span className="text-muted-foreground">=</span>
+        <input
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="值"
+          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
+        />
+        <button
+          type="button"
+          onClick={handleAdd}
+          className={cn(
+            "shrink-0 p-1 rounded transition-colors",
+            newKey.trim()
+              ? "text-primary hover:bg-primary/10"
+              : "text-muted-foreground/40 cursor-not-allowed"
+          )}
+          title="添加环境变量（也可按 Enter）"
+          disabled={!newKey.trim()}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface ServerFormProps {
   defaultValues?: Partial<MCPServerConfigValidated>;
   onSubmit: (data: MCPServerConfigValidated) => void;
@@ -298,7 +426,6 @@ export function ServerForm({
   submitLabel = "保存",
 }: ServerFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showRegistrySelector, setShowRegistrySelector] = useState(false);
 
   const {
     register,
@@ -313,13 +440,13 @@ export function ServerForm({
       command: "npx",
       args: [],
       env: {},
+      timeout: 30000,
       ...defaultValues,
     },
   });
 
   const transport = watch("transport");
   const command = watch("command");
-  const registryUrl = watch("registryUrl");
 
   // 自动检测 Registry 类型
   const registryType = useMemo<"npm" | "pip" | null>(() => {
@@ -342,13 +469,6 @@ export function ServerForm({
     }
     return null;
   }, [command]);
-
-  // 当检测到 registry 类型时，自动显示选择器
-  useEffect(() => {
-    if (registryType && transport === "stdio") {
-      setShowRegistrySelector(true);
-    }
-  }, [registryType, transport]);
 
   const handleFormSubmit = (data: MCPServerConfigValidated) => {
     onSubmit(data);
@@ -377,20 +497,6 @@ export function ServerForm({
           {errors.name && (
             <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>
           )}
-        </div>
-
-        {/* 描述 */}
-        <div>
-          <Label htmlFor="description" className="text-sm font-medium">
-            描述
-          </Label>
-          <textarea
-            id="description"
-            {...register("description")}
-            placeholder="简要描述此服务器的功能..."
-            rows={3}
-            className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-          />
         </div>
 
         {/* 连接类型 */}
@@ -464,36 +570,6 @@ export function ServerForm({
             </p>
           </div>
 
-          {/* Registry 选择器 */}
-          {registryType && (
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <button
-                type="button"
-                onClick={() => setShowRegistrySelector(!showRegistrySelector)}
-                className="flex items-center gap-2 text-sm font-medium mb-3"
-              >
-                {showRegistrySelector ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                {registryType === "npm" ? "NPM" : "Pip"} Registry 配置
-                {registryUrl && (
-                  <span className="ml-auto text-xs text-green-600">已配置</span>
-                )}
-              </button>
-              {showRegistrySelector && (
-                <RegistrySelector
-                  type={registryType}
-                  value={registryUrl}
-                  onChange={(url) =>
-                    setValue("registryUrl", url || undefined, { shouldDirty: true })
-                  }
-                />
-              )}
-            </div>
-          )}
-
           {/* 参数 */}
           <ArgsInput
             defaultValue={defaultValues?.args}
@@ -504,40 +580,16 @@ export function ServerForm({
             }}
           />
 
-          {/* 环境变量 */}
-          <div>
-            <Label htmlFor="env" className="text-sm font-medium">
-              环境变量
-            </Label>
-            <textarea
-              id="env"
-              placeholder={`KEY1=value1\nKEY2=value2`}
-              rows={3}
-              className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none font-mono"
-              onChange={(e) => {
-                const env: Record<string, string> = {};
-                e.target.value.split("\n").forEach((line) => {
-                  const [key, ...valueParts] = line.split("=");
-                  if (key?.trim() && valueParts.length > 0) {
-                    env[key.trim()] = valueParts.join("=").trim();
-                  }
-                });
-                setValue("env", Object.keys(env).length > 0 ? env : undefined, {
-                  shouldDirty: true,
-                });
-              }}
-              defaultValue={
-                defaultValues?.env
-                  ? Object.entries(defaultValues.env)
-                      .map(([k, v]) => `${k}=${v}`)
-                      .join("\n")
-                  : ""
-              }
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              每行一个环境变量，格式: KEY=value
-            </p>
-          </div>
+          {/* Registry 选择器 (尚未实现) */}
+          {registryType && (
+            <div className="rounded-lg border bg-muted/30 p-4 opacity-50 pointer-events-none">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ChevronRight className="h-4 w-4" />
+                {registryType === "npm" ? "NPM" : "Pip"} Registry 配置
+                <span className="ml-auto text-xs text-muted-foreground">(coming soon)</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -571,6 +623,25 @@ export function ServerForm({
         </div>
       )}
 
+      {/* 通用选项 */}
+      <div className="space-y-4">
+        {/* Auto Connect */}
+        <div className="flex items-center gap-2">
+          <input
+            id="autoConnect"
+            type="checkbox"
+            {...register("autoConnect")}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <Label
+            htmlFor="autoConnect"
+            className="text-sm font-medium cursor-pointer"
+          >
+            启动时自动连接
+          </Label>
+        </div>
+      </div>
+
       {/* 高级设置 */}
       <div className="space-y-4">
         <button
@@ -588,6 +659,50 @@ export function ServerForm({
 
         {showAdvanced && (
           <div className="space-y-4 pl-6 border-l-2">
+            {/* 描述 */}
+            <div>
+              <Label htmlFor="description" className="text-sm font-medium">
+                描述
+              </Label>
+              <textarea
+                id="description"
+                {...register("description")}
+                placeholder="简要描述此服务器的功能..."
+                rows={3}
+                className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              />
+            </div>
+
+            {/* 环境变量 */}
+            <EnvInput
+              defaultValue={defaultValues?.env}
+              onChange={(env) => {
+                setValue("env", env, { shouldDirty: true });
+              }}
+            />
+
+            {/* Timeout */}
+            <div>
+              <Label htmlFor="timeout" className="text-sm font-medium">
+                超时时间 (毫秒)
+              </Label>
+              <input
+                id="timeout"
+                type="number"
+                {...register("timeout", { valueAsNumber: true })}
+                placeholder="30000"
+                className={cn(
+                  "mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20",
+                  errors.timeout && "border-red-500"
+                )}
+              />
+              {errors.timeout && (
+                <p className="mt-1 text-xs text-red-500">
+                  {errors.timeout.message}
+                </p>
+              )}
+            </div>
+
             {/* Provider */}
             <div>
               <Label htmlFor="provider" className="text-sm font-medium">
@@ -599,28 +714,6 @@ export function ServerForm({
                 placeholder="例如: Anthropic, OpenAI"
                 className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
               />
-            </div>
-
-            {/* Logo URL */}
-            <div>
-              <Label htmlFor="logoUrl" className="text-sm font-medium">
-                Logo URL
-              </Label>
-              <input
-                id="logoUrl"
-                type="url"
-                {...register("logoUrl")}
-                placeholder="https://example.com/logo.png"
-                className={cn(
-                  "mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20",
-                  errors.logoUrl && "border-red-500"
-                )}
-              />
-              {errors.logoUrl && (
-                <p className="mt-1 text-xs text-red-500">
-                  {errors.logoUrl.message}
-                </p>
-              )}
             </div>
 
             {/* Tags */}
@@ -648,54 +741,32 @@ export function ServerForm({
               </p>
             </div>
 
-            {/* Timeout */}
-            <div>
-              <Label htmlFor="timeout" className="text-sm font-medium">
-                超时时间 (毫秒)
+            {/* Logo URL (尚未实现) */}
+            <div className="opacity-50 pointer-events-none">
+              <Label htmlFor="logoUrl" className="text-sm font-medium">
+                Logo URL
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(coming soon)</span>
               </Label>
               <input
-                id="timeout"
-                type="number"
-                {...register("timeout", { valueAsNumber: true })}
-                placeholder="30000"
-                className={cn(
-                  "mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20",
-                  errors.timeout && "border-red-500"
-                )}
+                id="logoUrl"
+                type="url"
+                disabled
+                placeholder="https://example.com/logo.png"
+                className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none"
               />
-              {errors.timeout && (
-                <p className="mt-1 text-xs text-red-500">
-                  {errors.timeout.message}
-                </p>
-              )}
             </div>
 
-            {/* Long Running */}
-            <div className="flex items-center gap-2">
+            {/* Long Running (尚未实现) */}
+            <div className="flex items-center gap-2 opacity-50 pointer-events-none">
               <input
                 id="longRunning"
                 type="checkbox"
-                {...register("longRunning")}
+                disabled
                 className="h-4 w-4 rounded border-gray-300"
               />
-              <Label htmlFor="longRunning" className="text-sm font-medium cursor-pointer">
+              <Label htmlFor="longRunning" className="text-sm font-medium">
                 长期运行服务器
-              </Label>
-            </div>
-
-            {/* Auto Connect */}
-            <div className="flex items-center gap-2">
-              <input
-                id="autoConnect"
-                type="checkbox"
-                {...register("autoConnect")}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <Label
-                htmlFor="autoConnect"
-                className="text-sm font-medium cursor-pointer"
-              >
-                启动时自动连接
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(coming soon)</span>
               </Label>
             </div>
           </div>
@@ -709,7 +780,7 @@ export function ServerForm({
             取消
           </Button>
         )}
-        <Button type="submit" disabled={!isDirty}>
+        <Button type="submit" disabled={!isDirty && !!defaultValues}>
           {submitLabel}
         </Button>
       </div>

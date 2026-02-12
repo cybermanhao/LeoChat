@@ -5,7 +5,7 @@ import { z } from "zod";
  * 用于验证 MCP 服务器配置的完整性和正确性
  */
 export const MCPServerConfigSchema = z.object({
-  id: z.string().min(1, "服务器 ID 不能为空"),
+  id: z.string().optional(),
   name: z.string().min(1, "服务器名称不能为空"),
   transport: z.enum(["stdio", "streamable-http"], {
     message: "连接类型必须是 stdio 或 streamable-http",
@@ -22,10 +22,13 @@ export const MCPServerConfigSchema = z.object({
   // 高级配置
   description: z.string().optional(),
   provider: z.string().optional(),
-  logoUrl: z.string().url("无效的 Logo URL").optional(),
+  logoUrl: z.union([z.string().url("无效的 Logo URL"), z.literal("")]).optional(),
   tags: z.array(z.string()).optional(),
   registryUrl: z.string().optional(),
-  timeout: z.number().int().positive("超时时间必须是正整数").optional(),
+  timeout: z.preprocess(
+    (val) => (Number.isNaN(val as number) ? undefined : val),
+    z.number().int().positive("超时时间必须是正整数").optional()
+  ),
   longRunning: z.boolean().optional(),
   autoConnect: z.boolean().optional(),
 

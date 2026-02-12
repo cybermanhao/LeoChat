@@ -69,6 +69,7 @@ export class MCPClient {
       // Create transport based on config (async)
       const transportResult = await createTransportAsync(this.config, {
         hostMode: typeof process !== "undefined" ? "electron" : "web",
+        connectionTimeout: this.config.timeout,
         onStatusChange: (status) => {
           if (status === "error") {
             this.setStatus("error");
@@ -82,7 +83,9 @@ export class MCPClient {
 
       this.transport = transportResult.transport;
 
-      // Create MCP client
+      // Create MCP client with listChanged support
+      // When a server dynamically adds/removes tools (e.g., WebMCP after browser connects),
+      // the SDK auto-refreshes and calls onChanged
       this.client = new Client(
         {
           name: "leochat",
@@ -90,6 +93,23 @@ export class MCPClient {
         },
         {
           capabilities: {},
+          listChanged: {
+            tools: {
+              autoRefresh: true,
+              debounceMs: 500,
+              onChanged: (_error: Error | null, tools: MCPTool[] | null) => {
+                if (tools) {
+                  console.log(`[MCP] Tools list changed for ${this.config.name}: ${tools.length} tools`);
+                  this.tools = tools.map((tool: any) => ({
+                    name: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.inputSchema as Record<string, unknown>,
+                  }));
+                  this.onToolsUpdate?.(this.tools);
+                }
+              },
+            },
+          },
         }
       );
 

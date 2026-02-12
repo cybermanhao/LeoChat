@@ -222,6 +222,7 @@ export interface MCPServerConfig {
   args?: string[];
   url?: string;
   env?: Record<string, string>;
+  timeout?: number;
 }
 
 export interface MCPSession {

@@ -450,27 +450,17 @@ export const useMCPStore = create<MCPState>()(
       },
 
       autoConnectAll: async () => {
-        const { autoConnectServerIds, enabledServerIds, connectServer } = get();
+        const { autoConnectServerIds, connectServer } = get();
+        if (autoConnectServerIds.length === 0) return;
 
-        // 合并：之前启用的 + 自动连接的（去重）
-        const toConnect = [...new Set([...enabledServerIds, ...autoConnectServerIds])];
-        if (toConnect.length === 0) return;
+        console.log("[MCP] Auto-connect starting:", autoConnectServerIds.length, "servers");
 
-        // 先清除陈旧的连接状态（持久化恢复的，实际并未连接）
-        set({
-          enabledServerIds: [],
-          serverStates: {},
-        });
-
-        console.log("[MCP] Auto-connect starting:", toConnect.length, "servers");
-
-        for (const serverId of toConnect) {
+        for (const serverId of autoConnectServerIds) {
           try {
             await connectServer(serverId);
             console.log("[MCP] Auto-connected:", serverId);
           } catch (error) {
             console.warn("[MCP] Auto-connect failed:", serverId, error);
-            // 继续连接下一个，不阻塞
           }
           // 每个连接之间延迟 500ms，避免同时 spawn 多个进程
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -481,10 +471,18 @@ export const useMCPStore = create<MCPState>()(
 
       // 初始化
       initBuiltinServers: () => {
-        // 重置内置服务列表为最新的 BUILTIN_SERVERS，清理废弃的服务
+        // 同步内置服务列表：新增/删除跟随 BUILTIN_SERVERS，保留用户对已有服务器的修改
         set((state) => {
-          // 获取当前有效的服务器 ID 集合
           const validServerIds = new Set(BUILTIN_SERVERS.map((s) => s.id));
+
+          // 保留用户对 builtin 服务器的修改（如 env、args、timeout 等）
+          const currentBuiltinSource = state.sources.find((s) => s.id === "builtin");
+          const currentBuiltinMap = new Map(
+            (currentBuiltinSource?.servers || []).map((s) => [s.id, s])
+          );
+          const mergedBuiltin = BUILTIN_SERVERS.map((s) =>
+            currentBuiltinMap.get(s.id) || s
+          );
 
           // 获取自定义服务
           const customSource = state.sources.find((s) => s.id === "custom");
@@ -509,7 +507,7 @@ export const useMCPStore = create<MCPState>()(
                 id: "builtin",
                 name: "内置服务",
                 type: "builtin" as const,
-                servers: BUILTIN_SERVERS,
+                servers: mergedBuiltin,
               },
               {
                 id: "custom",
@@ -550,21 +548,29 @@ export const useMCPStore = create<MCPState>()(
     {
       name: "leochat-mcp-storage",
       partialize: (state) => ({
-        // 只持久化自定义服务器和启用的服务器 ID
-        // 内置服务器列表始终从 BUILTIN_SERVERS 常量获取
+        // 持久化所有服务器配置（builtin + custom），不持久化运行时连接状态
+        builtinServers: state.sources.find((s) => s.id === "builtin")?.servers || [],
         customServers: state.sources.find((s) => s.id === "custom")?.servers || [],
-        enabledServerIds: state.enabledServerIds,
         autoConnectServerIds: state.autoConnectServerIds,
-        disabledToolIds: Array.from(state.disabledToolIds), // Convert Set to Array for persistence
+        disabledToolIds: Array.from(state.disabledToolIds),
       }),
       // 从持久化数据恢复时，重建完整的 sources
       merge: (persisted, current) => {
         const persistedData = persisted as {
+          builtinServers?: MCPServerConfig[];
           customServers?: MCPServerConfig[];
-          enabledServerIds?: string[];
           autoConnectServerIds?: string[];
           disabledToolIds?: string[];
         };
+
+        // 合并 builtin 服务器：以 BUILTIN_SERVERS 为基准，保留用户对已有服务器的修改
+        const persistedBuiltinMap = new Map(
+          (persistedData.builtinServers || []).map((s) => [s.id, s])
+        );
+        const mergedBuiltin = BUILTIN_SERVERS.map((s) =>
+          persistedBuiltinMap.get(s.id) || s
+        );
+
         return {
           ...current,
           sources: [
@@ -572,7 +578,7 @@ export const useMCPStore = create<MCPState>()(
               id: "builtin",
               name: "内置服务",
               type: "builtin" as const,
-              servers: BUILTIN_SERVERS,
+              servers: mergedBuiltin,
             },
             {
               id: "custom",
@@ -581,9 +587,12 @@ export const useMCPStore = create<MCPState>()(
               servers: persistedData.customServers || [],
             },
           ],
-          enabledServerIds: persistedData.enabledServerIds || [],
+          // 运行时连接状态不恢复，由 autoConnectAll 重新连接
+          enabledServerIds: [],
+          serverStates: {},
+          // 只恢复配置数据
           autoConnectServerIds: persistedData.autoConnectServerIds || [],
-          disabledToolIds: new Set(persistedData.disabledToolIds || []), // Convert Array back to Set
+          disabledToolIds: new Set(persistedData.disabledToolIds || []),
         };
       },
     }

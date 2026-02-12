@@ -688,6 +688,35 @@ export const useChatStore = create<ChatState>()(
         currentModel: state.currentModel,
         enableMarkdown: state.enableMarkdown,
       }),
+      merge: (persisted, current) => {
+        const data = persisted as Record<string, unknown>;
+        const conversations = (data.conversations || []) as Conversation[];
+
+        // 清理 conversations 中卡在 running/pending 状态的 tool-call 项
+        const cleanedConversations = conversations.map(conv => ({
+          ...conv,
+          displayMessages: (conv.displayMessages || []).map(msg => ({
+            ...msg,
+            contentItems: (msg.contentItems || []).map(item => {
+              if (item.type === 'tool-call' && (item.status === 'running' || item.status === 'pending')) {
+                return { ...item, status: 'error' as const };
+              }
+              return item;
+            }),
+          })),
+        }));
+
+        return {
+          ...current,
+          ...data,
+          conversations: cleanedConversations,
+          // 确保运行时状态不被恢复
+          isGenerating: false,
+          cardStatus: "stable" as CardStatus,
+          toolCallStates: {},
+          activeTaskLoop: null,
+        };
+      },
     }
   )
 );

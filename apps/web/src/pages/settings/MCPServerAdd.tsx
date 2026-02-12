@@ -9,6 +9,7 @@ import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
 export function MCPServerAddPage() {
   const navigate = useNavigate();
   const addServer = useMCPStore((s) => s.addServer);
+  const setAutoConnect = useMCPStore((s) => s.setAutoConnect);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async (data: MCPServerConfigValidated) => {
@@ -22,6 +23,11 @@ export function MCPServerAddPage() {
         ...data,
         id: serverId,
       });
+
+      // 同步 autoConnect 到 autoConnectServerIds
+      if (data.autoConnect) {
+        setAutoConnect(serverId, true);
+      }
 
       // 导航回服务器列表
       navigate("/mcp/servers");
