@@ -4,6 +4,11 @@ import { IPC_CHANNELS } from "@ai-chatbox/shared";
 
 // Custom APIs for renderer
 const api = {
+  // Window controls
+  minimize: () => ipcRenderer.send("window:minimize"),
+  maximize: () => ipcRenderer.send("window:maximize"),
+  close: () => ipcRenderer.send("window:close"),
+
   // Server
   getServerStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SERVER_STATUS),
 

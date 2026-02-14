@@ -227,7 +227,7 @@ export interface MCPServerConfig {
 
 export interface MCPSession {
   serverId: string;
-  status: "connecting" | "connected" | "disconnected" | "error";
+  status: "connecting" | "connected" | "disconnected" | "error" | "reconnecting";
   capabilities?: MCPCapabilities;
   tools?: MCPTool[];
 }

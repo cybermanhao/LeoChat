@@ -61,7 +61,10 @@
       "Bash(cmd /c \"start cmd /k npx -y @jason.today/webmcp@latest\")",
       "Bash(cmd /c \"start cmd /k npx -y @jason.today/webmcp@latest --foreground\")",
       "Bash(node -e:*)",
-      "Bash(git -C \"C:\\\\code\\\\LeoChat\" log --all --oneline -20 -- apps/web/src/stores/mcp.ts apps/web/src/App.tsx)"
+      "Bash(git -C \"C:\\\\code\\\\LeoChat\" log --all --oneline -20 -- apps/web/src/stores/mcp.ts apps/web/src/App.tsx)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(wait:*)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

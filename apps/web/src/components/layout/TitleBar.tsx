@@ -7,26 +7,12 @@ interface TitleBarProps {
 }
 
 export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
-  // 检测是否在 Electron 环境中
-  const isElectron = typeof window !== "undefined" && (window as any).electron;
+  const electronAPI = typeof window !== "undefined" && (window as any).electronAPI;
+  const isElectron = !!electronAPI;
 
-  const handleMinimize = () => {
-    if (isElectron) {
-      (window as any).electron.minimize();
-    }
-  };
-
-  const handleMaximize = () => {
-    if (isElectron) {
-      (window as any).electron.maximize();
-    }
-  };
-
-  const handleClose = () => {
-    if (isElectron) {
-      (window as any).electron.close();
-    }
-  };
+  const handleMinimize = () => electronAPI?.minimize();
+  const handleMaximize = () => electronAPI?.maximize();
+  const handleClose = () => electronAPI?.close();
 
   return (
     <div className="h-8 bg-card flex items-center justify-between px-2 select-none border-b">

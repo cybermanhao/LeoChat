@@ -31,9 +31,8 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     show: false,
+    frame: false,
     autoHideMenuBar: true,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 15, y: 10 },
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -61,6 +60,17 @@ function createWindow(): void {
 
 // Register IPC handlers
 function setupIPC(): void {
+  // Window controls
+  ipcMain.on("window:minimize", () => mainWindow?.minimize());
+  ipcMain.on("window:maximize", () => {
+    if (mainWindow?.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow?.maximize();
+    }
+  });
+  ipcMain.on("window:close", () => mainWindow?.close());
+
   // Server status
   ipcMain.handle(IPC_CHANNELS.SERVER_STATUS, () => {
     return {

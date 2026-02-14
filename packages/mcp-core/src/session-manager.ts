@@ -71,12 +71,29 @@ export class SessionManager {
 
     const clientOptions: MCPClientOptions = {
       config,
-      onStatusChange: () => this.notifySessionChange(),
+      autoReconnect: true,
+      onStatusChange: (status) => {
+        // 重连成功后重新注册到 dispatcher
+        if (status === "connected") {
+          const client = this.clients.get(serverId);
+          if (client) {
+            this.dispatcher.registerClient(client);
+          }
+        }
+        // 重连失败或断开时注销
+        if (status === "error" || status === "disconnected") {
+          this.dispatcher.unregisterClient(serverId);
+        }
+        this.notifySessionChange();
+      },
       onToolsUpdate: () => {
         this.dispatcher.registerClient(this.clients.get(serverId)!);
       },
       onError: (error) => {
         this.options.onError?.(serverId, error);
+      },
+      onReconnectAttempt: (attempt, maxAttempts) => {
+        console.log(`[MCP] Server ${serverId}: reconnect attempt ${attempt}/${maxAttempts}`);
       },
     };
 

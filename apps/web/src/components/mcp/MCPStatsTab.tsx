@@ -20,7 +20,7 @@ export function MCPStatsTab() {
     const serverDetails: Array<{
       name: string;
       id: string;
-      status: "connected" | "error" | "disconnected";
+      status: "connected" | "error" | "disconnected" | "reconnecting";
       toolCount: number;
       resourceCount: number;
       promptCount: number;
@@ -31,7 +31,9 @@ export function MCPStatsTab() {
     for (const server of allServers) {
       totalServers++;
       const state = serverStates[server.id];
-      const connected = state?.session?.status === "connected";
+      const sessionStatus = state?.session?.status;
+      const connected = sessionStatus === "connected";
+      const reconnecting = sessionStatus === "reconnecting";
       const hasError = !!state?.error;
       const tools = state?.session?.tools?.length || 0;
       const resources = state?.resources?.length || 0;
@@ -51,7 +53,7 @@ export function MCPStatsTab() {
       serverDetails.push({
         name: server.name,
         id: server.id,
-        status: connected ? "connected" : hasError ? "error" : "disconnected",
+        status: reconnecting ? "reconnecting" : connected ? "connected" : hasError ? "error" : "disconnected",
         toolCount: tools,
         resourceCount: resources,
         promptCount: prompts,
@@ -195,9 +197,10 @@ function StatCard({
   );
 }
 
-function StatusDot({ status }: { status: "connected" | "error" | "disconnected" }) {
+function StatusDot({ status }: { status: "connected" | "error" | "disconnected" | "reconnecting" }) {
   const colors = {
     connected: "bg-green-500",
+    reconnecting: "bg-orange-500",
     error: "bg-red-500",
     disconnected: "bg-gray-400",
   };

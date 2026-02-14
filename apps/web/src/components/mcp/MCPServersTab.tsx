@@ -23,7 +23,12 @@ import type { MCPServerConfig, MCPTool } from "@ai-chatbox/shared";
 
 type TransportType = "stdio" | "streamable-http";
 
-function StatusBadge({ connected, error, connecting }: { connected?: boolean; error?: string; connecting?: boolean }) {
+function StatusBadge({ connected, error, connecting, reconnecting }: { connected?: boolean; error?: string; connecting?: boolean; reconnecting?: boolean }) {
+  if (reconnecting) {
+    return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-600">
+      <Loader2 className="h-2.5 w-2.5 animate-spin" />重连中
+    </span>;
+  }
   if (connecting) {
     return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/10 text-yellow-600">
       <Loader2 className="h-2.5 w-2.5 animate-spin" />连接中
@@ -217,6 +222,7 @@ export function MCPServersTab() {
               {allServers.map((server) => {
                 const state = serverStates[server.id];
                 const connected = state?.session?.status === "connected";
+                const reconnecting = state?.session?.status === "reconnecting";
                 const tools = state?.session?.tools || [];
                 const expanded = expandedServers.has(server.id);
                 const connecting = isConnecting[server.id];
@@ -235,7 +241,7 @@ export function MCPServersTab() {
                           <span className="w-3 h-3" />
                         )}
                       </button>
-                      <StatusBadge connected={connected} error={state?.error} connecting={connecting} />
+                      <StatusBadge connected={connected} error={state?.error} connecting={connecting} reconnecting={reconnecting} />
                       <span className="flex-1 text-xs font-medium truncate ml-1">{server.name}</span>
                       {autoConnectServerIds.includes(server.id) && (
                         <span title="自动连接"><Zap className="h-2.5 w-2.5 text-yellow-500 shrink-0" /></span>

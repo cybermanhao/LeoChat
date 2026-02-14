@@ -83,6 +83,7 @@ export function MCPServersPage() {
               const state = serverStates[server.id];
               const isConnected = enabledServerIds.includes(server.id);
               const isLoading = connectingServerIds.has(server.id);
+              const isReconnecting = state?.session?.status === "reconnecting";
               const version = serverVersions[server.id];
               const isAutoConnect = autoConnectServerIds.includes(server.id);
 
@@ -100,6 +101,7 @@ export function MCPServersPage() {
                     version={version}
                     isLoading={isLoading}
                     isConnected={isConnected}
+                    isReconnecting={isReconnecting}
                     isAutoConnect={isAutoConnect}
                     error={state?.error}
                     onToggle={() => toggleServer(server.id)}

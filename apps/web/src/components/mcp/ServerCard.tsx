@@ -18,6 +18,7 @@ interface ServerCardProps {
   version?: string | null;
   isLoading?: boolean;
   isConnected?: boolean;
+  isReconnecting?: boolean;
   isAutoConnect?: boolean;
   error?: string;
   onToggle: (active: boolean) => void;
@@ -30,11 +31,21 @@ function StatusBadge({
   connected,
   error,
   loading,
+  reconnecting,
 }: {
   connected?: boolean;
   error?: string;
   loading?: boolean;
+  reconnecting?: boolean;
 }) {
+  if (reconnecting) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-orange-500/10 text-orange-600">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        重连中
+      </span>
+    );
+  }
   if (loading) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-yellow-500/10 text-yellow-600">
@@ -72,6 +83,7 @@ export function ServerCard({
   version,
   isLoading = false,
   isConnected = false,
+  isReconnecting = false,
   isAutoConnect = false,
   error,
   onToggle,
@@ -116,7 +128,7 @@ export function ServerCard({
           <div className="flex-1 min-w-0">
             <h3 className="font-medium text-sm truncate">{server.name}</h3>
             <div className="flex items-center gap-2 mt-0.5">
-              <StatusBadge connected={isConnected} error={error} loading={isLoading} />
+              <StatusBadge connected={isConnected} error={error} loading={isLoading} reconnecting={isReconnecting} />
               {isAutoConnect && (
                 <span title="自动连接">
                   <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
