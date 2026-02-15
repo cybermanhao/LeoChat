@@ -1,7 +1,7 @@
 # LeoChat
 
 AI Chat Application with Model Context Protocol (MCP) support.
-
+![演示功能](./theme-change.gif)
 ## Features
 
 - **Multi-Provider LLM**: DeepSeek, OpenRouter, OpenAI — configurable via UI or environment variables
