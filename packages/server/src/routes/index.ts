@@ -200,6 +200,20 @@ export function createRoutes(context: ServerContext) {
     });
   });
 
+  // Set LLM API key from frontend UI
+  app.post("/llm/config", async (c) => {
+    const { provider, apiKey } = await c.req.json<{ provider: LLMProvider; apiKey: string }>();
+    if (!provider || !apiKey) {
+      return c.json({ error: "provider and apiKey are required" }, 400);
+    }
+    llmService.setApiKey(provider, apiKey);
+    return c.json({
+      success: true,
+      availableProviders: llmService.getAvailableProviders(),
+      defaultProvider: llmService.getDefaultProvider(),
+    });
+  });
+
   // MCP server management
   app.post("/mcp/servers", async (c) => {
     const config = await c.req.json<MCPServerConfig>();

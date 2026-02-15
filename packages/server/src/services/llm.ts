@@ -89,6 +89,39 @@ export class LLMService {
   }
 
   /**
+   * 动态设置 API Key（从前端 UI 配置）
+   */
+  setApiKey(provider: LLMProvider, apiKey: string): void {
+    if (!apiKey) return;
+
+    const baseURLs: Record<LLMProvider, string> = {
+      deepseek: API_ENDPOINTS.DEEPSEEK,
+      openrouter: API_ENDPOINTS.OPENROUTER,
+      openai: API_ENDPOINTS.OPENAI,
+    };
+
+    const options: ConstructorParameters<typeof OpenAI>[0] = {
+      apiKey,
+      baseURL: baseURLs[provider],
+    };
+
+    if (provider === "openrouter") {
+      options.defaultHeaders = {
+        "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
+        "X-Title": "LeoChat",
+      };
+    }
+
+    this.clients.set(provider, new OpenAI(options));
+    console.log(`[LLM] ${provider} client configured via UI`);
+
+    // 更新默认提供商（如果之前没有任何 client）
+    if (this.clients.size === 1) {
+      this.defaultProvider = provider;
+    }
+  }
+
+  /**
    * 获取可用的提供商列表
    */
   getAvailableProviders(): LLMProvider[] {

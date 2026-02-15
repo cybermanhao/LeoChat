@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ChatLayout } from "./components/ChatLayout";
 import { useThemeStore } from "./stores/theme";
 import { useChatStore } from "./stores/chat";
@@ -7,6 +7,10 @@ import { useMCPStore } from "./stores/mcp";
 import { TooltipProvider } from "@ai-chatbox/ui";
 import { chatApi } from "./lib/api";
 import { initializeI18n } from "./i18n";
+
+// Electron production uses file:// protocol, which requires HashRouter
+const isFileProtocol = window.location.protocol === "file:";
+const Router = isFileProtocol ? HashRouter : BrowserRouter;
 
 // Layout
 import { AppLayout } from "./components/layout/AppLayout";
@@ -53,16 +57,24 @@ function AppInit({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [autoConnectAll]);
 
-  // 启动时从后端获取 LLM 配置
+  // 启动时从后端获取 LLM 配置，并同步本地保存的 API keys 到后端
+  const providerKeys = useChatStore((s) => s.providerKeys);
   useEffect(() => {
     chatApi.getLLMConfig().then((config) => {
       if (config.backendConfigured) {
         initFromBackendConfig(config);
         console.log("[App] Backend LLM config loaded:", config);
       }
+      // 同步本地保存的 API keys 到后端（用户之前在 UI 设置的）
+      Object.entries(providerKeys).forEach(([provider, key]) => {
+        if (key && key !== "backend") {
+          chatApi.setLLMConfig(provider, key).catch(() => {});
+        }
+      });
     }).catch((err) => {
       console.warn("[App] Failed to load backend LLM config:", err);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initFromBackendConfig]);
 
   return <>{children}</>;
@@ -71,7 +83,7 @@ function AppInit({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <TooltipProvider>
-      <BrowserRouter>
+      <Router>
         <AppInit>
           <Routes>
             {/* Main Layout with Activity Bar */}
@@ -102,7 +114,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AppInit>
-      </BrowserRouter>
+      </Router>
     </TooltipProvider>
   );
 }

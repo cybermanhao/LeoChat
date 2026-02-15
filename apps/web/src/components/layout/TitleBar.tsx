@@ -38,7 +38,7 @@ export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-muted text-muted-foreground hover:text-foreground rounded-none"
+              className="h-8 w-8 hover:bg-muted active:bg-muted/70 text-muted-foreground hover:text-foreground active:scale-90 rounded-none transition-all duration-150"
               onClick={handleMinimize}
             >
               <Minus className="h-3.5 w-3.5" />
@@ -46,7 +46,7 @@ export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-muted text-muted-foreground hover:text-foreground rounded-none"
+              className="h-8 w-8 hover:bg-muted active:bg-muted/70 text-muted-foreground hover:text-foreground active:scale-90 rounded-none transition-all duration-150"
               onClick={handleMaximize}
             >
               <Maximize2 className="h-3.5 w-3.5" />
@@ -54,7 +54,7 @@ export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground text-muted-foreground rounded-none"
+              className="h-8 w-8 hover:bg-destructive active:bg-destructive/70 hover:text-destructive-foreground active:scale-90 text-muted-foreground rounded-none transition-all duration-150"
               onClick={handleClose}
             >
               <X className="h-3.5 w-3.5" />

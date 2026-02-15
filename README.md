@@ -1,29 +1,31 @@
-# AI Chatbox MCP
+# LeoChat
 
-AI-Driven Multi-Modal Chatbox with Model Context Protocol (MCP) support.
+AI Chat Application with Model Context Protocol (MCP) support.
 
 ## Features
 
-- **Dual-Mode Architecture**: Works as both Web app and Electron desktop application
-- **MCP Integration**: Connect to MCP servers via Streamable HTTP (SSE) and Stdio transports
-- **Streaming UI**: Real-time streaming responses with skeleton placeholders
-- **Dynamic Themes**: CSS variable-based theming with multiple presets
-- **Generative UI**: Parse and render Markdown, code blocks, Mermaid diagrams, tables
-- **Action Buttons**: Support for custom action tags in AI responses
+- **Multi-Provider LLM**: DeepSeek, OpenRouter, OpenAI — configurable via UI or environment variables
+- **MCP Integration**: Connect to multiple MCP servers via Stdio and Streamable HTTP transports
+- **Built-in MCP Servers**: LeoChat (UI control), Filesystem, Memory, Fetch, Excel, Everything
+- **Dual-Mode**: Web app + Electron desktop application
+- **Streaming UI**: Real-time streaming responses with tool call status tracking
+- **Dynamic Themes**: 6 theme presets (3 light + 3 dark) with CSS variable system
+- **Generative UI**: Markdown, code blocks, Mermaid diagrams, action buttons, card rendering
+- **i18n**: Chinese / English / Japanese / German / French / Spanish
 
 ## Tech Stack
 
 - **Monorepo**: pnpm workspaces
-- **Frontend**: Vite, React 19, TypeScript, Tailwind CSS v4
-- **UI Components**: Shadcn UI (CSS variable customization)
-- **Runtime**: Electron (desktop) + Node.js (web backend)
+- **Frontend**: Vite, React 19, TypeScript, Tailwind CSS v4, Zustand
+- **UI Components**: Shadcn UI (Radix primitives)
+- **Backend**: Hono + Node.js (SSE streaming)
+- **Desktop**: Electron 33
 - **Protocol**: Model Context Protocol (MCP)
-- **LLM**: OpenRouter API (streaming support)
 
 ## Project Structure
 
 ```
-/
+LeoChat/
 ├── apps/
 │   ├── web/                # Vite + React frontend
 │   └── electron/           # Electron main & preload
@@ -31,7 +33,8 @@ AI-Driven Multi-Modal Chatbox with Model Context Protocol (MCP) support.
 │   ├── server/             # Node.js backend (Hono + SSE)
 │   ├── ui/                 # Shared component library
 │   ├── mcp-core/           # MCP Client & tool dispatcher
-│   └── shared/             # Types & utilities
+│   ├── shared/             # Types & utilities
+│   └── leochat-mcp/        # Built-in MCP server (UI control)
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -40,37 +43,38 @@ AI-Driven Multi-Modal Chatbox with Model Context Protocol (MCP) support.
 
 ### Prerequisites
 
-- Node.js >= 20.0.0
-- pnpm >= 9.0.0
+- Node.js >= 20
+- pnpm >= 9
 
-### Installation
+### Install
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Build packages
-pnpm build
+pnpm build:packages
 ```
 
-### Environment Setup
+### Environment (optional)
+
+API keys can be configured via the Settings UI. Alternatively, set them in `.env` for backend defaults:
 
 ```bash
-# Copy environment example
 cp .env.example .env
+```
 
-# Edit .env and add your OpenRouter API key
+```env
+DEEPSEEK_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-...
+OPENAI_API_KEY=sk-...
 ```
 
 ### Development
 
 ```bash
-# Start web development (frontend + server)
-pnpm dev:web
-pnpm dev:server
+# Web (frontend + backend)
+pnpm dev
 
-# Or start Electron development
-pnpm dev:electron
+# Electron desktop
+pnpm --filter @ai-chatbox/electron dev
 ```
 
 ### Build
@@ -79,43 +83,34 @@ pnpm dev:electron
 # Build all packages
 pnpm build
 
-# Build specific app
-pnpm build:web
-pnpm build:electron
+# Electron — directory (unpacked)
+pnpm --filter @ai-chatbox/electron build
+pnpm --filter @ai-chatbox/electron run pack
+
+# Electron — installer (NSIS)
+pnpm --filter @ai-chatbox/electron run dist
 ```
 
 ## Theme Presets
 
-Available theme presets:
-- `light` - Default light theme
-- `dark` - Default dark theme
-- `light-purple` - Light background + purple accent
-- `dark-green` - Dark background + green accent
-- `dark-purple` - Dark background + purple accent
-- `light-green` - Light background + green accent
+| Light | Dark |
+|-------|------|
+| Light | Dark |
+| Light Purple | Dark Purple |
+| Light Green | Dark Green |
 
-## MCP Integration
+## MCP Servers
 
-The app supports connecting to MCP servers via:
-- **Streamable HTTP (SSE)**: Remote MCP servers
-- **Stdio**: Local process-based MCP servers
+Built-in servers auto-connect on startup. Custom servers can be added via the MCP settings page.
 
-### Connecting to MCP Servers
-
-```typescript
-// Via API
-await fetch('/api/mcp/servers', {
-  method: 'POST',
-  body: JSON.stringify({
-    id: 'my-server',
-    name: 'My MCP Server',
-    transport: 'streamable-http',
-    url: 'http://localhost:8080/mcp'
-  })
-});
-
-await fetch('/api/mcp/servers/my-server/connect', { method: 'POST' });
-```
+| Server | Package | Description |
+|--------|---------|-------------|
+| LeoChat | built-in | UI control (theme, notifications, panels) |
+| Everything | `@modelcontextprotocol/server-everything` | Reference/test server |
+| Filesystem | `@modelcontextprotocol/server-filesystem` | File operations |
+| Memory | `@modelcontextprotocol/server-memory` | Knowledge graph memory |
+| Fetch | `@tokenizin/mcp-npx-fetch` | Web content fetching |
+| Excel | `@negokaz/excel-mcp-server` | Excel read/write |
 
 ## License
 

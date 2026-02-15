@@ -6,7 +6,7 @@ import type {
   MCPPrompt,
 } from "@ai-chatbox/shared";
 
-const API_BASE = "/api";
+const API_BASE = window.location.protocol === "file:" ? "http://localhost:3001/api" : "/api";
 
 interface StreamCallbacks {
   onChunk: (chunk: { content: string; index: number }) => void;
@@ -136,6 +136,15 @@ export const chatApi = {
     backendConfigured: boolean;
   }> {
     const response = await fetch(`${API_BASE}/llm/config`);
+    return response.json();
+  },
+
+  async setLLMConfig(provider: string, apiKey: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_BASE}/llm/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, apiKey }),
+    });
     return response.json();
   },
 };

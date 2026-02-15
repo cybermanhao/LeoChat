@@ -8,6 +8,7 @@ import {
   LeftDrawerContent,
 } from "../components/layout";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { LLMSettings } from "./settings/LLMSettings";
 import { t } from "../i18n";
 
 interface SettingCategory {
@@ -18,8 +19,7 @@ interface SettingCategory {
 
 const settingCategories: SettingCategory[] = [
   { id: "appearance", label: t("common.appearance"), icon: Palette },
-  { id: "model", label: t("settings.model.title"), icon: Globe },
-  { id: "api", label: t("settings.api.title"), icon: Key },
+  { id: "llm", label: t("settings.model.title"), icon: Globe },
   { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
   { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
   { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
@@ -66,20 +66,8 @@ export function SettingsPage() {
     switch (currentCategory) {
       case "appearance":
         return <AppearanceSettings />;
-      case "model":
-        return (
-          <div>
-            <h2 className="text-xl font-bold mb-4">{t("settings.model.title")}</h2>
-            <p className="text-muted-foreground">{t("settings.model.description")}</p>
-          </div>
-        );
-      case "api":
-        return (
-          <div>
-            <h2 className="text-xl font-bold mb-4">{t("settings.api.title")}</h2>
-            <p className="text-muted-foreground">{t("settings.api.description")}</p>
-          </div>
-        );
+      case "llm":
+        return <LLMSettings />;
       default:
         return (
           <div>
@@ -104,8 +92,8 @@ export function SettingsPage() {
         <div className="max-w-3xl">
           {getCategoryContent()}
 
-          {/* Coming Soon Notice - 仅在非外观页面显示 */}
-          {currentCategory !== "appearance" && (
+          {/* Coming Soon Notice - 仅在未实装页面显示 */}
+          {currentCategory !== "appearance" && currentCategory !== "llm" && (
             <div className="mt-8 p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
               <div className="flex items-start gap-3">
                 <SettingsIcon className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />

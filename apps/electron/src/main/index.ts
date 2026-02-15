@@ -43,6 +43,17 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
+    // Always open DevTools for debugging (remove in production)
+    mainWindow?.webContents.openDevTools();
+  });
+
+  // Log renderer errors
+  mainWindow.webContents.on("console-message", (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error(`[Renderer] ${message} (${sourceId}:${line})`);
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_e, errorCode, errorDescription) => {
+    console.error(`[did-fail-load] ${errorCode}: ${errorDescription}`);
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

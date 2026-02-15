@@ -64,7 +64,11 @@
       "Bash(git -C \"C:\\\\code\\\\LeoChat\" log --all --oneline -20 -- apps/web/src/stores/mcp.ts apps/web/src/App.tsx)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(wait:*)"
+      "Bash(wait:*)",
+      "WebFetch(domain:lobehub.com)",
+      "Bash(npx asar:*)",
+      "Bash(tasklist:*)",
+      "Bash(git status:*)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

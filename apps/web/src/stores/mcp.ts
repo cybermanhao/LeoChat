@@ -42,6 +42,21 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     command: "npx",
     args: ["-y", "@modelcontextprotocol/server-memory"],
   },
+  {
+    id: "fetch",
+    name: "Fetch",
+    transport: "stdio",
+    command: "npx",
+    args: ["-y", "@tokenizin/mcp-npx-fetch"],
+  },
+  {
+    id: "excel",
+    name: "Excel",
+    transport: "stdio",
+    command: "npx",
+    args: ["-y", "@negokaz/excel-mcp-server"],
+    env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
+  },
 ];
 
 interface MCPState {

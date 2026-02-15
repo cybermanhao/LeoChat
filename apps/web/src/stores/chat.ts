@@ -288,10 +288,19 @@ export const useChatStore = create<ChatState>()(
 
       setMCPTools: (tools) => set({ mcpTools: tools }),
 
-      setProviderKey: (provider, key) =>
+      setProviderKey: (provider, key) => {
         set((state) => ({
           providerKeys: { ...state.providerKeys, [provider]: key },
-        })),
+        }));
+        // 同步 API key 到后端
+        if (key && key !== "backend") {
+          import("../lib/api").then(({ chatApi }) => {
+            chatApi.setLLMConfig(provider, key).catch((err) => {
+              console.warn("[Chat] Failed to sync API key to backend:", err);
+            });
+          });
+        }
+      },
 
       setCurrentProvider: (provider) => {
         const defaultModels: Record<LLMProvider, string> = {
