@@ -22,6 +22,7 @@ import {
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
 import { Sparkles, Globe, FileText, Trash2 } from "lucide-react";
+import { t } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { ModelSelector } from "./ModelSelector";
@@ -195,7 +196,7 @@ export function ChatArea() {
 
   const handleClearChat = useCallback(() => {
     // TODO: 实现清空当前对话
-    if (confirm("确定要清空当前对话吗？")) {
+    if (confirm(t("chat.confirmClear"))) {
       console.log("Clear chat");
     }
   }, []);
@@ -243,7 +244,7 @@ export function ChatArea() {
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
-            选择模型
+            {t("settings.model.selectModel")}
           </TooltipContent>
         </Tooltip>
 
@@ -265,11 +266,11 @@ export function ChatArea() {
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
             >
               <Globe className="h-4 w-4" />
-              <span className="hidden sm:inline">联网搜索</span>
+              <span className="hidden sm:inline">{t("chat.webSearch")}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
-            联网搜索
+            {t("chat.webSearch")}
           </TooltipContent>
         </Tooltip>
 
@@ -284,11 +285,11 @@ export function ChatArea() {
               onClick={() => setEnableMarkdown(!enableMarkdown)}
             >
               <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">{enableMarkdown ? "Markdown" : "纯文本"}</span>
+              <span className="hidden sm:inline">{enableMarkdown ? t("chat.markdown") : t("chat.plainText")}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
-            {enableMarkdown ? "Markdown 渲染" : "纯文本"}
+            {enableMarkdown ? t("chat.markdownRendering") : t("chat.plainText")}
           </TooltipContent>
         </Tooltip>
 
@@ -304,11 +305,11 @@ export function ChatArea() {
                 onClick={handleClearChat}
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="hidden sm:inline">清空</span>
+                <span className="hidden sm:inline">{t("chat.clear")}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
-              清空对话
+              {t("chat.clearConversation")}
             </TooltipContent>
           </Tooltip>
         )}
@@ -323,7 +324,7 @@ export function ChatArea() {
       onSend={handleSend}
       onCancel={cancelGeneration}
       isLoading={isGenerating}
-      placeholder={selectedPromptContent ? "已启用系统提示..." : "输入消息，或使用 @tool 调用 MCP 工具..."}
+      placeholder={selectedPromptContent ? t("chat.placeholderWithPrompt") : t("chat.placeholderDefault")}
       toolbar={toolbar}
     />
   );
@@ -336,10 +337,10 @@ export function ChatArea() {
           {/* 欢迎信息 */}
           <div className="text-center">
             <h1 className="text-3xl font-semibold tracking-tight">
-              欢迎使用 LeoChat
+              {t("chat.welcome")}
             </h1>
             <p className="mt-3 text-muted-foreground">
-              开始对话，或使用 MCP 工具与您的环境交互
+              {t("chat.welcomeDescription")}
             </p>
           </div>
 
@@ -352,10 +353,10 @@ export function ChatArea() {
             style={{ marginTop: '32px' }}
           >
             {[
-              "帮我写一段代码",
-              "解释这个概念",
-              "翻译成英文",
-              "总结这篇文章",
+              t("chat.suggestions.code"),
+              t("chat.suggestions.explain"),
+              t("chat.suggestions.translate"),
+              t("chat.suggestions.summarize"),
             ].map((suggestion) => (
               <button
                 key={suggestion}

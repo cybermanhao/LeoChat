@@ -7,6 +7,7 @@ import {
 } from "@ai-chatbox/shared";
 import { Button, cn } from "@ai-chatbox/ui";
 import { Terminal, Globe, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
+import { t } from "../../i18n";
 
 function Label({ children, className, htmlFor }: { children: React.ReactNode; className?: string; htmlFor?: string }) {
   return <label htmlFor={htmlFor} className={className}>{children}</label>;
@@ -201,18 +202,18 @@ function ArgsInput({
         const extra = hint.extraArgs[Math.min(extraIndex, hint.extraArgs.length - 1)];
         return extra.placeholder;
       }
-      return "参数值...";
+      return t("mcp.form.argPlaceholder");
     }
-    if (index === 0) return "例如: -y";
-    if (index === 1) return "例如: @modelcontextprotocol/server-memory";
-    return "参数值...";
+    if (index === 0) return t("mcp.form.argExample1");
+    if (index === 1) return t("mcp.form.argExample2");
+    return t("mcp.form.argPlaceholder");
   };
 
   const needsExtraArgs = hint?.extraArgs.some((e) => e.required) && items.length <= (hint?.fixedArgs.length ?? 0);
 
   return (
     <div>
-      <Label className="text-sm font-medium">参数</Label>
+      <Label className="text-sm font-medium">{t("mcp.form.args")}</Label>
       <div className="mt-1.5 space-y-2">
         {items.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
@@ -231,7 +232,7 @@ function ArgsInput({
               type="button"
               onClick={() => handleRemove(index)}
               className="shrink-0 p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
-              title="删除此参数"
+              title={t("mcp.form.deleteArg")}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -243,10 +244,10 @@ function ArgsInput({
         type="button"
         onClick={handleAdd}
         className="mt-2 flex items-center gap-1.5 text-xs text-primary hover:bg-primary/10 rounded-md px-2 py-1.5 transition-colors"
-        title="添加新参数行（也可在输入框中按 Enter）"
+        title={t("mcp.form.addArgHint")}
       >
         <Plus className="h-3.5 w-3.5" />
-        添加参数
+        {t("mcp.form.addArg")}
       </button>
 
       {/* 知名 MCP 参数提示 */}
@@ -257,7 +258,7 @@ function ArgsInput({
               <span className="text-blue-500 mt-0.5">*</span>
               <span className="text-blue-700">
                 {extra.description}
-                {extra.multiple && " — 可添加多行"}
+                {extra.multiple && ""}
               </span>
             </div>
           ))}
@@ -265,7 +266,7 @@ function ArgsInput({
             <div key={env.key} className="flex items-start gap-2">
               <span className="text-blue-500 mt-0.5">*</span>
               <span className="text-blue-700">
-                需要环境变量 <code className="px-1 py-0.5 rounded bg-blue-100 font-mono text-[11px]">{env.key}</code>
+                <code className="px-1 py-0.5 rounded bg-blue-100 font-mono text-[11px]">{env.key}</code>
                 {" — "}{env.description}
               </span>
             </div>
@@ -342,7 +343,7 @@ function EnvInput({
 
   return (
     <div>
-      <Label className="text-sm font-medium">环境变量</Label>
+      <Label className="text-sm font-medium">{t("mcp.form.env")}</Label>
 
       {/* 已有条目 */}
       {items.length > 0 && (
@@ -352,21 +353,21 @@ function EnvInput({
               <input
                 value={item.key}
                 onChange={(e) => handleItemChange(index, "key", e.target.value)}
-                placeholder="变量名"
+                placeholder={t("mcp.form.envNamePlaceholder")}
                 className="w-[40%] rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
               />
               <span className="text-muted-foreground">=</span>
               <input
                 value={item.value}
                 onChange={(e) => handleItemChange(index, "value", e.target.value)}
-                placeholder="值"
+                placeholder={t("mcp.form.envValuePlaceholder")}
                 className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
               />
               <button
                 type="button"
                 onClick={() => handleRemove(index)}
                 className="shrink-0 p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                title="删除此环境变量"
+                title={t("mcp.form.deleteEnv")}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -382,7 +383,7 @@ function EnvInput({
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="变量名"
+          placeholder={t("mcp.form.envNamePlaceholder")}
           className="w-[40%] rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
         />
         <span className="text-muted-foreground">=</span>
@@ -390,7 +391,7 @@ function EnvInput({
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="值"
+          placeholder={t("mcp.form.envValuePlaceholder")}
           className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/20"
         />
         <button
@@ -402,7 +403,7 @@ function EnvInput({
               ? "text-primary hover:bg-primary/10"
               : "text-muted-foreground/40 cursor-not-allowed"
           )}
-          title="添加环境变量（也可按 Enter）"
+          title={t("mcp.form.addEnvHint")}
           disabled={!newKey.trim()}
         >
           <Plus className="h-3.5 w-3.5" />
@@ -423,7 +424,7 @@ export function ServerForm({
   defaultValues,
   onSubmit,
   onCancel,
-  submitLabel = "保存",
+  submitLabel,
 }: ServerFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -478,17 +479,17 @@ export function ServerForm({
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* 基础信息 */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">基础信息</h3>
+        <h3 className="text-lg font-semibold">{t("mcp.form.basicInfo")}</h3>
 
         {/* 名称 */}
         <div>
           <Label htmlFor="name" className="text-sm font-medium">
-            名称 <span className="text-red-500">*</span>
+            {t("mcp.form.name")} <span className="text-red-500">*</span>
           </Label>
           <input
             id="name"
             {...register("name")}
-            placeholder="例如: Memory Server"
+            placeholder={t("mcp.form.serverNameExample")}
             className={cn(
               "mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20",
               errors.name && "border-red-500"
@@ -502,7 +503,7 @@ export function ServerForm({
         {/* 连接类型 */}
         <div>
           <Label className="text-sm font-medium mb-2 block">
-            连接类型 <span className="text-red-500">*</span>
+            {t("mcp.form.connectionType")} <span className="text-red-500">*</span>
           </Label>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -518,7 +519,7 @@ export function ServerForm({
               <Terminal className="h-4 w-4" />
               <div className="text-left">
                 <div className="font-medium text-sm">STDIO</div>
-                <div className="text-xs opacity-80">本地进程通信</div>
+                <div className="text-xs opacity-80">{t("mcp.form.stdioDesc")}</div>
               </div>
             </button>
             <button
@@ -536,7 +537,7 @@ export function ServerForm({
               <Globe className="h-4 w-4" />
               <div className="text-left">
                 <div className="font-medium text-sm">HTTP</div>
-                <div className="text-xs opacity-80">远程 HTTP 连接</div>
+                <div className="text-xs opacity-80">{t("mcp.form.httpDesc")}</div>
               </div>
             </button>
           </div>
@@ -546,17 +547,17 @@ export function ServerForm({
       {/* STDIO 配置 */}
       {transport === "stdio" && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">STDIO 配置</h3>
+          <h3 className="text-lg font-semibold">{t("mcp.form.stdioConfig")}</h3>
 
           {/* 命令 */}
           <div>
             <Label htmlFor="command" className="text-sm font-medium">
-              命令 <span className="text-red-500">*</span>
+              {t("mcp.form.command")} <span className="text-red-500">*</span>
             </Label>
             <input
               id="command"
               {...register("command")}
-              placeholder="例如: npx 或 uvx"
+              placeholder={t("mcp.form.commandExample")}
               className={cn(
                 "mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20",
                 errors.command && "border-red-500"
@@ -566,7 +567,7 @@ export function ServerForm({
               <p className="mt-1 text-xs text-red-500">{errors.command.message}</p>
             )}
             <p className="mt-1.5 text-xs text-muted-foreground">
-              用于启动 MCP 服务器的命令，如 npx、node、python 等
+              {t("mcp.form.commandDesc")}
             </p>
           </div>
 
@@ -585,7 +586,7 @@ export function ServerForm({
             <div className="rounded-lg border bg-muted/30 p-4 opacity-50 pointer-events-none">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <ChevronRight className="h-4 w-4" />
-                {registryType === "npm" ? "NPM" : "Pip"} Registry 配置
+                {registryType === "npm" ? "NPM" : "Pip"} {t("mcp.form.registryConfig")}
                 <span className="ml-auto text-xs text-muted-foreground">(coming soon)</span>
               </div>
             </div>
@@ -596,12 +597,12 @@ export function ServerForm({
       {/* HTTP 配置 */}
       {transport === "streamable-http" && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">HTTP 配置</h3>
+          <h3 className="text-lg font-semibold">{t("mcp.form.httpConfig")}</h3>
 
           {/* URL */}
           <div>
             <Label htmlFor="url" className="text-sm font-medium">
-              服务器 URL <span className="text-red-500">*</span>
+              {t("mcp.form.serverUrl")} <span className="text-red-500">*</span>
             </Label>
             <input
               id="url"
@@ -617,7 +618,7 @@ export function ServerForm({
               <p className="mt-1 text-xs text-red-500">{errors.url.message}</p>
             )}
             <p className="mt-1.5 text-xs text-muted-foreground">
-              远程 MCP 服务器的完整 URL
+              {t("mcp.form.serverUrlDesc")}
             </p>
           </div>
         </div>
@@ -637,7 +638,7 @@ export function ServerForm({
             htmlFor="autoConnect"
             className="text-sm font-medium cursor-pointer"
           >
-            启动时自动连接
+            {t("mcp.form.autoConnectLabel")}
           </Label>
         </div>
       </div>
@@ -654,7 +655,7 @@ export function ServerForm({
           ) : (
             <ChevronRight className="h-4 w-4" />
           )}
-          高级设置
+          {t("mcp.form.advancedSettings")}
         </button>
 
         {showAdvanced && (
@@ -662,12 +663,12 @@ export function ServerForm({
             {/* 描述 */}
             <div>
               <Label htmlFor="description" className="text-sm font-medium">
-                描述
+                {t("mcp.form.description")}
               </Label>
               <textarea
                 id="description"
                 {...register("description")}
-                placeholder="简要描述此服务器的功能..."
+                placeholder={t("mcp.form.descriptionPlaceholder")}
                 rows={3}
                 className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none"
               />
@@ -684,7 +685,7 @@ export function ServerForm({
             {/* Timeout */}
             <div>
               <Label htmlFor="timeout" className="text-sm font-medium">
-                超时时间 (毫秒)
+                {t("mcp.form.timeout")}
               </Label>
               <input
                 id="timeout"
@@ -719,7 +720,7 @@ export function ServerForm({
             {/* Tags */}
             <div>
               <Label htmlFor="tags" className="text-sm font-medium">
-                标签
+                {t("mcp.form.tags")}
               </Label>
               <input
                 id="tags"
@@ -737,7 +738,7 @@ export function ServerForm({
                 defaultValue={defaultValues?.tags?.join(", ") || ""}
               />
               <p className="mt-1.5 text-xs text-muted-foreground">
-                用逗号分隔多个标签
+                {t("mcp.form.tagsSeparator")}
               </p>
             </div>
 
@@ -765,7 +766,7 @@ export function ServerForm({
                 className="h-4 w-4 rounded border-gray-300"
               />
               <Label htmlFor="longRunning" className="text-sm font-medium">
-                长期运行服务器
+                {t("mcp.form.longRunning")}
                 <span className="ml-2 text-xs text-muted-foreground font-normal">(coming soon)</span>
               </Label>
             </div>
@@ -777,11 +778,11 @@ export function ServerForm({
       <div className="flex items-center justify-end gap-3 pt-4 border-t">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>
-            取消
+            {t("common.cancel")}
           </Button>
         )}
         <Button type="submit" disabled={!isDirty && !!defaultValues}>
-          {submitLabel}
+          {submitLabel || t("common.save")}
         </Button>
       </div>
     </form>

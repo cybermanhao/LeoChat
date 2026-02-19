@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Server } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
 import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
@@ -59,9 +60,9 @@ export function MCPServerAddPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-xl font-bold">添加 MCP 服务器</h1>
+              <h1 className="text-xl font-bold">{t("mcp.addServer")}</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                配置新的模型上下文协议服务器
+                {t("mcp.serverAdd.subtitle")}
               </p>
             </div>
           </div>
@@ -74,10 +75,9 @@ export function MCPServerAddPage() {
           <div className="flex items-start gap-4 mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
             <Server className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-blue-900 mb-1">添加 MCP 服务器</p>
+              <p className="font-medium text-blue-900 mb-1">{t("mcp.serverAdd.infoTitle")}</p>
               <p className="text-blue-700">
-                填写以下信息以添加新的 MCP 服务器。STDIO 类型适用于本地进程通信，HTTP
-                类型适用于远程服务器连接。
+                {t("mcp.serverAdd.infoDesc")}
               </p>
             </div>
           </div>
@@ -85,7 +85,7 @@ export function MCPServerAddPage() {
           <ServerForm
             onSubmit={handleSave}
             onCancel={handleCancel}
-            submitLabel={isSaving ? "添加中..." : "添加服务器"}
+            submitLabel={isSaving ? t("mcp.adding") : t("mcp.addServer")}
           />
         </div>
       </div>

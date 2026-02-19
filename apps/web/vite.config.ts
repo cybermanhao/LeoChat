@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@ai-chatbox/ui/styles.css": path.resolve(__dirname, "../../packages/ui/src/styles/globals.css"),
     },
   },
   server: {

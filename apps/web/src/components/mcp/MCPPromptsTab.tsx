@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { cn } from "@ai-chatbox/ui";
 import { MessageSquare, Server } from "lucide-react";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 
 interface PromptWithServer {
@@ -37,8 +38,8 @@ export function MCPPromptsTab() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <MessageSquare className="h-8 w-8 mb-2 opacity-20" />
-        <p className="text-xs">暂无可用 Prompt</p>
-        <p className="text-[10px] mt-1">已连接的服务器未提供 Prompt 模板</p>
+        <p className="text-xs">{t("mcp.promptsDetail.empty")}</p>
+        <p className="text-[10px] mt-1">{t("mcp.promptsDetail.emptyDescription")}</p>
       </div>
     );
   }
@@ -48,7 +49,7 @@ export function MCPPromptsTab() {
       {/* 左侧列表 */}
       <div className="w-56 shrink-0 border-r flex flex-col min-h-0">
         <div className="p-2 border-b">
-          <span className="text-[10px] text-muted-foreground">共 {promptsWithServer.length} 个 Prompt</span>
+          <span className="text-[10px] text-muted-foreground">{t("mcp.promptsDetail.totalCount", { count: promptsWithServer.length })}</span>
         </div>
         <div className="flex-1 overflow-y-auto">
           {promptsWithServer.map((item, i) => {
@@ -93,21 +94,21 @@ export function MCPPromptsTab() {
 
             {selectedPrompt.prompt.description && (
               <div>
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">描述</div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.promptsDetail.description")}</div>
                 <p className="text-xs leading-relaxed">{selectedPrompt.prompt.description}</p>
               </div>
             )}
 
             {selectedPrompt.prompt.arguments && selectedPrompt.prompt.arguments.length > 0 && (
               <div>
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">参数</div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.promptsDetail.arguments")}</div>
                 <div className="space-y-1.5">
                   {selectedPrompt.prompt.arguments.map((arg) => (
                     <div key={arg.name} className="rounded bg-muted p-2">
                       <div className="flex items-center gap-1.5">
                         <code className="text-xs font-medium">{arg.name}</code>
                         {arg.required && (
-                          <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/10 text-red-600">必填</span>
+                          <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/10 text-red-600">{t("mcp.promptsDetail.required")}</span>
                         )}
                       </div>
                       {arg.description && (
@@ -122,7 +123,7 @@ export function MCPPromptsTab() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare className="h-8 w-8 mb-2 opacity-20" />
-            <p className="text-xs">选择 Prompt 查看详情</p>
+            <p className="text-xs">{t("mcp.promptsDetail.selectToView")}</p>
           </div>
         )}
       </div>

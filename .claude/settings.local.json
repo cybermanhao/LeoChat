@@ -68,7 +68,14 @@
       "WebFetch(domain:lobehub.com)",
       "Bash(npx asar:*)",
       "Bash(tasklist:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(git -C /c/code/LeoChat log --oneline -20 -- apps/web/vite.config.ts apps/electron/electron.vite.config.ts)",
+      "Bash(git -C /c/code/LeoChat show 3671e06 --stat)",
+      "Bash(git -C /c/code/LeoChat show 3671e06)",
+      "Bash(git -C /c/code/LeoChat show 3671e06:apps/electron/electron.vite.config.ts)",
+      "Bash(git -C /c/code/LeoChat show 3671e06^:apps/electron/electron.vite.config.ts)",
+      "Bash(git -C /c/code/LeoChat diff HEAD apps/web/vite.config.ts apps/electron/electron.vite.config.ts)",
+      "Bash(git -C /c/code/LeoChat log --oneline -5)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

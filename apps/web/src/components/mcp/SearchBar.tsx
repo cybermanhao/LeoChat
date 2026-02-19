@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, X } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 
 interface SearchBarProps {
   value: string;
@@ -12,7 +13,7 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChange,
-  placeholder = "搜索...",
+  placeholder = t("mcp.searchPlaceholder"),
   className,
 }: SearchBarProps) {
   const [expanded, setExpanded] = useState(!!value);
@@ -44,7 +45,7 @@ export function SearchBar({
         size="icon"
         onClick={() => setExpanded(true)}
         className={cn("h-9 w-9", className)}
-        title="搜索"
+        title={t("common.search")}
       >
         <Search className="h-4 w-4" />
       </Button>
@@ -73,7 +74,7 @@ export function SearchBar({
           size="icon"
           onClick={handleClear}
           className="absolute right-1 h-7 w-7"
-          title="清空"
+          title={t("mcp.clearSearch")}
         >
           <X className="h-3.5 w-3.5" />
         </Button>

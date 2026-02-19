@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { MessageSquare, Server, Database, Settings } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 
 interface ActivityItem {
   id: string;
@@ -13,7 +14,7 @@ interface ActivityItem {
 const activities: ActivityItem[] = [
   {
     id: "chat",
-    label: "聊天",
+    label: t("nav.chat"),
     icon: MessageSquare,
     path: "/",
   },
@@ -25,13 +26,13 @@ const activities: ActivityItem[] = [
   },
   {
     id: "knowledge",
-    label: "知识库",
+    label: t("nav.knowledge"),
     icon: Database,
     path: "/knowledge",
   },
   {
     id: "settings",
-    label: "设置",
+    label: t("nav.settings"),
     icon: Settings,
     path: "/settings",
   },

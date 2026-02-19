@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Server, Wrench, FileText, Zap, Check, AlertCircle, RefreshCw } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
 import { MCPToolsTab } from "../../components/mcp/MCPToolsTab";
@@ -73,12 +74,12 @@ export function MCPServerEditPage() {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <Server className="h-16 w-16 text-muted-foreground/40 mb-4" />
-        <h2 className="text-xl font-semibold mb-2">服务器未找到</h2>
+        <h2 className="text-xl font-semibold mb-2">{t("mcp.serverEdit.notFound")}</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          该服务器不存在或已被删除
+          {t("mcp.serverEdit.notFoundDesc")}
         </p>
         <Button onClick={() => navigate("/mcp/servers")}>
-          返回服务器列表
+          {t("mcp.serverEdit.backToList")}
         </Button>
       </div>
     );
@@ -118,19 +119,19 @@ export function MCPServerEditPage() {
   const tabs = [
     {
       value: "settings" as const,
-      label: "常规设置",
+      label: t("mcp.serverEdit.generalSettings"),
       icon: Server,
       available: true,
     },
     {
       value: "tools" as const,
-      label: `工具 (${tools.length})`,
+      label: t("mcp.serverEdit.toolsWithCount", { count: tools.length }),
       icon: Wrench,
       available: isConnected && tools.length > 0,
     },
     {
       value: "resources" as const,
-      label: `资源 (${resources.length})`,
+      label: t("mcp.serverEdit.resourcesWithCount", { count: resources.length }),
       icon: FileText,
       available: isConnected && resources.length > 0,
     },
@@ -162,7 +163,7 @@ export function MCPServerEditPage() {
               <div>
                 <h1 className="text-xl font-bold">{server.name}</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  编辑 MCP 服务器配置
+                  {t("mcp.serverEdit.editSubtitle")}
                 </p>
               </div>
             </div>
@@ -171,7 +172,7 @@ export function MCPServerEditPage() {
               {/* 连接状态开关 */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {isConnected ? "已连接" : "未连接"}
+                  {isConnected ? t("mcp.connected") : t("mcp.notConnected")}
                 </span>
                 <button
                   onClick={handleToggleConnection}
@@ -225,7 +226,7 @@ export function MCPServerEditPage() {
                 autoConnect: serverId ? autoConnectServerIds.includes(serverId) : false,
               }}
               onSubmit={handleSave}
-              submitLabel={isSaving ? "保存中..." : "保存"}
+              submitLabel={isSaving ? t("mcp.saving") : t("common.save")}
             />
           </div>
         )}
@@ -252,11 +253,11 @@ export function MCPServerEditPage() {
         {!isConnected && activeTab !== "settings" && (
           <div className="bg-card rounded-lg border p-12 flex flex-col items-center justify-center text-center">
             <Server className="h-12 w-12 text-muted-foreground/40 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">服务器未连接</h3>
+            <h3 className="text-lg font-semibold mb-2">{t("mcp.notConnected")}</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-md">
-              请先连接服务器以查看可用的工具、资源和 Prompts
+              {t("mcp.toolsDetail.emptyHint")}
             </p>
-            <Button onClick={handleToggleConnection}>连接服务器</Button>
+            <Button onClick={handleToggleConnection}>{t("mcp.connect")}</Button>
           </div>
         )}
       </div>
@@ -274,25 +275,25 @@ export function MCPServerEditPage() {
           {saveStatus === "saved" && (
             <>
               <Check className="h-4 w-4 text-green-500" />
-              配置已保存
+              {t("mcp.serverEdit.configSaved")}
             </>
           )}
           {saveStatus === "restarting" && (
             <>
               <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-              正在重启服务器以应用新配置...
+              {t("mcp.serverEdit.restarting")}
             </>
           )}
           {saveStatus === "restarted" && (
             <>
               <Check className="h-4 w-4 text-green-500" />
-              配置已保存，服务器已重启
+              {t("mcp.serverEdit.configSavedRestarted")}
             </>
           )}
           {saveStatus === "error" && (
             <>
               <AlertCircle className="h-4 w-4" />
-              保存失败，请重试
+              {t("mcp.serverEdit.saveFailed")}
             </>
           )}
         </div>

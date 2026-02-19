@@ -11,6 +11,7 @@ import {
   MessageSquare,
   BarChart3,
 } from "lucide-react";
+import { t } from "../i18n";
 import { useMCPStore } from "../stores/mcp";
 import { MCPServersTab } from "./mcp/MCPServersTab";
 import { MCPToolsTab } from "./mcp/MCPToolsTab";
@@ -26,11 +27,11 @@ interface MCPDialogProps {
 type TabId = "servers" | "tools" | "resources" | "prompts" | "stats";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "servers", label: "服务器", icon: Server },
-  { id: "tools", label: "工具", icon: Wrench },
-  { id: "resources", label: "资源", icon: FileText },
-  { id: "prompts", label: "Prompt", icon: MessageSquare },
-  { id: "stats", label: "统计", icon: BarChart3 },
+  { id: "servers", label: t("mcp.tabs.servers"), icon: Server },
+  { id: "tools", label: t("mcp.tabs.tools"), icon: Wrench },
+  { id: "resources", label: t("mcp.tabs.resources"), icon: FileText },
+  { id: "prompts", label: t("mcp.tabs.prompts"), icon: MessageSquare },
+  { id: "stats", label: t("mcp.tabs.stats"), icon: BarChart3 },
 ];
 
 export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
@@ -64,13 +65,13 @@ export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
       >
         {/* 头部：标题 + 统计 */}
         <div className="flex items-center justify-between h-10 px-3 border-b bg-muted/30 shrink-0">
-          <span className="text-sm font-medium">MCP 工具管理</span>
+          <span className="text-sm font-medium">{t("mcp.title")}</span>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>
-              服务器 <span className="text-green-600 font-medium">{stats.connectedServers}</span>/{stats.totalServers}
+              {t("mcp.servers")} <span className="text-green-600 font-medium">{stats.connectedServers}</span>/{stats.totalServers}
             </span>
             <span>
-              工具 <span className="text-primary font-medium">{stats.totalTools}</span>
+              {t("mcp.tools")} <span className="text-primary font-medium">{stats.totalTools}</span>
             </span>
           </div>
         </div>

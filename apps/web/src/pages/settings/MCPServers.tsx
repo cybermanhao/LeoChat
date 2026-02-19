@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerCard } from "../../components/mcp/ServerCard";
 import { ServerErrorBoundary } from "../../components/mcp/ServerErrorBoundary";
@@ -66,7 +67,7 @@ export function MCPServersPage() {
           className="gap-2"
         >
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          刷新同步
+          {t("mcp.refresh")}
         </Button>
       </div>
 
@@ -74,8 +75,8 @@ export function MCPServersPage() {
       <div className="flex-1 overflow-y-auto p-6">
         {allServers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <p className="text-sm">暂无 MCP 服务器</p>
-            <p className="text-xs mt-2">点击左侧 "添加 MCP" 按钮开始</p>
+            <p className="text-sm">{t("mcp.serversDetail.empty")}</p>
+            <p className="text-xs mt-2">{t("mcp.serversDetail.emptyHint")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -125,7 +126,7 @@ export function MCPServersPage() {
       {/* Delete Confirmation Hint */}
       {confirmDelete && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-yellow-500/90 text-white text-sm rounded-lg shadow-lg">
-          再次点击删除按钮确认删除
+          {t("mcp.confirmDeleteClick")}
         </div>
       )}
     </div>

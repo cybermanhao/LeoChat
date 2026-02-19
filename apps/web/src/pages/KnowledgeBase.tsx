@@ -1,5 +1,6 @@
 import { Database, Plus, FolderOpen, FileText } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
+import { t } from "../i18n";
 import {
   ThreeColumnLayout,
   LeftDrawer,
@@ -12,7 +13,7 @@ function KnowledgeBaseSidebar() {
   return (
     <LeftDrawer>
       <LeftDrawerHeader
-        title="知识库列表"
+        title={t("knowledge.listTitle")}
         actions={
           <Button variant="ghost" size="icon" disabled>
             <Plus className="h-4 w-4" />

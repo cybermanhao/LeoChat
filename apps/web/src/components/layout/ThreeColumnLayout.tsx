@@ -1,5 +1,6 @@
 import { ReactNode, useState } from "react";
 import { cn } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 
 interface ThreeColumnLayoutProps {
   leftDrawer?: ReactNode;
@@ -53,7 +54,7 @@ export function ThreeColumnLayout({
               collapsed ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
             )}
             onClick={() => setCollapsed(true)}
-            title="收起侧边栏"
+            title={t("layout.collapseSidebar")}
           />
         </div>
       )}
@@ -68,7 +69,7 @@ export function ThreeColumnLayout({
               : "w-0 opacity-0 pointer-events-none"
           )}
           onClick={() => setCollapsed(false)}
-          title="展开侧边栏"
+          title={t("layout.expandSidebar")}
         />
       )}
 

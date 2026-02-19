@@ -2,6 +2,7 @@ import { Plus, MessageSquare, Trash2 } from "lucide-react";
 import { Button, Separator } from "@ai-chatbox/ui";
 import { useChatStore } from "../stores/chat";
 import { cn } from "@ai-chatbox/ui";
+import { t } from "../i18n";
 import {
   LeftDrawer,
   LeftDrawerHeader,
@@ -17,7 +18,7 @@ export function Sidebar() {
     <LeftDrawer>
       {/* Header with New Chat Button */}
       <LeftDrawerHeader
-        title="对话"
+        title={t("nav.chat")}
         actions={
           <Button
             variant="ghost"

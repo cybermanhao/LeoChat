@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Server, Wrench, FileText, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 
 export function MCPStatsTab() {
@@ -80,7 +81,7 @@ export function MCPStatsTab() {
       <div className="grid grid-cols-4 gap-3">
         <StatCard
           icon={<Server className="h-4 w-4" />}
-          label="服务器"
+          label={t("mcp.stats.servers")}
           value={stats.connectedServers}
           total={stats.totalServers}
           color="text-blue-600"
@@ -88,21 +89,21 @@ export function MCPStatsTab() {
         />
         <StatCard
           icon={<Wrench className="h-4 w-4" />}
-          label="工具"
+          label={t("mcp.stats.tools")}
           value={stats.totalTools}
           color="text-purple-600"
           bgColor="bg-purple-500/10"
         />
         <StatCard
           icon={<FileText className="h-4 w-4" />}
-          label="资源"
+          label={t("mcp.stats.resources")}
           value={stats.totalResources}
           color="text-green-600"
           bgColor="bg-green-500/10"
         />
         <StatCard
           icon={<MessageSquare className="h-4 w-4" />}
-          label="Prompt"
+          label={t("mcp.stats.prompts")}
           value={stats.totalPrompts}
           color="text-orange-600"
           bgColor="bg-orange-500/10"
@@ -112,40 +113,40 @@ export function MCPStatsTab() {
       {/* 连接状态摘要 */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium">连接状态</span>
+          <span className="text-xs font-medium">{t("mcp.stats.connectionStatus")}</span>
           <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => syncWithBackend()}>
             <RefreshCw className="h-3 w-3" />
-            刷新
+            {t("mcp.refresh")}
           </Button>
         </div>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-green-500" />
-            已连接 {stats.connectedServers}
+            {t("mcp.connected")} {stats.connectedServers}
           </span>
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-red-500" />
-            错误 {stats.errorServers}
+            {t("mcp.error")} {stats.errorServers}
           </span>
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-gray-400" />
-            未连接 {stats.disconnectedServers}
+            {t("mcp.notConnected")} {stats.disconnectedServers}
           </span>
         </div>
       </div>
 
       {/* 服务器明细 */}
       <div>
-        <span className="text-xs font-medium">服务器明细</span>
+        <span className="text-xs font-medium">{t("mcp.stats.serverDetails")}</span>
         <div className="mt-2 rounded border overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-muted/50 text-muted-foreground">
-                <th className="text-left px-2 py-1.5 font-medium">名称</th>
-                <th className="text-left px-2 py-1.5 font-medium">协议</th>
-                <th className="text-center px-2 py-1.5 font-medium">状态</th>
-                <th className="text-center px-2 py-1.5 font-medium">工具</th>
-                <th className="text-center px-2 py-1.5 font-medium">资源</th>
+                <th className="text-left px-2 py-1.5 font-medium">{t("mcp.stats.tableHeader.name")}</th>
+                <th className="text-left px-2 py-1.5 font-medium">{t("mcp.stats.tableHeader.protocol")}</th>
+                <th className="text-center px-2 py-1.5 font-medium">{t("mcp.stats.tableHeader.status")}</th>
+                <th className="text-center px-2 py-1.5 font-medium">{t("mcp.stats.tableHeader.tools")}</th>
+                <th className="text-center px-2 py-1.5 font-medium">{t("mcp.stats.tableHeader.resources")}</th>
               </tr>
             </thead>
             <tbody>

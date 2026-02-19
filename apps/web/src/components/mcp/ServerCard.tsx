@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { MCPServerConfig } from "@ai-chatbox/shared";
+import { t } from "../../i18n";
 
 interface ServerCardProps {
   server: MCPServerConfig;
@@ -58,7 +59,7 @@ function StatusBadge({
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-600">
         <span className="h-2 w-2 rounded-full bg-red-500" />
-        错误
+        {t("mcp.error")}
       </span>
     );
   }
@@ -66,14 +67,14 @@ function StatusBadge({
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-600">
         <span className="h-2 w-2 rounded-full bg-green-500" />
-        已连接
+        {t("mcp.connected")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/10 text-muted-foreground">
       <span className="h-2 w-2 rounded-full bg-gray-400" />
-      未连接
+      {t("mcp.notConnected")}
     </span>
   );
 }
@@ -130,7 +131,7 @@ export function ServerCard({
             <div className="flex items-center gap-2 mt-0.5">
               <StatusBadge connected={isConnected} error={error} loading={isLoading} reconnecting={isReconnecting} />
               {isAutoConnect && (
-                <span title="自动连接">
+                <span title={t("mcp.autoConnect")}>
                   <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
                 </span>
               )}
@@ -149,7 +150,7 @@ export function ServerCard({
                 e.stopPropagation();
                 onDelete();
               }}
-              title="删除"
+              title={t("common.delete")}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -163,7 +164,7 @@ export function ServerCard({
               onToggle(!isConnected);
             }}
             disabled={isLoading}
-            title={isConnected ? "断开连接" : "连接"}
+            title={isConnected ? t("mcp.disconnect") : t("mcp.connect")}
           >
             {isLoading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

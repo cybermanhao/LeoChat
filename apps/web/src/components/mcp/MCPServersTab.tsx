@@ -18,6 +18,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import type { MCPServerConfig, MCPTool } from "@ai-chatbox/shared";
 
@@ -35,13 +36,13 @@ function StatusBadge({ connected, error, connecting, reconnecting }: { connected
     </span>;
   }
   if (error) return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-500/10 text-red-600">
-    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />错误
+    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />{t("mcp.error")}
   </span>;
   if (connected) return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-green-500/10 text-green-600">
-    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />已连接
+    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />{t("mcp.connected")}
   </span>;
   return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-500/10 text-muted-foreground">
-    <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />未连接
+    <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />{t("mcp.notConnected")}
   </span>;
 }
 
@@ -75,7 +76,7 @@ function InlineServerForm({
   return (
     <div className="p-3 border-b bg-muted/30">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium">添加服务器</span>
+        <span className="text-xs font-medium">{t("mcp.addServer")}</span>
         <button onClick={onCancel} className="p-0.5 hover:bg-muted rounded">
           <X className="h-3 w-3" />
         </button>
@@ -85,13 +86,13 @@ function InlineServerForm({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="服务器名称"
+          placeholder={t("mcp.form.serverNamePlaceholder")}
           className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
         />
         <div className="flex gap-1">
           {[
-            { value: "stdio", label: "STDIO", icon: Terminal, desc: "进程通信" },
-            { value: "streamable-http", label: "HTTP", icon: Globe, desc: "HTTP 连接" },
+            { value: "stdio", label: "STDIO", icon: Terminal, desc: t("mcp.transport.stdio.desc") },
+            { value: "streamable-http", label: "HTTP", icon: Globe, desc: t("mcp.transport.http.desc") },
           ].map((opt) => (
             <button
               key={opt.value}
@@ -114,18 +115,18 @@ function InlineServerForm({
                 type="text"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                placeholder="命令 (如 npx)"
+                placeholder={t("mcp.form.commandPlaceholder")}
                 className="w-20 rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
               />
               <input
                 type="text"
                 value={args}
                 onChange={(e) => setArgs(e.target.value)}
-                placeholder="参数 (空格分隔)"
+                placeholder={t("mcp.form.argsPlaceholder")}
                 className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">通过 STDIO 直接与本地进程通信</p>
+            <p className="text-[10px] text-muted-foreground">{t("mcp.transport.stdio.description")}</p>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -133,14 +134,14 @@ function InlineServerForm({
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="http://localhost:3000/mcp"
+              placeholder={t("mcp.form.urlPlaceholder")}
               className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
             />
-            <p className="text-[10px] text-muted-foreground">通过 Streamable HTTP 连接远程服务</p>
+            <p className="text-[10px] text-muted-foreground">{t("mcp.transport.http.description")}</p>
           </div>
         )}
         <Button size="sm" className="w-full h-7 text-xs" onClick={handleSubmit}>
-          添加
+          {t("common.add")}
         </Button>
       </div>
     </div>
@@ -207,7 +208,7 @@ export function MCPServersTab() {
             onClick={() => setShowAddForm(true)}
           >
             <Plus className="h-3 w-3" />
-            添加服务器
+            {t("mcp.addServer")}
           </button>
         )}
 
@@ -244,7 +245,7 @@ export function MCPServersTab() {
                       <StatusBadge connected={connected} error={state?.error} connecting={connecting} reconnecting={reconnecting} />
                       <span className="flex-1 text-xs font-medium truncate ml-1">{server.name}</span>
                       {autoConnectServerIds.includes(server.id) && (
-                        <span title="自动连接"><Zap className="h-2.5 w-2.5 text-yellow-500 shrink-0" /></span>
+                        <span title={t("mcp.autoConnect")}><Zap className="h-2.5 w-2.5 text-yellow-500 shrink-0" /></span>
                       )}
                       {connected && tools.length > 0 && (
                         <span className="text-[10px] text-muted-foreground mr-1">{tools.length}</span>
@@ -256,7 +257,7 @@ export function MCPServersTab() {
                             autoConnectServerIds.includes(server.id) && "text-yellow-500"
                           )}
                           onClick={() => setAutoConnect(server.id, !autoConnectServerIds.includes(server.id))}
-                          title={autoConnectServerIds.includes(server.id) ? "取消自动连接" : "启用自动连接"}
+                          title={autoConnectServerIds.includes(server.id) ? t("mcp.disableAutoConnect") : t("mcp.enableAutoConnect")}
                         >
                           <Zap className="h-3 w-3" />
                         </button>
@@ -267,7 +268,7 @@ export function MCPServersTab() {
                               confirmDelete === server.id && "text-red-500"
                             )}
                             onClick={() => handleDeleteServer(server.id)}
-                            title={confirmDelete === server.id ? "再次点击确认删除" : "删除"}
+                            title={confirmDelete === server.id ? t("mcp.confirmDeleteClick") : t("common.delete")}
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>

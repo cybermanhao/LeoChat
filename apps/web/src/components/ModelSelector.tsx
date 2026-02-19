@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@ai-chatbox/ui";
 import { Sparkles, Check, ExternalLink } from "lucide-react";
+import { t } from "../i18n";
 
 type LLMProvider = "deepseek" | "openrouter" | "openai";
 
@@ -25,7 +26,7 @@ const DEEPSEEK_MODELS: Model[] = [
     id: "deepseek-chat",
     name: "DeepSeek Chat",
     provider: "DeepSeek",
-    description: "通用对话模型，高性价比",
+    description: t("models.deepseek.chat.description"),
     contextWindow: 64000,
     pricing: "¥1 / 1M tokens",
   },
@@ -33,7 +34,7 @@ const DEEPSEEK_MODELS: Model[] = [
     id: "deepseek-reasoner",
     name: "DeepSeek R1",
     provider: "DeepSeek",
-    description: "推理增强模型，支持思维链",
+    description: t("models.deepseek.reasoner.description"),
     contextWindow: 64000,
     pricing: "¥4 / 1M tokens",
   },
@@ -45,7 +46,7 @@ const OPENAI_MODELS: Model[] = [
     id: "gpt-4o",
     name: "GPT-4o",
     provider: "OpenAI",
-    description: "最强大的多模态模型",
+    description: t("models.openai.gpt4o.description"),
     contextWindow: 128000,
     pricing: "$2.50 / 1M tokens",
   },
@@ -53,7 +54,7 @@ const OPENAI_MODELS: Model[] = [
     id: "gpt-4o-mini",
     name: "GPT-4o Mini",
     provider: "OpenAI",
-    description: "快速且经济实惠",
+    description: t("models.openai.gpt4oMini.description"),
     contextWindow: 128000,
     pricing: "$0.15 / 1M tokens",
   },
@@ -61,7 +62,7 @@ const OPENAI_MODELS: Model[] = [
     id: "gpt-4-turbo",
     name: "GPT-4 Turbo",
     provider: "OpenAI",
-    description: "强大的推理能力",
+    description: t("models.openai.gpt4Turbo.description"),
     contextWindow: 128000,
     pricing: "$10.00 / 1M tokens",
   },
@@ -73,7 +74,7 @@ const OPENROUTER_MODELS: Model[] = [
     id: "anthropic/claude-3.5-sonnet",
     name: "Claude 3.5 Sonnet",
     provider: "Anthropic",
-    description: "出色的编程和推理能力",
+    description: t("models.anthropic.sonnet.description"),
     contextWindow: 200000,
     pricing: "$3.00 / 1M tokens",
   },
@@ -81,7 +82,7 @@ const OPENROUTER_MODELS: Model[] = [
     id: "anthropic/claude-3-opus",
     name: "Claude 3 Opus",
     provider: "Anthropic",
-    description: "最强大的 Claude 模型",
+    description: t("models.anthropic.opus.description"),
     contextWindow: 200000,
     pricing: "$15.00 / 1M tokens",
   },
@@ -89,7 +90,7 @@ const OPENROUTER_MODELS: Model[] = [
     id: "google/gemini-pro-1.5",
     name: "Gemini Pro 1.5",
     provider: "Google",
-    description: "超长上下文窗口",
+    description: t("models.google.geminiPro.description"),
     contextWindow: 1000000,
     pricing: "$1.25 / 1M tokens",
   },
@@ -97,7 +98,7 @@ const OPENROUTER_MODELS: Model[] = [
     id: "openai/gpt-4o",
     name: "GPT-4o",
     provider: "OpenAI",
-    description: "通过 OpenRouter 访问",
+    description: t("models.common.viaOpenRouter"),
     contextWindow: 128000,
     pricing: "$2.50 / 1M tokens",
   },
@@ -105,7 +106,7 @@ const OPENROUTER_MODELS: Model[] = [
     id: "deepseek/deepseek-chat",
     name: "DeepSeek Chat",
     provider: "DeepSeek",
-    description: "通过 OpenRouter 访问",
+    description: t("models.common.viaOpenRouter"),
     contextWindow: 64000,
     pricing: "$0.14 / 1M tokens",
   },
@@ -118,8 +119,8 @@ const MODELS_BY_PROVIDER: Record<LLMProvider, Model[]> = {
 };
 
 const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
-  deepseek: { name: "DeepSeek 官方", link: "https://platform.deepseek.com" },
-  openai: { name: "OpenAI 官方", link: "https://platform.openai.com" },
+  deepseek: { name: "DeepSeek", link: "https://platform.deepseek.com" },
+  openai: { name: "OpenAI", link: "https://platform.openai.com" },
   openrouter: { name: "OpenRouter", link: "https://openrouter.ai/models" },
 };
 
@@ -161,10 +162,10 @@ export function ModelSelector({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            选择模型
+            {t("settings.model.selectModel")}
           </DialogTitle>
           <DialogDescription>
-            当前服务商: {providerInfo.name}
+            {t("settings.model.defaultProvider")}: {providerInfo.name}
           </DialogDescription>
         </DialogHeader>
 
@@ -172,7 +173,7 @@ export function ModelSelector({
           {/* 搜索框 */}
           <input
             type="text"
-            placeholder="搜索模型..."
+            placeholder={t("models.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -208,7 +209,7 @@ export function ModelSelector({
                   <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
                     {model.contextWindow && (
                       <span>
-                        上下文: {(model.contextWindow / 1000).toFixed(0)}K
+                        {t("models.context")}: {(model.contextWindow / 1000).toFixed(0)}K
                       </span>
                     )}
                     {model.pricing && <span>{model.pricing}</span>}
@@ -227,7 +228,7 @@ export function ModelSelector({
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-primary hover:underline"
             >
-              查看所有模型
+              {t("models.viewAllModels")}
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>

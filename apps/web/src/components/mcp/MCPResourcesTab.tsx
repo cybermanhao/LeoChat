@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { cn, Button } from "@ai-chatbox/ui";
 import { FileText, Server, Download, Image as ImageIcon } from "lucide-react";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { mcpApi } from "../../lib/api";
 import ReactMarkdown from "react-markdown";
@@ -61,7 +62,7 @@ export function MCPResourcesTab() {
         }
       } catch (error) {
         console.error("Failed to fetch resource:", error);
-        setContentError("加载资源内容失败");
+        setContentError(t("mcp.resourcesDetail.loadError"));
         setResourceContent(null);
       } finally {
         setIsLoadingContent(false);
@@ -75,8 +76,8 @@ export function MCPResourcesTab() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <FileText className="h-8 w-8 mb-2 opacity-20" />
-        <p className="text-xs">暂无可用资源</p>
-        <p className="text-[10px] mt-1">已连接的服务器未提供资源</p>
+        <p className="text-xs">{t("mcp.resourcesDetail.empty")}</p>
+        <p className="text-[10px] mt-1">{t("mcp.resourcesDetail.emptyDescription")}</p>
       </div>
     );
   }
@@ -86,7 +87,7 @@ export function MCPResourcesTab() {
       {/* 左侧列表 */}
       <div className="w-56 shrink-0 border-r flex flex-col min-h-0">
         <div className="p-2 border-b">
-          <span className="text-[10px] text-muted-foreground">共 {resourcesWithServer.length} 个资源</span>
+          <span className="text-[10px] text-muted-foreground">{t("mcp.resourcesDetail.totalCount", { count: resourcesWithServer.length })}</span>
         </div>
         <div className="flex-1 overflow-y-auto">
           {resourcesWithServer.map((item, i) => {
@@ -143,17 +144,17 @@ export function MCPResourcesTab() {
 
             {selectedResource.resource.description && (
               <div>
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">描述</div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.resourcesDetail.description")}</div>
                 <p className="text-xs leading-relaxed">{selectedResource.resource.description}</p>
               </div>
             )}
 
             {/* 内容预览 */}
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground mb-1">内容预览</div>
+              <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.resourcesDetail.contentPreview")}</div>
               {isLoadingContent ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <span className="text-xs">加载中...</span>
+                  <span className="text-xs">{t("mcp.resourcesDetail.loading")}</span>
                 </div>
               ) : contentError ? (
                 <div className="flex items-center justify-center py-8 text-red-600">
@@ -184,7 +185,7 @@ export function MCPResourcesTab() {
                 </div>
               ) : (
                 <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <span className="text-xs">暂无内容</span>
+                  <span className="text-xs">{t("mcp.resourcesDetail.noContent")}</span>
                 </div>
               )}
             </div>
@@ -192,7 +193,7 @@ export function MCPResourcesTab() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <FileText className="h-8 w-8 mb-2 opacity-20" />
-            <p className="text-xs">选择资源查看详情</p>
+            <p className="text-xs">{t("mcp.resourcesDetail.selectToView")}</p>
           </div>
         )}
       </div>

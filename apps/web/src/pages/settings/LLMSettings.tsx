@@ -54,20 +54,20 @@ interface Model {
 
 const MODELS_BY_PROVIDER: Record<LLMProvider, Model[]> = {
   deepseek: [
-    { id: "deepseek-chat", name: "DeepSeek Chat", description: "通用对话，高性价比", contextWindow: 64000, pricing: "¥1/1M tokens" },
-    { id: "deepseek-reasoner", name: "DeepSeek R1", description: "推理增强，支持思维链", contextWindow: 64000, pricing: "¥4/1M tokens" },
+    { id: "deepseek-chat", name: "DeepSeek Chat", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
+    { id: "deepseek-reasoner", name: "DeepSeek R1", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
   ],
   openrouter: [
-    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: "出色的编程和推理能力", contextWindow: 200000, pricing: "$3/1M" },
-    { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: "最强大的 Claude 模型", contextWindow: 200000, pricing: "$15/1M" },
-    { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: "超长上下文窗口", contextWindow: 1000000, pricing: "$1.25/1M" },
-    { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: "通过 OpenRouter 访问", contextWindow: 128000, pricing: "$2.50/1M" },
-    { id: "deepseek/deepseek-chat", name: "DeepSeek (via OR)", description: "通过 OpenRouter 访问", contextWindow: 64000, pricing: "$0.14/1M" },
+    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3/1M" },
+    { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15/1M" },
+    { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25/1M" },
+    { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50/1M" },
+    { id: "deepseek/deepseek-chat", name: "DeepSeek (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
   ],
   openai: [
-    { id: "gpt-4o", name: "GPT-4o", description: "最强大的多模态模型", contextWindow: 128000, pricing: "$2.50/1M" },
-    { id: "gpt-4o-mini", name: "GPT-4o Mini", description: "快速且经济实惠", contextWindow: 128000, pricing: "$0.15/1M" },
-    { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "强大的推理能力", contextWindow: 128000, pricing: "$10/1M" },
+    { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
+    { id: "gpt-4o-mini", name: "GPT-4o Mini", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15/1M" },
+    { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10/1M" },
   ],
 };
 
@@ -215,11 +215,11 @@ export function LLMSettings() {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5" />
-          模型
+          {t("settings.model.selectModel")}
         </h3>
         {!hasKey && (
           <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 text-sm text-yellow-800 dark:text-yellow-200">
-            请先配置 {currentProviderInfo.name} 的 API Key
+            {t("settings.api.configureKeyFirst", { provider: currentProviderInfo.name })}
           </div>
         )}
         <div className="space-y-1.5">

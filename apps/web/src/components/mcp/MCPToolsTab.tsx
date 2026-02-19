@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { cn, Switch } from "@ai-chatbox/ui";
 import { Wrench, Search, Server } from "lucide-react";
+import { t } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import type { MCPTool } from "@ai-chatbox/shared";
 
@@ -58,8 +59,8 @@ export function MCPToolsTab() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <Wrench className="h-8 w-8 mb-2 opacity-20" />
-        <p className="text-xs">暂无可用工具</p>
-        <p className="text-[10px] mt-1">请先连接服务器</p>
+        <p className="text-xs">{t("mcp.toolsDetail.empty")}</p>
+        <p className="text-[10px] mt-1">{t("mcp.toolsDetail.emptyHint")}</p>
       </div>
     );
   }
@@ -76,12 +77,12 @@ export function MCPToolsTab() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索工具..."
+              placeholder={t("mcp.searchToolsPlaceholder")}
               className="flex-1 bg-transparent text-xs outline-none"
             />
           </div>
           <div className="text-[10px] text-muted-foreground mt-1 px-0.5">
-            共 {filteredTools.length} 个工具
+            {t("mcp.toolsDetail.totalCount", { count: filteredTools.length })}
           </div>
         </div>
 
@@ -136,7 +137,7 @@ export function MCPToolsTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {isToolEnabled(selectedTool.serverId, selectedTool.tool.name) ? "已启用" : "已禁用"}
+                    {isToolEnabled(selectedTool.serverId, selectedTool.tool.name) ? t("common.enabled") : t("common.disabled")}
                   </span>
                   <Switch
                     checked={isToolEnabled(selectedTool.serverId, selectedTool.tool.name)}
@@ -154,14 +155,14 @@ export function MCPToolsTab() {
 
             {selectedTool.tool.description && (
               <div>
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">描述</div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.toolsDetail.description")}</div>
                 <p className="text-xs leading-relaxed">{selectedTool.tool.description}</p>
               </div>
             )}
 
             {selectedTool.tool.inputSchema && (
               <div>
-                <div className="text-[11px] font-medium text-muted-foreground mb-1">参数 Schema</div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-1">{t("mcp.toolsDetail.inputSchema")}</div>
                 <pre className="rounded bg-muted p-2 text-[11px] overflow-x-auto leading-relaxed">
                   {JSON.stringify(selectedTool.tool.inputSchema, null, 2)}
                 </pre>
@@ -171,7 +172,7 @@ export function MCPToolsTab() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Wrench className="h-8 w-8 mb-2 opacity-20" />
-            <p className="text-xs">选择工具查看详情</p>
+            <p className="text-xs">{t("mcp.toolsDetail.selectToView")}</p>
           </div>
         )}
       </div>
