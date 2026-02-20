@@ -33,8 +33,8 @@ const es: TranslationDictionary = {
 
   // Layout
   "layout": {
-    "collapseSidebar": "Collapse Sidebar",
-    "expandSidebar": "Expand Sidebar"
+    "collapseSidebar": "Contraer barra lateral",
+    "expandSidebar": "Expandir barra lateral"
   },
 
   // Navigation
@@ -43,7 +43,7 @@ const es: TranslationDictionary = {
     "chat": "Chat",
     "settings": "Configuración",
     "profile": "Perfil",
-    "knowledge": "Knowledge Base"
+    "knowledge": "Base de Conocimientos"
   },
 
   // Chat
@@ -56,22 +56,22 @@ const es: TranslationDictionary = {
     "clearHistory": "Limpiar Historial",
     "copyMessage": "Copiar Mensaje",
     "copied": "¡Copiado!",
-    "welcome": "Welcome to LeoChat",
-    "welcomeDescription": "Start a conversation or interact with your environment using MCP tools",
-    "confirmClear": "Are you sure you want to clear the current conversation?",
-    "clear": "Clear",
-    "clearConversation": "Clear Conversation",
+    "welcome": "Bienvenido a LeoChat",
+    "welcomeDescription": "Inicia una conversación o interactúa con tu entorno usando herramientas MCP",
+    "confirmClear": "¿Estás seguro de que quieres limpiar la conversación actual?",
+    "clear": "Limpiar",
+    "clearConversation": "Limpiar Conversación",
     "markdown": "Markdown",
-    "plainText": "Plain Text",
-    "markdownRendering": "Markdown Rendering",
-    "placeholderDefault": "Type a message, or use @tool to call MCP tools...",
-    "placeholderWithPrompt": "System prompt enabled...",
-    "webSearch": "Web Search",
+    "plainText": "Texto Plano",
+    "markdownRendering": "Renderizado Markdown",
+    "placeholderDefault": "Escribe un mensaje, o usa @tool para llamar herramientas MCP...",
+    "placeholderWithPrompt": "Prompt del sistema activado...",
+    "webSearch": "Búsqueda Web",
     "suggestions": {
-      "code": "Help me write some code",
-      "explain": "Explain this concept",
-      "translate": "Translate to English",
-      "summarize": "Summarize this article"
+      "code": "Ayúdame a escribir código",
+      "explain": "Explica este concepto",
+      "translate": "Traducir al inglés",
+      "summarize": "Resume este artículo"
     }
   },
 
@@ -91,7 +91,7 @@ const es: TranslationDictionary = {
       "getConfigured": "Configurado",
       "saveSuccess": "Guardado exitosamente",
       "save": "Guardar",
-      "configureKeyFirst": "Please configure {{provider}} API Key first"
+      "configureKeyFirst": "Por favor configure la clave API de {{provider}} primero"
     },
     "appearance": {
       "title": "Apariencia",
@@ -106,7 +106,7 @@ const es: TranslationDictionary = {
       "description": "Configurar claves API y parámetros del modelo",
       "defaultProvider": "Proveedor Predeterminado",
       "apiKeys": "Claves API",
-      "selectModel": "Model"
+      "selectModel": "Modelo"
     },
     "notifications": {
       "title": "Notificaciones"
@@ -128,30 +128,36 @@ const es: TranslationDictionary = {
     "language": "Idioma / Language"
   },
 
+  // Sidebar
+  "sidebar": {
+    "mcpConnected": "MCP Conectado",
+    "untitledChat": "Chat Sin Título"
+  },
+
   // Models
   "models": {
-    "searchPlaceholder": "Search models...",
+    "searchPlaceholder": "Buscar modelos...",
     "deepseek": {
-      "chat": { "description": "General chat model, cost-effective" },
-      "reasoner": { "description": "Reasoning-enhanced model with chain-of-thought" }
+      "chat": { "description": "Modelo de chat general, rentable" },
+      "reasoner": { "description": "Modelo mejorado de razonamiento con cadena de pensamiento" }
     },
     "openai": {
-      "gpt4o": { "description": "Most powerful multimodal model" },
-      "gpt4oMini": { "description": "Fast and affordable" },
-      "gpt4Turbo": { "description": "Powerful reasoning capability" }
+      "gpt4o": { "description": "Modelo multimodal más potente" },
+      "gpt4oMini": { "description": "Rápido y económico" },
+      "gpt4Turbo": { "description": "Potente capacidad de razonamiento" }
     },
     "anthropic": {
-      "sonnet": { "description": "Excellent programming and reasoning" },
-      "opus": { "description": "Most powerful Claude model" }
+      "sonnet": { "description": "Excelente programación y razonamiento" },
+      "opus": { "description": "Modelo Claude más potente" }
     },
     "google": {
-      "geminiPro": { "description": "Extra-long context window" }
+      "geminiPro": { "description": "Ventana de contexto extra larga" }
     },
     "common": {
-      "viaOpenRouter": "Access via OpenRouter"
+      "viaOpenRouter": "Acceso vía OpenRouter"
     },
-    "context": "Context",
-    "viewAllModels": "View all models"
+    "context": "Contexto",
+    "viewAllModels": "Ver todos los modelos"
   },
 
   // MCP
@@ -169,18 +175,18 @@ const es: TranslationDictionary = {
     "disconnect": "Desconectar",
     "connected": "Conectado",
     "disconnected": "Desconectado",
-    "notConnected": "Not Connected",
+    "notConnected": "No Conectado",
     "error": "Error",
     "autoConnect": "Conexión Automática",
-    "enableAutoConnect": "Enable Auto Connect",
-    "disableAutoConnect": "Disable Auto Connect",
+    "enableAutoConnect": "Habilitar Conexión Automática",
+    "disableAutoConnect": "Deshabilitar Conexión Automática",
     "refresh": "Actualizar",
     "searchPlaceholder": "Buscar...",
-    "searchToolsPlaceholder": "Search tools...",
-    "clearSearch": "Clear",
-    "confirmDeleteClick": "Click again to confirm delete",
-    "adding": "Adding...",
-    "saving": "Saving...",
+    "searchToolsPlaceholder": "Buscar herramientas...",
+    "clearSearch": "Limpiar",
+    "confirmDeleteClick": "Haz clic de nuevo para confirmar eliminación",
+    "adding": "Añadiendo...",
+    "saving": "Guardando...",
     "serverName": "Nombre del Servidor",
     "serverUrl": "URL del Servidor",
     "serverDescription": "Descripción",
@@ -205,65 +211,65 @@ const es: TranslationDictionary = {
     "promptApply": "Aplicar Indicación",
     "promptApplied": "¡Indicación aplicada!",
     "tabs": {
-      "servers": "Servers",
-      "tools": "Tools",
-      "resources": "Resources",
+      "servers": "Servidores",
+      "tools": "Herramientas",
+      "resources": "Recursos",
       "prompts": "Prompts",
-      "stats": "Statistics"
+      "stats": "Estadísticas"
     },
     "transport": {
       "stdio": {
-        "desc": "Process Communication",
-        "description": "Communicate with local process via STDIO"
+        "desc": "Comunicación de Proceso",
+        "description": "Comunicarse con el proceso local vía STDIO"
       },
       "http": {
-        "desc": "HTTP Connection",
-        "description": "Connect to remote service via Streamable HTTP"
+        "desc": "Conexión HTTP",
+        "description": "Conectarse al servicio remoto vía Streamable HTTP"
       }
     },
     "form": {
-      "serverNamePlaceholder": "Server Name",
-      "serverNameExample": "e.g., Memory Server",
-      "commandPlaceholder": "Command (e.g., npx)",
-      "commandExample": "e.g., npx or uvx",
-      "argsPlaceholder": "Arguments (space-separated)",
-      "argPlaceholder": "Argument value...",
-      "argExample1": "e.g., -y",
-      "argExample2": "e.g., @modelcontextprotocol/server-memory",
+      "serverNamePlaceholder": "Nombre del Servidor",
+      "serverNameExample": "ej., Memory Server",
+      "commandPlaceholder": "Comando (ej., npx)",
+      "commandExample": "ej., npx o uvx",
+      "argsPlaceholder": "Argumentos (separados por espacios)",
+      "argPlaceholder": "Valor del argumento...",
+      "argExample1": "ej., -y",
+      "argExample2": "ej., @modelcontextprotocol/server-memory",
       "urlPlaceholder": "http://localhost:3000/mcp",
-      "descriptionPlaceholder": "Briefly describe this server's function...",
-      "authorPlaceholder": "e.g., Anthropic, OpenAI",
+      "descriptionPlaceholder": "Describe brevemente la función de este servidor...",
+      "authorPlaceholder": "ej., Anthropic, OpenAI",
       "tagsPlaceholder": "tag1, tag2, tag3",
       "logoPlaceholder": "https://example.com/logo.png",
-      "envNamePlaceholder": "Variable Name",
-      "envValuePlaceholder": "Value",
-      "deleteArg": "Delete this argument",
-      "deleteEnv": "Delete this environment variable",
-      "addArgHint": "Add new argument (or press Enter in input)",
-      "addEnvHint": "Add environment variable (or press Enter)",
-      "allowedPathsDesc": "Allowed directory paths (can add multiple)",
-      "basicInfo": "Basic Information",
-      "name": "Name",
-      "connectionType": "Connection Type",
-      "stdioConfig": "STDIO Configuration",
-      "httpConfig": "HTTP Configuration",
-      "command": "Command",
-      "commandDesc": "Command to start the MCP server, e.g., npx, node, python, etc.",
-      "args": "Arguments",
-      "addArg": "Add Argument",
-      "serverUrl": "Server URL",
-      "serverUrlDesc": "Full URL of the remote MCP server",
-      "autoConnectLabel": "Auto connect on startup",
-      "advancedSettings": "Advanced Settings",
-      "description": "Description",
-      "env": "Environment Variables",
-      "timeout": "Timeout (milliseconds)",
-      "tags": "Tags",
-      "tagsSeparator": "Separate multiple tags with commas",
-      "longRunning": "Long-running Server",
-      "stdioDesc": "Local process communication",
-      "httpDesc": "Remote HTTP connection",
-      "registryConfig": "Registry Configuration"
+      "envNamePlaceholder": "Nombre de Variable",
+      "envValuePlaceholder": "Valor",
+      "deleteArg": "Eliminar este argumento",
+      "deleteEnv": "Eliminar esta variable de entorno",
+      "addArgHint": "Añadir nuevo argumento (o presiona Enter en el input)",
+      "addEnvHint": "Añadir variable de entorno (o presiona Enter)",
+      "allowedPathsDesc": "Rutas de directorio permitidas (puedes añadir múltiples)",
+      "basicInfo": "Información Básica",
+      "name": "Nombre",
+      "connectionType": "Tipo de Conexión",
+      "stdioConfig": "Configuración STDIO",
+      "httpConfig": "Configuración HTTP",
+      "command": "Comando",
+      "commandDesc": "Comando para iniciar el servidor MCP, ej., npx, node, python, etc.",
+      "args": "Argumentos",
+      "addArg": "Añadir Argumento",
+      "serverUrl": "URL del Servidor",
+      "serverUrlDesc": "URL completa del servidor MCP remoto",
+      "autoConnectLabel": "Conexión automática al iniciar",
+      "advancedSettings": "Configuración Avanzada",
+      "description": "Descripción",
+      "env": "Variables de Entorno",
+      "timeout": "Tiempo de espera (milisegundos)",
+      "tags": "Etiquetas",
+      "tagsSeparator": "Separa múltiples etiquetas con comas",
+      "longRunning": "Servidor de Ejecución Larga",
+      "stdioDesc": "Comunicación de proceso local",
+      "httpDesc": "Conexión HTTP remota",
+      "registryConfig": "Configuración de Registry"
     },
     "stats": {
       "connections": "Conexiones",
@@ -271,17 +277,17 @@ const es: TranslationDictionary = {
       "errors": "Errores",
       "tools": "Herramientas",
       "providers": "Proveedores",
-      "servers": "Servers",
-      "resources": "Resources",
+      "servers": "Servidores",
+      "resources": "Recursos",
       "prompts": "Prompts",
-      "connectionStatus": "Connection Status",
-      "serverDetails": "Server Details",
+      "connectionStatus": "Estado de Conexión",
+      "serverDetails": "Detalles del Servidor",
       "tableHeader": {
-        "name": "Name",
-        "protocol": "Protocol",
-        "status": "Status",
-        "tools": "Tools",
-        "resources": "Resources"
+        "name": "Nombre",
+        "protocol": "Protocolo",
+        "status": "Estado",
+        "tools": "Herramientas",
+        "resources": "Recursos"
       }
     },
     "status": {
@@ -290,65 +296,65 @@ const es: TranslationDictionary = {
       "error": "Error"
     },
     "toolsDetail": {
-      "empty": "No tools available",
-      "emptyHint": "Please connect a server first",
-      "selectToView": "Select a tool to view details",
-      "description": "Description",
-      "inputSchema": "Input Schema",
-      "totalCount": "{{count}} tools in total"
+      "empty": "No hay herramientas disponibles",
+      "emptyHint": "Por favor conecta un servidor primero",
+      "selectToView": "Selecciona una herramienta para ver detalles",
+      "description": "Descripción",
+      "inputSchema": "Esquema de Entrada",
+      "totalCount": "{{count}} herramientas en total"
     },
     "resourcesDetail": {
-      "empty": "No resources available",
-      "emptyDescription": "Connected servers do not provide resources",
-      "loadError": "Failed to load resource content",
-      "description": "Description",
-      "contentPreview": "Content Preview",
-      "noContent": "No content",
-      "loading": "Loading...",
-      "selectToView": "Select a resource to view details",
-      "totalCount": "{{count}} resources in total"
+      "empty": "No hay recursos disponibles",
+      "emptyDescription": "Los servidores conectados no proporcionan recursos",
+      "loadError": "Error al cargar el contenido del recurso",
+      "description": "Descripción",
+      "contentPreview": "Vista Previa del Contenido",
+      "noContent": "Sin contenido",
+      "loading": "Cargando...",
+      "selectToView": "Selecciona un recurso para ver detalles",
+      "totalCount": "{{count}} recursos en total"
     },
     "promptsDetail": {
-      "empty": "No prompts available",
-      "emptyDescription": "Connected servers do not provide prompt templates",
-      "totalCount": "{{count}} prompts in total",
-      "description": "Description",
-      "arguments": "Arguments",
-      "required": "Required",
-      "selectToView": "Select a prompt to view details"
+      "empty": "No hay prompts disponibles",
+      "emptyDescription": "Los servidores conectados no proporcionan plantillas de prompt",
+      "totalCount": "{{count}} prompts en total",
+      "description": "Descripción",
+      "arguments": "Argumentos",
+      "required": "Requerido",
+      "selectToView": "Selecciona un prompt para ver detalles"
     },
     "serversDetail": {
-      "empty": "No MCP servers",
-      "emptyHint": "Click \"Add MCP\" button on the left to start"
+      "empty": "No hay servidores MCP",
+      "emptyHint": "Haz clic en el botón \"Añadir MCP\" a la izquierda para comenzar"
     },
     "serverEdit": {
-      "generalSettings": "General Settings",
-      "toolsWithCount": "Tools ({{count}})",
-      "resourcesWithCount": "Resources ({{count}})",
-      "notFound": "Server Not Found",
-      "notFoundDesc": "This server does not exist or has been deleted",
-      "backToList": "Back to Server List",
-      "editSubtitle": "Edit MCP server configuration",
-      "configSaved": "Configuration saved",
-      "restarting": "Restarting server to apply new configuration...",
-      "configSavedRestarted": "Configuration saved, server restarted",
-      "saveFailed": "Save failed, please try again"
+      "generalSettings": "Configuración General",
+      "toolsWithCount": "Herramientas ({{count}})",
+      "resourcesWithCount": "Recursos ({{count}})",
+      "notFound": "Servidor No Encontrado",
+      "notFoundDesc": "Este servidor no existe o ha sido eliminado",
+      "backToList": "Volver a la Lista de Servidores",
+      "editSubtitle": "Editar configuración del servidor MCP",
+      "configSaved": "Configuración guardada",
+      "restarting": "Reiniciando servidor para aplicar nueva configuración...",
+      "configSavedRestarted": "Configuración guardada, servidor reiniciado",
+      "saveFailed": "Error al guardar, por favor intenta de nuevo"
     },
     "serverAdd": {
-      "subtitle": "Configure a new Model Context Protocol server",
-      "infoTitle": "Add MCP Server",
-      "infoDesc": "Fill in the information below to add a new MCP server. STDIO type is for local process communication, HTTP type is for remote server connections."
+      "subtitle": "Configurar un nuevo servidor Model Context Protocol",
+      "infoTitle": "Añadir Servidor MCP",
+      "infoDesc": "Completa la información a continuación para añadir un nuevo servidor MCP. El tipo STDIO es para comunicación de proceso local, el tipo HTTP es para conexiones de servidor remoto."
     },
     "sources": {
-      "builtin": "Built-in Services",
-      "custom": "Custom Services"
+      "builtin": "Servicios Integrados",
+      "custom": "Servicios Personalizados"
     }
   },
 
   // Knowledge Base
   "knowledge": {
-    "title": "Knowledge Base",
-    "listTitle": "Knowledge Base List"
+    "title": "Base de Conocimientos",
+    "listTitle": "Lista de Base de Conocimientos"
   },
 
   // Errors

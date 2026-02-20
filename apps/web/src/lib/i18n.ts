@@ -100,6 +100,10 @@ export type TranslationKey =
   | "quickAccess.github"
   | "quickAccess.language"
 
+  // Sidebar
+  | "sidebar.mcpConnected"
+  | "sidebar.untitledChat"
+
   // 模型相关
   | "models.searchPlaceholder"
   | "models.deepseek.chat.description"

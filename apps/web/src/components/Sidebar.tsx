@@ -51,7 +51,7 @@ export function Sidebar() {
               >
                 <MessageSquare className="h-4 w-4 shrink-0" />
                 <span className="truncate">
-                  {conv.title || "Untitled Chat"}
+                  {conv.title || t("sidebar.untitledChat")}
                 </span>
               </Button>
               <Button
@@ -71,7 +71,7 @@ export function Sidebar() {
       <LeftDrawerFooter>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span>MCP Connected</span>
+          <span>{t("sidebar.mcpConnected")}</span>
         </div>
       </LeftDrawerFooter>
     </LeftDrawer>

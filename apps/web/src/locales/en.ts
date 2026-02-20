@@ -128,6 +128,12 @@ const en: TranslationDictionary = {
     "language": "Language / 语言"
   },
 
+  // Sidebar
+  "sidebar": {
+    "mcpConnected": "MCP Connected",
+    "untitledChat": "Untitled Chat"
+  },
+
   // Models
   "models": {
     "searchPlaceholder": "Search models...",

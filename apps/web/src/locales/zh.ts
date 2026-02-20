@@ -128,6 +128,12 @@ const zh: TranslationDictionary = {
     "language": "语言 / Language"
   },
 
+  // Sidebar
+  "sidebar": {
+    "mcpConnected": "MCP 已连接",
+    "untitledChat": "未命名对话"
+  },
+
   // Models
   "models": {
     "searchPlaceholder": "搜索模型...",
