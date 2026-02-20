@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { setLocaleTranslations } from "../lib/i18n";
+import { t as tFn, setLocaleTranslations, type TranslationKey } from "../lib/i18n";
 
 export type Locale = "en" | "zh" | "ja" | "es" | "fr" | "de";
 
@@ -22,6 +22,7 @@ export const LOCALES: LocaleOption[] = [
 
 interface I18nState {
   currentLocale: Locale;
+  t: (key: TranslationKey, params?: Record<string, any>) => string;
   setLocale: (locale: Locale) => void;
   getCurrentLocaleOption: () => LocaleOption;
 }
@@ -30,11 +31,14 @@ export const useI18nStore = create<I18nState>()(
   persist(
     (set, get) => ({
       currentLocale: "zh", // 默认中文
+      t: tFn,
 
       setLocale: async (locale) => {
         set({ currentLocale: locale });
         // 更新翻译
         await setLocaleTranslations(locale);
+        // 设置新的 t 引用，作为 locale 切换完成的信号
+        set({ t: (key, params?) => tFn(key, params) });
       },
 
       getCurrentLocaleOption: () => {

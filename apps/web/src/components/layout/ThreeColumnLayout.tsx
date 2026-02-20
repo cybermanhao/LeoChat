@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { cn } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 interface ThreeColumnLayoutProps {
   leftDrawer?: ReactNode;
@@ -22,6 +22,7 @@ export function ThreeColumnLayout({
   defaultCollapsed = false,
   children,
 }: ThreeColumnLayoutProps) {
+  const { t } = useT();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (

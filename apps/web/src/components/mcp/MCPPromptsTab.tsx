@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { cn } from "@ai-chatbox/ui";
 import { MessageSquare, Server } from "lucide-react";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 
 interface PromptWithServer {
@@ -11,6 +11,7 @@ interface PromptWithServer {
 }
 
 export function MCPPromptsTab() {
+  const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptWithServer | null>(null);

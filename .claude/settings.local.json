@@ -75,7 +75,9 @@
       "Bash(git -C /c/code/LeoChat show 3671e06:apps/electron/electron.vite.config.ts)",
       "Bash(git -C /c/code/LeoChat show 3671e06^:apps/electron/electron.vite.config.ts)",
       "Bash(git -C /c/code/LeoChat diff HEAD apps/web/vite.config.ts apps/electron/electron.vite.config.ts)",
-      "Bash(git -C /c/code/LeoChat log --oneline -5)"
+      "Bash(git -C /c/code/LeoChat log --oneline -5)",
+      "Bash(head -5 grep -n \"^const\\\\|^const \" C:/code/LeoChat/apps/web/src/components/ModelSelector.tsx)",
+      "Bash(git stash:*)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

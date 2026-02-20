@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Check, Eye, EyeOff, ExternalLink, Sparkles } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import { useChatStore, type LLMProvider } from "../../stores/chat";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 // --- Provider 配置 ---
 
@@ -15,33 +15,6 @@ interface ProviderInfo {
   color: string;
 }
 
-const PROVIDERS: ProviderInfo[] = [
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    description: t("settings.api.descriptionDeepSeek"),
-    link: "https://platform.deepseek.com/api_keys",
-    linkText: t("settings.api.linkTextDeepSeek"),
-    color: "bg-blue-500",
-  },
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    description: t("settings.api.descriptionOpenRouter"),
-    link: "https://openrouter.ai/keys",
-    linkText: t("settings.api.linkTextOpenRouter"),
-    color: "bg-purple-500",
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    description: t("settings.api.descriptionOpenAI"),
-    link: "https://platform.openai.com/api-keys",
-    linkText: t("settings.api.linkTextOpenAI"),
-    color: "bg-green-500",
-  },
-];
-
 // --- 模型列表 ---
 
 interface Model {
@@ -52,34 +25,62 @@ interface Model {
   pricing: string;
 }
 
-const MODELS_BY_PROVIDER: Record<LLMProvider, Model[]> = {
-  deepseek: [
-    { id: "deepseek-chat", name: "DeepSeek Chat", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
-    { id: "deepseek-reasoner", name: "DeepSeek R1", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
-  ],
-  openrouter: [
-    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3/1M" },
-    { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15/1M" },
-    { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25/1M" },
-    { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50/1M" },
-    { id: "deepseek/deepseek-chat", name: "DeepSeek (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
-  ],
-  openai: [
-    { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
-    { id: "gpt-4o-mini", name: "GPT-4o Mini", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15/1M" },
-    { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10/1M" },
-  ],
-};
-
 // --- 组件 ---
 
 export function LLMSettings() {
+  const { t } = useT();
   const currentProvider = useChatStore((s) => s.currentProvider);
   const currentModel = useChatStore((s) => s.currentModel);
   const providerKeys = useChatStore((s) => s.providerKeys);
   const setCurrentProvider = useChatStore((s) => s.setCurrentProvider);
   const setCurrentModel = useChatStore((s) => s.setCurrentModel);
   const setProviderKey = useChatStore((s) => s.setProviderKey);
+
+  const PROVIDERS = useMemo<ProviderInfo[]>(() => [
+    {
+      id: "deepseek",
+      name: "DeepSeek",
+      description: t("settings.api.descriptionDeepSeek"),
+      link: "https://platform.deepseek.com/api_keys",
+      linkText: t("settings.api.linkTextDeepSeek"),
+      color: "bg-blue-500",
+    },
+    {
+      id: "openrouter",
+      name: "OpenRouter",
+      description: t("settings.api.descriptionOpenRouter"),
+      link: "https://openrouter.ai/keys",
+      linkText: t("settings.api.linkTextOpenRouter"),
+      color: "bg-purple-500",
+    },
+    {
+      id: "openai",
+      name: "OpenAI",
+      description: t("settings.api.descriptionOpenAI"),
+      link: "https://platform.openai.com/api-keys",
+      linkText: t("settings.api.linkTextOpenAI"),
+      color: "bg-green-500",
+    },
+  ], [t]);
+
+  const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
+    deepseek: [
+      { id: "deepseek-chat", name: "DeepSeek Chat", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
+      { id: "deepseek-reasoner", name: "DeepSeek R1", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
+    ],
+    openrouter: [
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3/1M" },
+      { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15/1M" },
+      { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25/1M" },
+      { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50/1M" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
+    ],
+    openai: [
+      { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
+      { id: "gpt-4o-mini", name: "GPT-4o Mini", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15/1M" },
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10/1M" },
+    ],
+  }), [t]);
 
   const [localKey, setLocalKey] = useState("");
   const [showKey, setShowKey] = useState(false);

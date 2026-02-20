@@ -22,13 +22,14 @@ import {
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
 import { Sparkles, Globe, FileText, Trash2 } from "lucide-react";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { ModelSelector } from "./ModelSelector";
 import { mcpApi } from "../lib/api";
 
 export function ChatArea() {
+  const { t } = useT();
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const conversations = useChatStore((s) => s.conversations);

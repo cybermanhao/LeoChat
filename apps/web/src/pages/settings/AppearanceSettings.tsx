@@ -1,9 +1,10 @@
 import { useThemeStore, getThemePresets } from "../../stores/theme";
 import { Check } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 export function AppearanceSettings() {
+  const { t } = useT();
   const currentTheme = useThemeStore((s) => s.currentTheme);
   const setTheme = useThemeStore((s) => s.setTheme);
   const themePresets = getThemePresets();

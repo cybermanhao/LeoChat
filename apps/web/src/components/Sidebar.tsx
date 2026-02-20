@@ -2,7 +2,7 @@ import { Plus, MessageSquare, Trash2 } from "lucide-react";
 import { Button, Separator } from "@ai-chatbox/ui";
 import { useChatStore } from "../stores/chat";
 import { cn } from "@ai-chatbox/ui";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 import {
   LeftDrawer,
   LeftDrawerHeader,
@@ -11,6 +11,7 @@ import {
 } from "./layout";
 
 export function Sidebar() {
+  const { t } = useT();
   const { conversations, currentConversationId, setCurrentConversation, createConversation, deleteConversation } =
     useChatStore();
 

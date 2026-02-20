@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Server, Wrench, FileText, Zap, Check, AlertCircle, RefreshCw } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
 import { MCPToolsTab } from "../../components/mcp/MCPToolsTab";
@@ -39,6 +39,7 @@ function needsRestart(
 type SaveStatus = null | "saved" | "restarting" | "restarted" | "error";
 
 export function MCPServerEditPage() {
+  const { t } = useT();
   const { serverId } = useParams<{ serverId: string }>();
   const navigate = useNavigate();
 

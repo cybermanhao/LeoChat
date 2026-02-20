@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { cn, Button } from "@ai-chatbox/ui";
 import { FileText, Server, Download, Image as ImageIcon } from "lucide-react";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { mcpApi } from "../../lib/api";
 import ReactMarkdown from "react-markdown";
@@ -13,6 +13,7 @@ interface ResourceWithServer {
 }
 
 export function MCPResourcesTab() {
+  const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const [selectedResource, setSelectedResource] = useState<ResourceWithServer | null>(null);

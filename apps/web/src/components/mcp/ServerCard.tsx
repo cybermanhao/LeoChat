@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { MCPServerConfig } from "@ai-chatbox/shared";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 interface ServerCardProps {
   server: MCPServerConfig;
@@ -39,6 +39,7 @@ function StatusBadge({
   loading?: boolean;
   reconnecting?: boolean;
 }) {
+  const { t } = useT();
   if (reconnecting) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-orange-500/10 text-orange-600">
@@ -91,6 +92,7 @@ export function ServerCard({
   onDelete,
   onEdit,
 }: ServerCardProps) {
+  const { t } = useT();
   const TransportIcon = server.transport === "stdio" ? Terminal : Globe;
 
   // 从服务器配置中提取描述（需要扩展 MCPServerConfig 类型）

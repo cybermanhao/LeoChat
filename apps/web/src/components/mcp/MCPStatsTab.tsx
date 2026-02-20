@@ -1,10 +1,11 @@
 import { useMemo } from "react";
 import { Server, Wrench, FileText, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 
 export function MCPStatsTab() {
+  const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const syncWithBackend = useMCPStore((s) => s.syncWithBackend);

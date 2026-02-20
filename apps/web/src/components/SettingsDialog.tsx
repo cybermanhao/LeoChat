@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
 } from "@ai-chatbox/ui";
 import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 
 type LLMProvider = "deepseek" | "openrouter" | "openai";
 
@@ -21,36 +21,36 @@ interface ProviderConfig {
   linkText: string;
 }
 
-const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
-  deepseek: {
-    name: "DeepSeek",
-    placeholder: t("settings.api.keyPlaceholder"),
-    description: t("settings.api.descriptionDeepSeek"),
-    link: "https://platform.deepseek.com/api_keys",
-    linkText: t("settings.api.linkTextDeepSeek"),
-  },
-  openrouter: {
-    name: "OpenRouter",
-    placeholder: t("settings.api.keyPlaceholder"),
-    description: t("settings.api.descriptionOpenRouter"),
-    link: "https://openrouter.ai/keys",
-    linkText: t("settings.api.linkTextOpenRouter"),
-  },
-  openai: {
-    name: "OpenAI",
-    placeholder: t("settings.api.keyPlaceholder"),
-    description: t("settings.api.descriptionOpenAI"),
-    link: "https://platform.openai.com/api-keys",
-    linkText: t("settings.api.linkTextOpenAI"),
-  },
-};
-
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const { t } = useT();
+  const PROVIDER_CONFIGS = useMemo<Record<LLMProvider, ProviderConfig>>(() => ({
+    deepseek: {
+      name: "DeepSeek",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionDeepSeek"),
+      link: "https://platform.deepseek.com/api_keys",
+      linkText: t("settings.api.linkTextDeepSeek"),
+    },
+    openrouter: {
+      name: "OpenRouter",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionOpenRouter"),
+      link: "https://openrouter.ai/keys",
+      linkText: t("settings.api.linkTextOpenRouter"),
+    },
+    openai: {
+      name: "OpenAI",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionOpenAI"),
+      link: "https://platform.openai.com/api-keys",
+      linkText: t("settings.api.linkTextOpenAI"),
+    },
+  }), [t]);
   const { providerKeys, setProviderKey, currentProvider, setCurrentProvider } = useChatStore();
 
   const [localKeys, setLocalKeys] = useState<Record<LLMProvider, string>>({

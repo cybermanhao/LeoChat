@@ -1,6 +1,6 @@
 import { Database, Plus, FolderOpen, FileText } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 import {
   ThreeColumnLayout,
   LeftDrawer,
@@ -10,6 +10,7 @@ import {
 
 // 知识库侧边栏
 function KnowledgeBaseSidebar() {
+  const { t } = useT();
   return (
     <LeftDrawer>
       <LeftDrawerHeader

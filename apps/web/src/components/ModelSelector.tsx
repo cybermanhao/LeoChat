@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@ai-chatbox/ui";
 import { Sparkles, Check, ExternalLink } from "lucide-react";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 
 type LLMProvider = "deepseek" | "openrouter" | "openai";
 
@@ -19,104 +19,6 @@ interface Model {
   contextWindow?: number;
   pricing?: string;
 }
-
-// DeepSeek 官方直连模型
-const DEEPSEEK_MODELS: Model[] = [
-  {
-    id: "deepseek-chat",
-    name: "DeepSeek Chat",
-    provider: "DeepSeek",
-    description: t("models.deepseek.chat.description"),
-    contextWindow: 64000,
-    pricing: "¥1 / 1M tokens",
-  },
-  {
-    id: "deepseek-reasoner",
-    name: "DeepSeek R1",
-    provider: "DeepSeek",
-    description: t("models.deepseek.reasoner.description"),
-    contextWindow: 64000,
-    pricing: "¥4 / 1M tokens",
-  },
-];
-
-// OpenAI 官方直连模型
-const OPENAI_MODELS: Model[] = [
-  {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    provider: "OpenAI",
-    description: t("models.openai.gpt4o.description"),
-    contextWindow: 128000,
-    pricing: "$2.50 / 1M tokens",
-  },
-  {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
-    provider: "OpenAI",
-    description: t("models.openai.gpt4oMini.description"),
-    contextWindow: 128000,
-    pricing: "$0.15 / 1M tokens",
-  },
-  {
-    id: "gpt-4-turbo",
-    name: "GPT-4 Turbo",
-    provider: "OpenAI",
-    description: t("models.openai.gpt4Turbo.description"),
-    contextWindow: 128000,
-    pricing: "$10.00 / 1M tokens",
-  },
-];
-
-// OpenRouter 模型（通过 OpenRouter 代理）
-const OPENROUTER_MODELS: Model[] = [
-  {
-    id: "anthropic/claude-3.5-sonnet",
-    name: "Claude 3.5 Sonnet",
-    provider: "Anthropic",
-    description: t("models.anthropic.sonnet.description"),
-    contextWindow: 200000,
-    pricing: "$3.00 / 1M tokens",
-  },
-  {
-    id: "anthropic/claude-3-opus",
-    name: "Claude 3 Opus",
-    provider: "Anthropic",
-    description: t("models.anthropic.opus.description"),
-    contextWindow: 200000,
-    pricing: "$15.00 / 1M tokens",
-  },
-  {
-    id: "google/gemini-pro-1.5",
-    name: "Gemini Pro 1.5",
-    provider: "Google",
-    description: t("models.google.geminiPro.description"),
-    contextWindow: 1000000,
-    pricing: "$1.25 / 1M tokens",
-  },
-  {
-    id: "openai/gpt-4o",
-    name: "GPT-4o",
-    provider: "OpenAI",
-    description: t("models.common.viaOpenRouter"),
-    contextWindow: 128000,
-    pricing: "$2.50 / 1M tokens",
-  },
-  {
-    id: "deepseek/deepseek-chat",
-    name: "DeepSeek Chat",
-    provider: "DeepSeek",
-    description: t("models.common.viaOpenRouter"),
-    contextWindow: 64000,
-    pricing: "$0.14 / 1M tokens",
-  },
-];
-
-const MODELS_BY_PROVIDER: Record<LLMProvider, Model[]> = {
-  deepseek: DEEPSEEK_MODELS,
-  openai: OPENAI_MODELS,
-  openrouter: OPENROUTER_MODELS,
-};
 
 const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
   deepseek: { name: "DeepSeek", link: "https://platform.deepseek.com" },
@@ -139,7 +41,33 @@ export function ModelSelector({
   currentProvider,
   onSelect,
 }: ModelSelectorProps) {
+  const { t } = useT();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const DEEPSEEK_MODELS = useMemo<Model[]>(() => [
+    { id: "deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
+    { id: "deepseek-reasoner", name: "DeepSeek R1", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
+  ], [t]);
+
+  const OPENAI_MODELS = useMemo<Model[]>(() => [
+    { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
+    { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15 / 1M tokens" },
+    { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10.00 / 1M tokens" },
+  ], [t]);
+
+  const OPENROUTER_MODELS = useMemo<Model[]>(() => [
+    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3.00 / 1M tokens" },
+    { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15.00 / 1M tokens" },
+    { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25 / 1M tokens" },
+    { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
+    { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
+  ], [t]);
+
+  const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
+    deepseek: DEEPSEEK_MODELS,
+    openai: OPENAI_MODELS,
+    openrouter: OPENROUTER_MODELS,
+  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS]);
 
   const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const providerInfo = PROVIDER_INFO[currentProvider];

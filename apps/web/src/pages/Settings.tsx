@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Settings as SettingsIcon, Palette, Globe, Key, Bell, Shield, Zap } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
 import {
   ThreeColumnLayout,
@@ -9,7 +9,7 @@ import {
 } from "../components/layout";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { LLMSettings } from "./settings/LLMSettings";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 
 interface SettingCategory {
   id: string;
@@ -17,19 +17,19 @@ interface SettingCategory {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const settingCategories: SettingCategory[] = [
-  { id: "appearance", label: t("common.appearance"), icon: Palette },
-  { id: "llm", label: t("settings.model.title"), icon: Globe },
-  { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
-  { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
-  { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
-];
-
 // 设置侧边栏
 function SettingsSidebar({ currentCategory, onSelectCategory }: {
   currentCategory: string;
   onSelectCategory: (id: string) => void;
 }) {
+  const { t } = useT();
+  const settingCategories = useMemo<SettingCategory[]>(() => [
+    { id: "appearance", label: t("common.appearance"), icon: Palette },
+    { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
+    { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
+    { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
+  ], [t]);
   return (
     <LeftDrawer>
       <LeftDrawerHeader title={t("common.settings")} />
@@ -60,7 +60,15 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
 }
 
 export function SettingsPage() {
+  const { t } = useT();
   const [currentCategory, setCurrentCategory] = useState("appearance");
+  const settingCategories = useMemo<SettingCategory[]>(() => [
+    { id: "appearance", label: t("common.appearance"), icon: Palette },
+    { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
+    { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
+    { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
+  ], [t]);
 
   const getCategoryContent = () => {
     switch (currentCategory) {

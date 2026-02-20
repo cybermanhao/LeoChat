@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, X } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 interface SearchBarProps {
   value: string;
@@ -13,9 +13,11 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChange,
-  placeholder = t("mcp.searchPlaceholder"),
+  placeholder,
   className,
 }: SearchBarProps) {
+  const { t } = useT();
+  const effectivePlaceholder = placeholder ?? t("mcp.searchPlaceholder");
   const [expanded, setExpanded] = useState(!!value);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -65,7 +67,7 @@ export function SearchBar({
             setExpanded(false);
           }
         }}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         className="h-9 w-64 pl-9 pr-9 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all"
       />
       {value && (

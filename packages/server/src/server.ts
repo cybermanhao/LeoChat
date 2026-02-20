@@ -11,11 +11,11 @@ export interface ServerContext {
   startTime: number;
 }
 
-export function createServer() {
+export function createServer(externalSessionManager?: ReturnType<typeof createSessionManager>) {
   const app = new Hono();
 
-  // Create session manager for MCP connections
-  const sessionManager = createSessionManager({
+  // Use external session manager if provided (e.g. from Electron), otherwise create one
+  const sessionManager = externalSessionManager ?? createSessionManager({
     onSessionChange: (sessions) => {
       console.log("MCP sessions updated:", sessions.length, "connected");
     },

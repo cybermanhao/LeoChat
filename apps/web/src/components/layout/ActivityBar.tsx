@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { MessageSquare, Server, Database, Settings } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 interface ActivityItem {
   id: string;
@@ -11,36 +12,37 @@ interface ActivityItem {
   badge?: number;
 }
 
-const activities: ActivityItem[] = [
-  {
-    id: "chat",
-    label: t("nav.chat"),
-    icon: MessageSquare,
-    path: "/",
-  },
-  {
-    id: "mcp",
-    label: "MCP",
-    icon: Server,
-    path: "/mcp/servers",
-  },
-  {
-    id: "knowledge",
-    label: t("nav.knowledge"),
-    icon: Database,
-    path: "/knowledge",
-  },
-  {
-    id: "settings",
-    label: t("nav.settings"),
-    icon: Settings,
-    path: "/settings",
-  },
-];
-
 export function ActivityBar() {
+  const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const activities = useMemo<ActivityItem[]>(() => [
+    {
+      id: "chat",
+      label: t("nav.chat"),
+      icon: MessageSquare,
+      path: "/",
+    },
+    {
+      id: "mcp",
+      label: "MCP",
+      icon: Server,
+      path: "/mcp/servers",
+    },
+    {
+      id: "knowledge",
+      label: t("nav.knowledge"),
+      icon: Database,
+      path: "/knowledge",
+    },
+    {
+      id: "settings",
+      label: t("nav.settings"),
+      icon: Settings,
+      path: "/settings",
+    },
+  ], [t]);
 
   const getIsActive = (path: string) => {
     if (path === "/") {

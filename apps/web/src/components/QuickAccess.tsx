@@ -3,9 +3,10 @@ import { Mail, Github } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
 import { useI18nStore, LOCALES, type LocaleOption } from "../stores/i18n";
 import { cn } from "@ai-chatbox/ui";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 
 export function QuickAccess() {
+  const { t } = useT();
   const currentLocale = useI18nStore((s) => s.currentLocale);
   const setLocale = useI18nStore((s) => s.setLocale);
   const getCurrentLocaleOption = useI18nStore((s) => s.getCurrentLocaleOption);

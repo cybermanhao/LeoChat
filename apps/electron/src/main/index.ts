@@ -19,8 +19,8 @@ const sessionManager = createSessionManager({
   },
 });
 
-// Create and start the server
-const server = createServer();
+// Create and start the server (share sessionManager with HTTP routes)
+const server = createServer(sessionManager);
 const SERVER_PORT = 3001;
 
 function createWindow(): void {

@@ -11,7 +11,7 @@ import {
   MessageSquare,
   BarChart3,
 } from "lucide-react";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 import { useMCPStore } from "../stores/mcp";
 import { MCPServersTab } from "./mcp/MCPServersTab";
 import { MCPToolsTab } from "./mcp/MCPToolsTab";
@@ -26,15 +26,15 @@ interface MCPDialogProps {
 
 type TabId = "servers" | "tools" | "resources" | "prompts" | "stats";
 
-const TABS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "servers", label: t("mcp.tabs.servers"), icon: Server },
-  { id: "tools", label: t("mcp.tabs.tools"), icon: Wrench },
-  { id: "resources", label: t("mcp.tabs.resources"), icon: FileText },
-  { id: "prompts", label: t("mcp.tabs.prompts"), icon: MessageSquare },
-  { id: "stats", label: t("mcp.tabs.stats"), icon: BarChart3 },
-];
-
 export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
+  const { t } = useT();
+  const TABS = useMemo<Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }>>(() => [
+    { id: "servers", label: t("mcp.tabs.servers"), icon: Server },
+    { id: "tools", label: t("mcp.tabs.tools"), icon: Wrench },
+    { id: "resources", label: t("mcp.tabs.resources"), icon: FileText },
+    { id: "prompts", label: t("mcp.tabs.prompts"), icon: MessageSquare },
+    { id: "stats", label: t("mcp.tabs.stats"), icon: BarChart3 },
+  ], [t]);
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const [activeTab, setActiveTab] = useState<TabId>("servers");

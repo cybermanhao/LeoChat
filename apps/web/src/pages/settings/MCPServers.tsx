@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerCard } from "../../components/mcp/ServerCard";
 import { ServerErrorBoundary } from "../../components/mcp/ServerErrorBoundary";
 
 export function MCPServersPage() {
+  const { t } = useT();
   const navigate = useNavigate();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);

@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Server } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
 import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
 
 export function MCPServerAddPage() {
+  const { t } = useT();
   const navigate = useNavigate();
   const addServer = useMCPStore((s) => s.addServer);
   const setAutoConnect = useMCPStore((s) => s.setAutoConnect);

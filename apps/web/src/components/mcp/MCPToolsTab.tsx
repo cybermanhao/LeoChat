@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { cn, Switch } from "@ai-chatbox/ui";
 import { Wrench, Search, Server } from "lucide-react";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import type { MCPTool } from "@ai-chatbox/shared";
 
@@ -12,6 +12,7 @@ interface ToolWithServer {
 }
 
 export function MCPToolsTab() {
+  const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const toggleTool = useMCPStore((s) => s.toggleTool);

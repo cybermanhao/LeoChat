@@ -7,7 +7,7 @@ import {
 } from "@ai-chatbox/shared";
 import { Button, cn } from "@ai-chatbox/ui";
 import { Terminal, Globe, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 
 function Label({ children, className, htmlFor }: { children: React.ReactNode; className?: string; htmlFor?: string }) {
   return <label htmlFor={htmlFor} className={className}>{children}</label>;
@@ -138,6 +138,7 @@ function ArgsInput({
   defaultValue?: string[];
   onChange: (args: string[]) => void;
 }) {
+  const { t } = useT();
   const [items, setItems] = useState<string[]>(
     defaultValue && defaultValue.length > 0 ? defaultValue : [""]
   );
@@ -285,6 +286,7 @@ function EnvInput({
   defaultValue?: Record<string, string>;
   onChange: (env: Record<string, string> | undefined) => void;
 }) {
+  const { t } = useT();
   const [items, setItems] = useState<{ key: string; value: string }[]>(
     defaultValue
       ? Object.entries(defaultValue).map(([key, value]) => ({ key, value }))
@@ -426,6 +428,7 @@ export function ServerForm({
   onCancel,
   submitLabel,
 }: ServerFormProps) {
+  const { t } = useT();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const {

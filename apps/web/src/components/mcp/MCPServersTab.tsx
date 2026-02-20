@@ -18,13 +18,14 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { t } from "../../i18n";
+import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import type { MCPServerConfig, MCPTool } from "@ai-chatbox/shared";
 
 type TransportType = "stdio" | "streamable-http";
 
 function StatusBadge({ connected, error, connecting, reconnecting }: { connected?: boolean; error?: string; connecting?: boolean; reconnecting?: boolean }) {
+  const { t } = useT();
   if (reconnecting) {
     return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-600">
       <Loader2 className="h-2.5 w-2.5 animate-spin" />重连中
@@ -53,6 +54,7 @@ function InlineServerForm({
   onSave: (config: Omit<MCPServerConfig, "id">) => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [name, setName] = useState("");
   const [transport, setTransport] = useState<TransportType>("stdio");
   const [command, setCommand] = useState("npx");
@@ -149,6 +151,7 @@ function InlineServerForm({
 }
 
 export function MCPServersTab() {
+  const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const isConnecting = useMCPStore((s) => s.isConnecting);
