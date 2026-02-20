@@ -215,7 +215,8 @@ const en: TranslationDictionary = {
       "tools": "Tools",
       "resources": "Resources",
       "prompts": "Prompts",
-      "stats": "Statistics"
+      "stats": "Statistics",
+      "env": "Env"
     },
     "transport": {
       "stdio": {

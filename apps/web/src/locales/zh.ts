@@ -215,7 +215,8 @@ const zh: TranslationDictionary = {
       "tools": "工具",
       "resources": "资源",
       "prompts": "Prompt",
-      "stats": "统计"
+      "stats": "统计",
+      "env": "环境"
     },
     "transport": {
       "stdio": {

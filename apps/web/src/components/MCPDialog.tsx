@@ -36,6 +36,7 @@ export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
     { id: "resources", label: t("mcp.tabs.resources"), icon: FileText },
     { id: "prompts", label: t("mcp.tabs.prompts"), icon: MessageSquare },
     { id: "stats", label: t("mcp.tabs.stats"), icon: BarChart3 },
+    { id: "env", label: t("mcp.tabs.env"), icon: Cpu },
   ], [t]);
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
@@ -108,6 +109,7 @@ export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
           {activeTab === "resources" && <MCPResourcesTab />}
           {activeTab === "prompts" && <MCPPromptsTab />}
           {activeTab === "stats" && <MCPStatsTab />}
+          {activeTab === "env" && <MCPEnvTab />}
         </div>
       </DialogContent>
     </Dialog>

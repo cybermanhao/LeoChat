@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Button,
   cn,
@@ -17,12 +17,152 @@ import {
   X,
   Trash2,
   Zap,
+  CheckCircle2,
+  XCircle,
+  ExternalLink,
+  Copy,
+  Check,
+  Cpu,
 } from "lucide-react";
 import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
+import { envApi, type EnvToolStatus } from "../../lib/api";
 import type { MCPServerConfig, MCPTool } from "@ai-chatbox/shared";
 
 type TransportType = "stdio" | "streamable-http";
+
+// ---------- 环境安装子组件 ----------
+const ENV_META: Array<{
+  id: string;
+  label: string;
+  installUrl: string;
+  installCmd: string;
+}> = [
+  { id: "npx",    label: "npx",     installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
+  { id: "uvx",    label: "uvx",     installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
+  { id: "uv",     label: "uv",      installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
+  { id: "python", label: "Python",  installUrl: "https://www.python.org/downloads/",  installCmd: "winget install Python.Python.3" },
+  { id: "bun",    label: "Bun",     installUrl: "https://bun.sh/",                    installCmd: 'powershell -c "irm bun.sh/install.ps1 | iex"' },
+  { id: "node",   label: "Node.js", installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
+  { id: "mcp",    label: "MCP CLI", installUrl: "https://github.com/modelcontextprotocol/python-sdk", installCmd: "pip install mcp" },
+];
+
+function EnvSection() {
+  const [expanded, setExpanded] = useState(false);
+  const [tools, setTools] = useState<EnvToolStatus[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const fetchEnv = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await envApi.check();
+      setTools(data);
+    } catch {
+      setTools([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 展开时懒加载
+  useEffect(() => {
+    if (expanded && tools.length === 0) fetchEnv();
+  }, [expanded, tools.length, fetchEnv]);
+
+  const handleCopy = async (id: string, cmd: string) => {
+    await navigator.clipboard.writeText(cmd);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const installedCount = tools.filter((t) => t.installed).length;
+
+  return (
+    <div className="border-b">
+      {/* 折叠标题 */}
+      <button
+        className="flex items-center gap-1.5 w-full h-8 px-3 hover:bg-muted/50 text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <Cpu className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span className="flex-1 text-xs font-medium">环境安装</span>
+        {tools.length > 0 && (
+          <span className="text-[10px] text-muted-foreground mr-1">
+            {installedCount}/{ENV_META.length}
+          </span>
+        )}
+        {expanded ? (
+          <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+        )}
+      </button>
+
+      {/* 列表 */}
+      {expanded && (
+        <div className="pb-1 px-2 space-y-0.5">
+          {loading ? (
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            ENV_META.map((meta) => {
+              const tool = tools.find((t) => t.id === meta.id);
+              const installed = tool?.installed ?? false;
+              const version = tool?.version;
+              const isCopied = copiedId === meta.id;
+
+              return (
+                <div key={meta.id} className="flex items-center gap-1.5 h-7 px-1">
+                  {installed ? (
+                    <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                  ) : (
+                    <XCircle className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                  )}
+                  <span className="text-xs font-medium w-12 shrink-0">{meta.label}</span>
+                  {installed && version ? (
+                    <span className="flex-1 text-[10px] text-muted-foreground font-mono truncate">
+                      {version.replace(/^(node\s+|Python\s+|uv\s+)/, "")}
+                    </span>
+                  ) : (
+                    <span className="flex-1 text-[10px] text-muted-foreground">未安装</span>
+                  )}
+                  {!installed && (
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        onClick={() => window.open(meta.installUrl, "_blank")}
+                        title="打开安装页面"
+                      >
+                        <ExternalLink className="h-2.5 w-2.5" />
+                        安装
+                      </button>
+                      <button
+                        className={cn(
+                          "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] transition-colors",
+                          isCopied
+                            ? "bg-green-500/10 text-green-600"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        )}
+                        onClick={() => handleCopy(meta.id, meta.installCmd)}
+                        title={meta.installCmd}
+                      >
+                        {isCopied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                        {isCopied ? "已复制" : "命令"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+// ---------- end EnvSection ----------
 
 function StatusBadge({ connected, error, connecting, reconnecting }: { connected?: boolean; error?: string; connecting?: boolean; reconnecting?: boolean }) {
   const { t } = useT();
@@ -214,6 +354,9 @@ export function MCPServersTab() {
             {t("mcp.addServer")}
           </button>
         )}
+
+        {/* 环境安装区块 */}
+        <EnvSection />
 
         <div className="flex-1 overflow-y-auto">
           {allServers.length === 0 ? (

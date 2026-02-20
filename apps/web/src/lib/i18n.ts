@@ -173,6 +173,7 @@ export type TranslationKey =
   | "mcp.tabs.resources"
   | "mcp.tabs.prompts"
   | "mcp.tabs.stats"
+  | "mcp.tabs.env"
   // MCP transport
   | "mcp.transport.stdio.desc"
   | "mcp.transport.stdio.description"

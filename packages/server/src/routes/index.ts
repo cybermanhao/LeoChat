@@ -357,10 +357,12 @@ export function createRoutes(context: ServerContext) {
   // Environment check
   app.get("/env/check", async (c) => {
     const tools = [
+      { id: "npx",    name: "npx",      commands: ["npx --version"] },
       { id: "node",   name: "Node.js",  commands: ["node --version"] },
+      { id: "uvx",    name: "uvx",      commands: ["uvx --version"] },
+      { id: "uv",     name: "uv",       commands: ["uv --version"] },
       { id: "python", name: "Python",   commands: ["python --version", "python3 --version"] },
       { id: "bun",    name: "Bun",      commands: ["bun --version"] },
-      { id: "uv",     name: "uv",       commands: ["uv --version"] },
       { id: "mcp",    name: "MCP CLI",  commands: ["mcp --version"] },
     ];
 
