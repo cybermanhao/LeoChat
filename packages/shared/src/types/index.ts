@@ -220,6 +220,7 @@ export interface MCPServerConfig {
   transport: "stdio" | "streamable-http";
   command?: string;
   args?: string[];
+  cwd?: string;
   url?: string;
   env?: Record<string, string>;
   timeout?: number;

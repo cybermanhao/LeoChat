@@ -584,6 +584,22 @@ export function ServerForm({
             }}
           />
 
+          {/* 工作目录 */}
+          <div>
+            <Label htmlFor="cwd" className="text-sm font-medium">
+              {t("mcp.form.cwd")}
+            </Label>
+            <input
+              id="cwd"
+              {...register("cwd")}
+              placeholder={t("mcp.form.cwdPlaceholder")}
+              className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {t("mcp.form.cwdDesc")}
+            </p>
+          </div>
+
           {/* Registry 选择器 (尚未实现) */}
           {registryType && (
             <div className="rounded-lg border bg-muted/30 p-4 opacity-50 pointer-events-none">

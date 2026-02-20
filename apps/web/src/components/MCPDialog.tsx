@@ -10,6 +10,7 @@ import {
   FileText,
   MessageSquare,
   BarChart3,
+  Cpu,
 } from "lucide-react";
 import { useT } from "../i18n";
 import { useMCPStore } from "../stores/mcp";
@@ -18,13 +19,14 @@ import { MCPToolsTab } from "./mcp/MCPToolsTab";
 import { MCPResourcesTab } from "./mcp/MCPResourcesTab";
 import { MCPPromptsTab } from "./mcp/MCPPromptsTab";
 import { MCPStatsTab } from "./mcp/MCPStatsTab";
+import { MCPEnvTab } from "./mcp/MCPEnvTab";
 
 interface MCPDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type TabId = "servers" | "tools" | "resources" | "prompts" | "stats";
+type TabId = "servers" | "tools" | "resources" | "prompts" | "stats" | "env";
 
 export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
   const { t } = useT();

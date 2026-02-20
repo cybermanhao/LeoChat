@@ -14,6 +14,7 @@ export const MCPServerConfigSchema = z.object({
   // STDIO 配置
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
+  cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
 
   // HTTP 配置

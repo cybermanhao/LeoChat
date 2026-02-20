@@ -1,9 +1,26 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { exec } from "child_process";
+import { promisify } from "util";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
+
+const execAsync = promisify(exec);
+
+async function getToolVersion(commands: string[]): Promise<string | null> {
+  for (const cmd of commands) {
+    try {
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 5000 });
+      const output = (stdout || stderr).trim();
+      if (output) return output;
+    } catch {
+      // try next command
+    }
+  }
+  return null;
+}
 
 export function createRoutes(context: ServerContext) {
   const app = new Hono();
@@ -335,6 +352,25 @@ export function createRoutes(context: ServerContext) {
 
     const result = await context.sessionManager.callTool(toolName, args);
     return c.json({ result });
+  });
+
+  // Environment check
+  app.get("/env/check", async (c) => {
+    const tools = [
+      { id: "node",   name: "Node.js",  commands: ["node --version"] },
+      { id: "python", name: "Python",   commands: ["python --version", "python3 --version"] },
+      { id: "bun",    name: "Bun",      commands: ["bun --version"] },
+      { id: "uv",     name: "uv",       commands: ["uv --version"] },
+      { id: "mcp",    name: "MCP CLI",  commands: ["mcp --version"] },
+    ];
+
+    const results = await Promise.all(
+      tools.map(async (tool) => {
+        const version = await getToolVersion(tool.commands);
+        return { id: tool.id, name: tool.name, installed: version !== null, version: version ?? null };
+      })
+    );
+    return c.json(results);
   });
 
   // Image proxy

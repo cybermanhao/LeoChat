@@ -122,6 +122,7 @@ async function createStdioTransportAsync(
     command: config.command,
     args: config.args,
     env,
+    ...(config.cwd ? { cwd: config.cwd } : {}),
   });
 
   // 使用 Promise.race 实现超时

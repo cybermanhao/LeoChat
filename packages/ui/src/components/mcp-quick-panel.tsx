@@ -66,7 +66,7 @@ export function MCPQuickPanel({
         side="top"
         align="start"
         sideOffset={8}
-        className="w-56 max-w-[90vw] p-0 bg-popover"
+        className="w-56 max-w-[90vw] p-0 bg-card"
       >
         {/* Header */}
         <div className="flex items-center justify-between h-9 px-3 border-b">

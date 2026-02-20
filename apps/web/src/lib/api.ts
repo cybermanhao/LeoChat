@@ -243,3 +243,18 @@ export const mcpApi = {
     return response.json();
   },
 };
+
+export interface EnvToolStatus {
+  id: string;
+  name: string;
+  installed: boolean;
+  version: string | null;
+}
+
+// Environment API
+export const envApi = {
+  async check(): Promise<EnvToolStatus[]> {
+    const response = await fetch(`${API_BASE}/env/check`);
+    return response.json();
+  },
+};
