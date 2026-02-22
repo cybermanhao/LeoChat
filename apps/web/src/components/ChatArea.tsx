@@ -439,7 +439,7 @@ export function ChatArea() {
                   />
                 ) : undefined
               }
-              renderContent={(content) => {
+              renderContent={(content, isLastTextItem) => {
                 const isStreamingMsg = isGenerating && index === messages.length - 1 && message.role === "assistant";
                 const { actions: parsedActions, cleanContent: contentWithoutActions } = parseActionTags(content);
                 const { cards, columns, cleanContent } = parseCardTags(contentWithoutActions);
@@ -448,7 +448,7 @@ export function ChatArea() {
                     {cleanContent && (
                       <StreamingContent
                         content={cleanContent}
-                        isStreaming={isStreamingMsg}
+                        isStreaming={isStreamingMsg && isLastTextItem}
                         enableMarkdown={enableMarkdown}
                         renderCodeBlock={(code, language) => (
                           <CodeBlock code={code} language={language} showLineNumbers />

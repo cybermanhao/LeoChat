@@ -22,8 +22,8 @@ export interface ChatMessageProps {
   message: DisplayMessage;
   isStreaming?: boolean;
   toolCallStates?: ToolCallState[];
-  /** 自定义渲染文本内容（每个 text contentItem 调用一次） */
-  renderContent?: (content: string) => React.ReactNode;
+  /** 自定义渲染文本内容（每个 text contentItem 调用一次，isLastTextItem 表示是否为最后一个文本段） */
+  renderContent?: (content: string, isLastTextItem: boolean) => React.ReactNode;
   /** 在内容区顶部显示的操作按钮 */
   actions?: React.ReactNode;
   /** @deprecated 使用 renderContent 代替 */
@@ -53,12 +53,16 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
     // 判断是否有工具调用
     const hasToolCalls = message.contentItems.some(item => item.type === 'tool-call');
 
-    // streaming cursor 只在最后一项是文本时显示
-    const lastItem = message.contentItems[message.contentItems.length - 1];
-    const showStreamingCursor = isStreaming && (!lastItem || lastItem.type === 'text');
-
     // 判断思考是否完成：有内容输出或不再 streaming
     const isThinkingComplete = hasReasoning && (hasTextContent || !isStreaming);
+
+    // 最后一个非空文本项的 id，用于判断是否为末尾文本段
+    const lastTextItemId = (() => {
+      const textItems = message.contentItems.filter(
+        (i) => i.type === 'text' && Boolean(i.content as string)
+      );
+      return textItems[textItems.length - 1]?.id;
+    })();
 
     // 渲染单个 contentItem
     const renderItem = (item: MessageContentItem) => {
@@ -67,9 +71,10 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
         if (!content) return null;
 
         if (renderContent) {
+          const isLastTextItem = item.id === lastTextItemId;
           return (
             <div key={item.id} className="px-4 py-2">
-              {renderContent(content)}
+              {renderContent(content, isLastTextItem)}
             </div>
           );
         }
@@ -154,8 +159,7 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
               "rounded-lg overflow-hidden",
               isUser
                 ? "bg-primary text-primary-foreground"
-                : "bg-muted text-foreground",
-              showStreamingCursor && isAssistant && "streaming-cursor"
+                : "bg-muted text-foreground"
             )}
           >
             {/* Reasoning 折叠区域 - 在内容之前 */}

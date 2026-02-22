@@ -174,12 +174,6 @@ ${getThemeDescriptions()}
 - open_panel(panel, tab) - 打开面板 (mcp/settings/history)
 - close_panel(panel) - 关闭面板
 
-## 卡片展示
-- render_cards(cards, columns) - 渲染卡片组件
-  适用场景：搜索结果、产品展示、文章列表等
-  cards: [{title, description, image, link, linkText}, ...]
-  columns: 1 | 2 | 3 (默认 2)
-
 ## 其他能力
 - copy_to_clipboard(text) - 复制到剪贴板
 - open_url(url, newTab) - 打开链接
@@ -359,35 +353,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
-      {
-        name: "render_cards",
-        description: "渲染卡片组件，用于展示结构化信息（如搜索结果、产品、文章等）。支持左图右信息布局，可点击跳转。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            cards: {
-              type: "array",
-              description: "卡片数据数组",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string", description: "卡片标题" },
-                  description: { type: "string", description: "卡片描述" },
-                  image: { type: "string", description: "图片 URL" },
-                  link: { type: "string", description: "点击跳转链接" },
-                  linkText: { type: "string", description: "链接文字，默认'查看详情'" },
-                },
-              },
-            },
-            columns: {
-              type: "number",
-              enum: [1, 2, 3],
-              description: "列数，默认 2",
-            },
-          },
-          required: ["cards"],
-        },
-      },
+      // TODO: render_cards - 前端注入卡片到消息气泡，需要完成 UI command pipeline 调试后启用
+      // {
+      //   name: "render_cards",
+      //   description: "渲染卡片组件，用于展示结构化信息（如搜索结果、产品、文章等）。支持左图右信息布局，可点击跳转。",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       cards: {
+      //         type: "array",
+      //         description: "卡片数据数组",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             title: { type: "string", description: "卡片标题" },
+      //             description: { type: "string", description: "卡片描述" },
+      //             image: { type: "string", description: "图片 URL" },
+      //             link: { type: "string", description: "点击跳转链接" },
+      //             linkText: { type: "string", description: "链接文字，默认'查看详情'" },
+      //           },
+      //         },
+      //       },
+      //       columns: { type: "number", enum: [1, 2, 3], description: "列数，默认 2" },
+      //     },
+      //     required: ["cards"],
+      //   },
+      // },
       {
         name: "generate_waifu",
         description: "生成随机二次元图片（waifu/头像等）。返回图片URL，可直接用于头像、示例图片等场景。",
@@ -516,45 +507,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    case "render_cards": {
-      const { cards, columns = 2 } = args as {
-        cards: Array<{
-          title?: string;
-          description?: string;
-          image?: string;
-          link?: string;
-          linkText?: string;
-        }>;
-        columns?: number;
-      };
-
-      if (!cards || cards.length === 0) {
-        return makeError("请提供至少一张卡片");
-      }
-
-      // 生成 <card> 标签
-      const cardTags = cards
-        .map((card) => {
-          const attrs: string[] = [];
-          if (card.title) attrs.push(`title="${escapeAttr(card.title)}"`);
-          if (card.description) attrs.push(`description="${escapeAttr(card.description)}"`);
-          if (card.image) attrs.push(`image="${escapeAttr(card.image)}"`);
-          if (card.link) attrs.push(`link="${escapeAttr(card.link)}"`);
-          if (card.linkText) attrs.push(`linkText="${escapeAttr(card.linkText)}"`);
-          return `<card ${attrs.join(" ")} />`;
-        })
-        .join("\n");
-
-      // 如果有多张卡片，用 <cards> 包裹
-      const output =
-        cards.length > 1
-          ? `<cards columns="${columns}">\n${cardTags}\n</cards>`
-          : cardTags;
-
-      return {
-        content: [{ type: "text" as const, text: output }],
-      };
-    }
+    // TODO: render_cards - 需要完成前端 UI command pipeline 调试后启用
+    // case "render_cards": { ... }
 
     case "generate_waifu": {
       const { category = "waifu", count = 1, asCard = true } = args as {
