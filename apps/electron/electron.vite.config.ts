@@ -1,5 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import { resolve } from "path";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   main: {
@@ -24,6 +26,13 @@ export default defineConfig({
   },
   renderer: {
     root: "../web",
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        "@": resolve(__dirname, "../web/src"),
+        "@ai-chatbox/ui/styles.css": resolve(__dirname, "../../packages/ui/src/styles/globals.css"),
+      },
+    },
     server: {
       proxy: {
         "/api": {

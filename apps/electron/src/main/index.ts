@@ -43,8 +43,9 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
-    // Always open DevTools for debugging (remove in production)
-    mainWindow?.webContents.openDevTools();
+    if (is.dev) {
+      mainWindow?.webContents.openDevTools();
+    }
   });
 
   // Log renderer errors
