@@ -53,8 +53,8 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     id: "excel",
     name: "Excel",
     transport: "stdio",
-    command: "npx",
-    args: ["-y", "@negokaz/excel-mcp-server"],
+    command: "uvx",
+    args: ["excel-mcp-server", "stdio"],
     env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
   },
 ];

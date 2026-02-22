@@ -67,6 +67,9 @@ const zh: TranslationDictionary = {
     "placeholderDefault": "输入消息，或使用 @tool 调用 MCP 工具...",
     "placeholderWithPrompt": "已启用系统提示...",
     "webSearch": "联网搜索",
+    "temperature": "温度",
+    "contextWindow": "上下文窗口",
+    "maxEpochs": "最大轮数",
     "suggestions": {
       "code": "帮我写一段代码",
       "explain": "解释这个概念",
@@ -108,7 +111,12 @@ const zh: TranslationDictionary = {
       "description": "配置 API 密钥和模型参数",
       "defaultProvider": "默认提供商",
       "apiKeys": "API密钥",
-      "selectModel": "模型"
+      "selectModel": "模型",
+      "contextDepth": "记忆深度",
+      "contextDepthLabel": "记忆深度",
+      "contextDepthDescription": "控制 AI 能「记住」多少对话历史。档位越高，记忆越长，但消耗的 token 越多。",
+      "contextDepthShort": "短（省 token）",
+      "contextDepthFull": "完整"
     },
     "notifications": {
       "title": "通知"
@@ -389,6 +397,12 @@ const zh: TranslationDictionary = {
     "deleted": "已删除",
     "created": "已创建",
     "updated": "已更新"
+  },
+
+  // UI Mode
+  "ui": {
+    "simpleMode": "简",
+    "professionalMode": "专"
   }
 };
 

@@ -11,7 +11,7 @@ import type {
   ContextMessage,
   MessageContentItem,
 } from "@ai-chatbox/shared";
-import { generateId, LLM_PROVIDERS } from "@ai-chatbox/shared";
+import { generateId, LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP } from "@ai-chatbox/shared";
 import { processToolResultForUICommands } from "../lib/ui-commands";
 import { handleApiError } from "../lib/api-error";
 
@@ -71,6 +71,9 @@ interface ChatState {
   currentModel: string;
   enableMarkdown: boolean;
   maxEpochs: number;
+  contextLevel: number;  // 1-10，记忆深度档位（默认 5）
+  uiMode: 'simple' | 'professional';  // UI 模式（默认 simple）
+  temperature: number;  // LLM 温度参数（默认 0.7）
 
   // 运行时状态（不持久化）
   input: string;
@@ -104,6 +107,9 @@ interface ChatState {
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;
   setMaxEpochs: (n: number) => void;
+  setContextLevel: (level: number) => void;
+  setUiMode: (mode: 'simple' | 'professional') => void;
+  setTemperature: (t: number) => void;
   initFromBackendConfig: (config: { availableProviders: string[]; defaultProvider: string }) => void;
 
   // 内部方法
@@ -132,6 +138,9 @@ export const useChatStore = create<ChatState>()(
       currentModel: "deepseek-chat",
       enableMarkdown: true,
       maxEpochs: 10,
+      contextLevel: 5,
+      uiMode: 'simple' as 'simple' | 'professional',
+      temperature: 0.7,
 
       // 运行时状态
       input: "",
@@ -199,7 +208,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       sendMessage: async (content, systemPrompt) => {
-        const { currentConversationId, currentProvider, currentModel, providerKeys, mcpTools, maxEpochs } = get();
+        const { currentConversationId, currentProvider, currentModel, providerKeys, mcpTools, maxEpochs, contextLevel, temperature } = get();
 
         // 创建会话（如果需要）
         const convId = currentConversationId || get().createConversation();
@@ -220,7 +229,12 @@ export const useChatStore = create<ChatState>()(
           model: currentModel,
           apiKey: providerKeys[currentProvider] || "",
           baseURL: providerConfig?.baseURL,
+          temperature,
         };
+
+        // 计算 contextLength（档位映射）和 modelContextLimit
+        const contextLength = CONTEXT_LEVEL_MAP[contextLevel] ?? 30;
+        const modelContextLimit = getModelContextLimit(currentModel);
 
         // 创建 TaskLoop（使用后端代理模式，无需前端 API 密钥）
         const TaskLoopClass = await getTaskLoop();
@@ -234,6 +248,8 @@ export const useChatStore = create<ChatState>()(
           useBackendProxy: true,  // 使用后端代理
           backendURL: "http://localhost:3001",
           systemPrompt,  // 传递系统提示
+          contextLength: contextLength > 0 ? contextLength : undefined,
+          modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
           onToolCall: async (toolName: string, args: Record<string, unknown>) => {
             // TODO: 通过 MCP 调用工具
             console.log("Tool call:", toolName, args);
@@ -339,6 +355,12 @@ export const useChatStore = create<ChatState>()(
       setEnableMarkdown: (enable) => set({ enableMarkdown: enable }),
 
       setMaxEpochs: (n) => set({ maxEpochs: Math.min(Math.max(n, 1), 50) }),
+
+      setContextLevel: (level) => set({ contextLevel: Math.min(Math.max(level, 1), 10) }),
+
+      setUiMode: (mode) => set({ uiMode: mode }),
+
+      setTemperature: (t) => set({ temperature: Math.min(Math.max(t, 0), 2) }),
 
       initFromBackendConfig: (config) => {
         const { availableProviders, defaultProvider } = config;
@@ -720,6 +742,9 @@ export const useChatStore = create<ChatState>()(
         currentModel: state.currentModel,
         enableMarkdown: state.enableMarkdown,
         maxEpochs: state.maxEpochs,
+        contextLevel: state.contextLevel,
+        uiMode: state.uiMode,
+        temperature: state.temperature,
       }),
       merge: (persisted, current) => {
         const data = persisted as Record<string, unknown>;

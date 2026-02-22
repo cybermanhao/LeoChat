@@ -32,9 +32,11 @@ export function LLMSettings() {
   const currentProvider = useChatStore((s) => s.currentProvider);
   const currentModel = useChatStore((s) => s.currentModel);
   const providerKeys = useChatStore((s) => s.providerKeys);
+  const contextLevel = useChatStore((s) => s.contextLevel);
   const setCurrentProvider = useChatStore((s) => s.setCurrentProvider);
   const setCurrentModel = useChatStore((s) => s.setCurrentModel);
   const setProviderKey = useChatStore((s) => s.setProviderKey);
+  const setContextLevel = useChatStore((s) => s.setContextLevel);
 
   const PROVIDERS = useMemo<ProviderInfo[]>(() => [
     {
@@ -262,6 +264,35 @@ export function LLMSettings() {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* --- 区块 D: 记忆深度 --- */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground">{t("settings.model.contextDepth")}</h3>
+        <div className="rounded-lg border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-foreground">{t("settings.model.contextDepthLabel")}</label>
+            <span className="text-sm text-muted-foreground">
+              {contextLevel === 10 ? t("settings.model.contextDepthFull") : `${contextLevel} / 10`}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.model.contextDepthDescription")}
+          </p>
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={contextLevel}
+            onChange={(e) => setContextLevel(Number(e.target.value))}
+            className="w-full accent-primary"
+          />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{t("settings.model.contextDepthShort")}</span>
+            <span>{t("settings.model.contextDepthFull")}</span>
+          </div>
         </div>
       </div>
     </div>

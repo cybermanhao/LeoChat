@@ -36,6 +36,27 @@ const MAX_TOOL_RESULT_LENGTH = 3000;
 const DEFAULT_BACKEND_URL = "http://localhost:3001";
 
 /**
+ * 估算消息列表的 token 数量（字符数 / 3，误差 ±20%）
+ */
+function estimateTokens(messages: ChatMessage[]): number {
+  const text = JSON.stringify(messages);
+  return Math.ceil(text.length / 3);
+}
+
+/**
+ * 判断是否为 context 溢出错误
+ */
+function isContextOverflowError(e: unknown): boolean {
+  const msg = String(e).toLowerCase();
+  return (
+    msg.includes("context_length_exceeded") ||
+    msg.includes("maximum context") ||
+    msg.includes("token limit") ||
+    msg.includes("context window")
+  );
+}
+
+/**
  * 截断工具调用结果
  */
 function truncateToolResult(content: string, maxLength: number = MAX_TOOL_RESULT_LENGTH): string {
@@ -85,7 +106,9 @@ export class TaskLoop {
 
   // 上下文与容错
   private contextLength: number;
+  private modelContextLimit: number;
   private maxJsonParseRetry: number;
+  private _retriedContextOverflow: boolean = false;
 
   // Token 消费统计
   private totalInputTokens: number = 0;
@@ -143,6 +166,7 @@ export class TaskLoop {
 
     // 上下文与容错
     this.contextLength = opts.contextLength ?? 0;
+    this.modelContextLimit = opts.modelContextLimit ?? 0;
     this.maxJsonParseRetry = opts.maxJsonParseRetry ?? 3;
 
     // 确保包含 system 消息
@@ -455,35 +479,59 @@ export class TaskLoop {
     needToolCall: boolean;
     finalMessages?: ChatMessage[];
   }> {
-    return withRetry(
-      (signal) => this.executeLLMRequest(uiMessageId, signal, previousToolCalls),
-      this.retryConfig,
-      this.circuitBreaker,
-      (event) => {
-        this.emit({
-          type: "retry",
-          attempt: event.attempt,
-          maxAttempts: event.maxAttempts,
-          delayMs: event.delayMs,
-          error: event.error,
-          statusCode: event.statusCode,
-        });
-      },
-      this.abortController?.signal
-    );
+    try {
+      return await withRetry(
+        (signal) => this.executeLLMRequest(uiMessageId, signal, previousToolCalls),
+        this.retryConfig,
+        this.circuitBreaker,
+        (event) => {
+          this.emit({
+            type: "retry",
+            attempt: event.attempt,
+            maxAttempts: event.maxAttempts,
+            delayMs: event.delayMs,
+            error: event.error,
+            statusCode: event.statusCode,
+          });
+        },
+        this.abortController?.signal
+      );
+    } catch (e) {
+      // Context 溢出自动重试：减半 contextLength，重试一次
+      if (isContextOverflowError(e) && !this._retriedContextOverflow) {
+        this._retriedContextOverflow = true;
+        const currentLen = this.contextLength > 0 ? this.contextLength : this.messages.filter(m => m.role !== "system").length;
+        this.contextLength = Math.max(4, Math.floor(currentLen / 2));
+        console.warn(`[TaskLoop] Context overflow detected, retrying with contextLength=${this.contextLength}`);
+        return this.callLLM(uiMessageId, previousToolCalls);
+      }
+      throw e;
+    }
   }
 
   /**
-   * 获取上下文截断后的消息列表
+   * 获取上下文截断后的消息列表（支持消息数限制 + token 感知截断）
    */
   private getContextMessages(): ChatMessage[] {
-    if (!this.contextLength || this.contextLength <= 0) {
-      return this.messages;
-    }
     const systemMessages = this.messages.filter(m => m.role === "system");
-    const nonSystemMessages = this.messages.filter(m => m.role !== "system");
-    const truncated = nonSystemMessages.slice(-this.contextLength);
-    return [...systemMessages, ...truncated];
+    let nonSystem = this.messages.filter(m => m.role !== "system");
+
+    // 1. 按消息数截断
+    if (this.contextLength > 0) {
+      nonSystem = nonSystem.slice(-this.contextLength);
+    }
+
+    // 2. Token 感知截断：如果模型有 context 上限，按 token 估算继续截断
+    if (this.modelContextLimit > 0) {
+      const budget = Math.floor(this.modelContextLimit * 0.85);
+      while (nonSystem.length > 1) {
+        const estimated = estimateTokens([...systemMessages, ...nonSystem]);
+        if (estimated <= budget) break;
+        nonSystem = nonSystem.slice(1);
+      }
+    }
+
+    return [...systemMessages, ...nonSystem];
   }
 
   /**

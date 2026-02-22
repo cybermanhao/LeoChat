@@ -47,3 +47,6 @@ coverage/
 # Lock files (keep pnpm-lock.yaml)
 package-lock.json
 yarn.lock
+
+# MCP servers - built binaries
+mcp-servers/excel-mcp-server/dist/

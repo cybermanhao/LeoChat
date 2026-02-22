@@ -89,7 +89,7 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxDelayMs: 30000,
   jitter: true,
   retryableStatusCodes: [429, 500, 502, 503, 504],
-  attemptTimeoutMs: 60000,
+  attemptTimeoutMs: 300000,
 };
 
 /**

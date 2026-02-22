@@ -67,6 +67,9 @@ const de: TranslationDictionary = {
     "placeholderDefault": "Geben Sie eine Nachricht ein oder verwenden Sie @tool, um MCP-Tools aufzurufen...",
     "placeholderWithPrompt": "System-Prompt aktiviert...",
     "webSearch": "Websuche",
+    "temperature": "Temperatur",
+    "contextWindow": "Kontextfenster",
+    "maxEpochs": "Max. Runden",
     "suggestions": {
       "code": "Hilf mir beim Coden",
       "explain": "Erkläre dieses Konzept",
@@ -108,7 +111,12 @@ const de: TranslationDictionary = {
       "description": "API-Schlüssel und Modellparameter konfigurieren",
       "defaultProvider": "Standardanbieter",
       "apiKeys": "API-Schlüssel",
-      "selectModel": "Modell"
+      "selectModel": "Modell",
+      "contextDepth": "Gedächtnistiefe",
+      "contextDepthLabel": "Gedächtnistiefe",
+      "contextDepthDescription": "Steuert, wie viel Gesprächsverlauf die KI \"erinnern\" kann. Höhere Stufen bedeuten längeres Gedächtnis, aber mehr Token-Verbrauch.",
+      "contextDepthShort": "Kurz (spart Tokens)",
+      "contextDepthFull": "Vollständig"
     },
     "notifications": {
       "title": "Benachrichtigungen"
@@ -385,6 +393,12 @@ const de: TranslationDictionary = {
     "deleted": "Gelöscht",
     "created": "Erstellt",
     "updated": "Aktualisiert"
+  },
+
+  // UI Mode
+  "ui": {
+    "simpleMode": "Einfach",
+    "professionalMode": "Pro"
   }
 };
 

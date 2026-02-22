@@ -9,6 +9,12 @@ import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared"
 
 const execAsync = promisify(exec);
 
+const MAX_TOOL_RESULT = 3000;
+function truncateResult(s: string): string {
+  if (s.length <= MAX_TOOL_RESULT) return s;
+  return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
+}
+
 async function getToolVersion(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
@@ -57,12 +63,26 @@ export function createRoutes(context: ServerContext) {
     const MAX_TOOL_ROUNDS = Math.min(Math.max(maxToolRounds ?? 10, 1), 50);
 
     return streamSSE(c, async (stream) => {
+      // Abort detection: when the client disconnects, stop writing
+      let aborted = false;
+      stream.onAbort(() => { aborted = true; });
+
+      // Safe write helper: swallows errors after abort so we don't double-throw
+      async function safeWrite(event: string, data: string): Promise<void> {
+        if (aborted) return;
+        try {
+          await stream.writeSSE({ event, data });
+        } catch {
+          aborted = true;
+        }
+      }
+
       // Internal message history for tool loop
       let internalMessages = [...inputMessages];
       let toolRound = 0;
 
       try {
-        while (toolRound < MAX_TOOL_ROUNDS) {
+        while (toolRound < MAX_TOOL_ROUNDS && !aborted) {
           let currentToolCalls: ToolCall[] = [];
           let hasToolCalls = false;
           let completedMessage: ChatMessage | null = null;
@@ -76,99 +96,82 @@ export function createRoutes(context: ServerContext) {
             },
             {
               onChunk: async (chunk) => {
-                await stream.writeSSE({
-                  event: "chunk",
-                  data: JSON.stringify({
-                    ...chunk,
-                    index: Date.now(),
-                  }),
-                });
+                await safeWrite("chunk", JSON.stringify({ ...chunk, index: Date.now() }));
               },
               onToolCall: async (toolCall) => {
+                if (aborted) return;
                 hasToolCalls = true;
                 currentToolCalls.push(toolCall);
 
-                await stream.writeSSE({
-                  event: "tool_call",
-                  data: JSON.stringify(toolCall),
-                });
+                await safeWrite("tool_call", JSON.stringify(toolCall));
 
                 // Execute tool
                 try {
-                  const result = await context.sessionManager.callTool(
+                  const rawResult = await context.sessionManager.callTool(
                     toolCall.name,
                     toolCall.arguments as Record<string, unknown>
                   );
-                  await stream.writeSSE({
-                    event: "tool_result",
-                    data: JSON.stringify({
-                      id: toolCall.id,
-                      result,
-                    }),
-                  });
+                  // Truncate at source — prevents large SSE payloads and oversized final event
+                  const rawStr = typeof rawResult === "string"
+                    ? rawResult
+                    : JSON.stringify(rawResult);
+                  const truncated = truncateResult(rawStr);
 
-                  // Update tool call with result for message history
+                  await safeWrite("tool_result", JSON.stringify({ id: toolCall.id, result: truncated }));
+
                   toolCall.status = "completed";
-                  toolCall.result = result;
+                  toolCall.result = truncated;
                 } catch (error) {
                   const errorMsg = error instanceof Error ? error.message : String(error);
-                  await stream.writeSSE({
-                    event: "tool_error",
-                    data: JSON.stringify({
-                      id: toolCall.id,
-                      error: errorMsg,
-                    }),
-                  });
-
-                  // Update tool call with error
+                  await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: errorMsg }));
                   toolCall.status = "error";
                   toolCall.result = { error: errorMsg };
                 }
               },
               onComplete: async (message) => {
                 completedMessage = message;
-                // Don't send complete event here if we have tool calls
-                // We'll send it after the loop finishes
                 if (!hasToolCalls) {
-                  await stream.writeSSE({
-                    event: "complete",
-                    data: JSON.stringify(message),
-                  });
+                  await safeWrite("complete", JSON.stringify(message));
                 }
               },
               onError: async (error) => {
-                await stream.writeSSE({
-                  event: "error",
-                  data: JSON.stringify({ error: error.message }),
-                });
+                await safeWrite("error", JSON.stringify({ error: error.message }));
               },
             }
           );
 
           // If no tool calls, we're done
-          if (!hasToolCalls) {
+          if (!hasToolCalls || aborted) {
             break;
           }
 
-          // Add assistant message with tool calls to history
-          // Capture content from the completed message (text before tool calls)
+          // Build assistant message for history.
+          // Strip result/status from tool_calls — they don't belong in the assistant
+          // message per OpenAI spec, and keeping them was the main source of the
+          // oversized final SSE event.
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}-${toolRound}`,
             role: "assistant",
             content: completedMessage?.content || "",
-            tool_calls: currentToolCalls,
+            tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
+              id,
+              name,
+              arguments: args,
+              status: "completed" as const,
+            })),
             timestamp: Date.now(),
           };
           internalMessages.push(assistantMessage);
 
-          // Add tool result messages to history
+          // Add tool result messages to history (already truncated above)
           for (const toolCall of currentToolCalls) {
+            const rawContent = typeof toolCall.result === "string"
+              ? toolCall.result
+              : JSON.stringify(toolCall.result);
             const toolResultMessage: ChatMessage = {
               id: `tool-${toolCall.id}`,
               role: "tool",
-              content: typeof toolCall.result === "string"
-                ? toolCall.result
-                : JSON.stringify(toolCall.result),
+              content: truncateResult(rawContent),
               tool_call_id: toolCall.id,
               timestamp: Date.now(),
             };
@@ -179,22 +182,13 @@ export function createRoutes(context: ServerContext) {
         }
 
         // Send final event with complete message history (only when tool calls happened)
-        if (toolRound > 0) {
-          await stream.writeSSE({
-            event: "final",
-            data: JSON.stringify({
-              toolRounds: toolRound,
-              internalMessages,
-            }),
-          });
+        if (!aborted && toolRound > 0) {
+          await safeWrite("final", JSON.stringify({ toolRounds: toolRound, internalMessages }));
         }
       } catch (error) {
-        await stream.writeSSE({
-          event: "error",
-          data: JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        });
+        await safeWrite("error", JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        }));
       }
     });
   });

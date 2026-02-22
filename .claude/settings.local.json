@@ -79,7 +79,12 @@
       "Bash(head -5 grep -n \"^const\\\\|^const \" C:/code/LeoChat/apps/web/src/components/ModelSelector.tsx)",
       "Bash(git stash:*)",
       "Bash(npx electron-builder:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(cd /c/code/LeoChat/mcp-servers/excel-mcp-server && mkdir -p dist && go build -o dist/excel-mcp-server.exe ./cmd/excel-mcp-server 2>&1)",
+      "Bash(curl -s https://api.github.com/repos/negokaz/excel-mcp-server/releases/latest | python3 -c \"import json,sys; assets=json.load\\(sys.stdin\\)['assets']; [print\\(a['name'], a['browser_download_url']\\) for a in assets]\" 2>&1)",
+      "Bash(echo download done:*)",
+      "Bash(cd /c/code/LeoChat/mcp-servers/excel-mcp-server/dist && unzip -o /tmp/excel-mcp-server-win.zip && ls -la 2>&1)",
+      "Bash(uvx:*)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

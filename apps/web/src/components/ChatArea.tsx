@@ -19,7 +19,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Globe, FileText, Trash2, RefreshCw } from "lucide-react";
+import { Sparkles, Trash2, RefreshCw, Thermometer, Layers } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
@@ -48,6 +48,11 @@ export function ChatArea() {
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const toolCallStates = useChatStore((s) => s.toolCallStates);
   const executeAction = useChatStore((s) => s.executeAction);
+  const uiMode = useChatStore((s) => s.uiMode);
+  const temperature = useChatStore((s) => s.temperature);
+  const setTemperature = useChatStore((s) => s.setTemperature);
+  const contextLevel = useChatStore((s) => s.contextLevel);
+  const setContextLevel = useChatStore((s) => s.setContextLevel);
 
   // 直接计算 messages，确保响应式更新
   const currentConversation = conversations.find((c) => c.id === currentConversationId);
@@ -137,8 +142,17 @@ export function ChatArea() {
   // 对话框状态
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 
-  // 功能开关
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  // Temperature Popover
+  const [tempPopoverOpen, setTempPopoverOpen] = useState(false);
+  const tempPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Context Window Popover
+  const [ctxPopoverOpen, setCtxPopoverOpen] = useState(false);
+  const ctxPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Max Epochs Popover
+  const [epochsPopoverOpen, setEpochsPopoverOpen] = useState(false);
+  const epochsPopoverRef = useRef<HTMLDivElement>(null);
 
   // Prompt store
   const activePrompt = usePromptStore((s) => s.activePrompt);
@@ -196,6 +210,45 @@ export function ChatArea() {
     }
     return parts.length > 0 ? parts.join("\n\n") : null;
   }, [mcpSources, mcpServerStates, mcpPromptCache, activePrompt, customPrompts]);
+
+  // 点击外部关闭 Temperature Popover
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tempPopoverRef.current && !tempPopoverRef.current.contains(event.target as Node)) {
+        setTempPopoverOpen(false);
+      }
+    };
+    if (tempPopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tempPopoverOpen]);
+
+  // 点击外部关闭 Context Window Popover
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ctxPopoverRef.current && !ctxPopoverRef.current.contains(event.target as Node)) {
+        setCtxPopoverOpen(false);
+      }
+    };
+    if (ctxPopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [ctxPopoverOpen]);
+
+  // 点击外部关闭 Max Epochs Popover
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (epochsPopoverRef.current && !epochsPopoverRef.current.contains(event.target as Node)) {
+        setEpochsPopoverOpen(false);
+      }
+    };
+    if (epochsPopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [epochsPopoverOpen]);
 
   const handleModelSelect = useCallback(
     (modelId: string) => {
@@ -258,67 +311,140 @@ export function ChatArea() {
           </TooltipContent>
         </Tooltip>
 
-        {/* 系统提示 */}
-        <SystemPromptPanel />
+        {/* 系统提示（仅专业模式） */}
+        {uiMode === 'professional' && <SystemPromptPanel />}
 
-        {/* 联网搜索 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant={webSearchEnabled ? "secondary" : "ghost"}
-              size="sm"
-              className={cn(toolbarButtonClass, webSearchEnabled && "bg-secondary text-foreground")}
-              onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-            >
-              <Globe className="h-4 w-4" />
-              <span className="hidden sm:inline">{t("chat.webSearch")}</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            {t("chat.webSearch")}
-          </TooltipContent>
-        </Tooltip>
+        {/* Temperature 按钮（仅专业模式） */}
+        {uiMode === 'professional' && (
+          <div ref={tempPopoverRef} className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(toolbarButtonClass, tempPopoverOpen && "bg-muted text-foreground")}
+                  onClick={() => setTempPopoverOpen(!tempPopoverOpen)}
+                >
+                  <Thermometer className="h-4 w-4" />
+                  <span className="hidden sm:inline">{temperature.toFixed(1)}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {t("chat.temperature")}
+              </TooltipContent>
+            </Tooltip>
+            {tempPopoverOpen && (
+              <div className="bg-card border border-border rounded-lg shadow-lg p-3 absolute bottom-full mb-1 z-50 w-48">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-foreground font-medium">{t("chat.temperature")}</span>
+                  <span className="text-xs text-muted-foreground">{temperature.toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(e) => setTemperature(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px] text-muted-foreground">0</span>
+                  <span className="text-[10px] text-muted-foreground">2</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Markdown 渲染 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant={enableMarkdown ? "secondary" : "ghost"}
-              size="sm"
-              className={cn(toolbarButtonClass, enableMarkdown && "bg-secondary text-foreground")}
-              onClick={() => setEnableMarkdown(!enableMarkdown)}
-            >
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">{enableMarkdown ? t("chat.markdown") : t("chat.plainText")}</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            {enableMarkdown ? t("chat.markdownRendering") : t("chat.plainText")}
-          </TooltipContent>
-        </Tooltip>
+        {/* Context Window 按钮（仅专业模式） */}
+        {uiMode === 'professional' && (
+          <div ref={ctxPopoverRef} className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(toolbarButtonClass, ctxPopoverOpen && "bg-muted text-foreground")}
+                  onClick={() => setCtxPopoverOpen(!ctxPopoverOpen)}
+                >
+                  <Layers className="h-4 w-4" />
+                  <span className="hidden sm:inline">{contextLevel === 10 ? "∞" : contextLevel}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {t("chat.contextWindow")}
+              </TooltipContent>
+            </Tooltip>
+            {ctxPopoverOpen && (
+              <div className="bg-card border border-border rounded-lg shadow-lg p-3 absolute bottom-full mb-1 z-50 w-48">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-foreground font-medium">{t("chat.contextWindow")}</span>
+                  <span className="text-xs text-muted-foreground">{contextLevel === 10 ? "∞" : contextLevel}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={contextLevel}
+                  onChange={(e) => setContextLevel(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px] text-muted-foreground">1</span>
+                  <span className="text-[10px] text-muted-foreground">∞</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* 最大循环轮数 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(toolbarButtonClass, "flex items-center gap-1 rounded-md px-2 h-7 cursor-default select-none")}>
-              <RefreshCw className="h-3.5 w-3.5 shrink-0" />
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={maxEpochs}
-                onChange={(e) => setMaxEpochs(Number(e.target.value))}
-                className="w-7 bg-transparent text-xs text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                onClick={(e) => e.currentTarget.select()}
-              />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            最大工具调用轮数（1-50）
-          </TooltipContent>
-        </Tooltip>
+        {/* 最大循环轮数（仅专业模式） */}
+        {uiMode === 'professional' && (
+          <div ref={epochsPopoverRef} className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(toolbarButtonClass, epochsPopoverOpen && "bg-muted text-foreground")}
+                  onClick={() => setEpochsPopoverOpen(!epochsPopoverOpen)}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="hidden sm:inline">{maxEpochs}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {t("chat.maxEpochs")}
+              </TooltipContent>
+            </Tooltip>
+            {epochsPopoverOpen && (
+              <div className="bg-card border border-border rounded-lg shadow-lg p-3 absolute bottom-full mb-1 z-50 w-48">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-foreground font-medium">{t("chat.maxEpochs")}</span>
+                  <span className="text-xs text-muted-foreground">{maxEpochs}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={maxEpochs}
+                  onChange={(e) => setMaxEpochs(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px] text-muted-foreground">1</span>
+                  <span className="text-[10px] text-muted-foreground">50</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 清空对话 */}
         {messages.length > 0 && (

@@ -1,6 +1,8 @@
 import { Minus, X, Maximize2 } from "lucide-react";
-import { Button } from "@ai-chatbox/ui";
+import { Button, cn } from "@ai-chatbox/ui";
 import { QuickAccess } from "../QuickAccess";
+import { useChatStore } from "../../stores/chat";
+import { useT } from "../../i18n";
 
 interface TitleBarProps {
   title?: string;
@@ -9,6 +11,9 @@ interface TitleBarProps {
 export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
   const electronAPI = typeof window !== "undefined" && (window as any).electronAPI;
   const isElectron = !!electronAPI;
+  const { t } = useT();
+  const uiMode = useChatStore((s) => s.uiMode);
+  const setUiMode = useChatStore((s) => s.setUiMode);
 
   const handleMinimize = () => electronAPI?.minimize();
   const handleMaximize = () => electronAPI?.maximize();
@@ -29,6 +34,32 @@ export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
 
       {/* 右侧：快捷访问 + 窗口控制 */}
       <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
+        {/* 简洁/专业模式切换 */}
+        <div className="flex items-center h-5 rounded-md border border-border overflow-hidden mr-2">
+          <button
+            onClick={() => setUiMode('simple')}
+            className={cn(
+              "px-2 text-[11px] h-full transition-colors",
+              uiMode === 'simple'
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t("ui.simpleMode")}
+          </button>
+          <button
+            onClick={() => setUiMode('professional')}
+            className={cn(
+              "px-2 text-[11px] h-full transition-colors",
+              uiMode === 'professional'
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t("ui.professionalMode")}
+          </button>
+        </div>
+
         {/* 快捷访问按钮 */}
         <QuickAccess />
 

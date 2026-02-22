@@ -67,6 +67,9 @@ const ja: TranslationDictionary = {
     "placeholderDefault": "メッセージを入力、または @tool で MCP ツールを呼び出し...",
     "placeholderWithPrompt": "システムプロンプト有効...",
     "webSearch": "ウェブ検索",
+    "temperature": "温度",
+    "contextWindow": "コンテキストウィンドウ",
+    "maxEpochs": "最大ループ数",
     "suggestions": {
       "code": "コードを書いてください",
       "explain": "この概念を説明してください",
@@ -108,7 +111,12 @@ const ja: TranslationDictionary = {
       "description": "API キーとモデルパラメータを設定",
       "defaultProvider": "デフォルトプロバイダー",
       "apiKeys": "API キー",
-      "selectModel": "モデル"
+      "selectModel": "モデル",
+      "contextDepth": "記憶の深さ",
+      "contextDepthLabel": "記憶の深さ",
+      "contextDepthDescription": "AIが「記憶」できる会話履歴の量を制御します。レベルが高いほど記憶が長くなりますが、トークン消費も増えます。",
+      "contextDepthShort": "短い（トークン節約）",
+      "contextDepthFull": "完全"
     },
     "notifications": {
       "title": "通知"
@@ -385,6 +393,12 @@ const ja: TranslationDictionary = {
     "deleted": "削除しました",
     "created": "作成しました",
     "updated": "更新しました"
+  },
+
+  // UI Mode
+  "ui": {
+    "simpleMode": "簡",
+    "professionalMode": "詳"
   }
 };
 

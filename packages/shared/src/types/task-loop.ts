@@ -169,6 +169,7 @@ export interface TaskLoopOptions {
 
   // 上下文与容错
   contextLength?: number;              // 发送给 LLM 的最大消息数（0=不限制）
+  modelContextLimit?: number;          // 模型最大 token 数（0=不限）
   maxJsonParseRetry?: number;          // 工具参数 JSON 解析失败最大重试次数，默认 3
 }
 

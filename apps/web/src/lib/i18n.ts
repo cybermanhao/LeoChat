@@ -91,6 +91,11 @@ export type TranslationKey =
   | "settings.model.defaultProvider"
   | "settings.model.apiKeys"
   | "settings.model.selectModel"
+  | "settings.model.contextDepth"
+  | "settings.model.contextDepthLabel"
+  | "settings.model.contextDepthDescription"
+  | "settings.model.contextDepthShort"
+  | "settings.model.contextDepthFull"
   | "settings.notifications.title"
   | "settings.privacy.title"
   | "settings.advanced.title"
@@ -304,6 +309,13 @@ export type TranslationKey =
   | "mcp.stats.tableHeader.resources"
   // Chat (additional)
   | "chat.webSearch"
+  | "chat.temperature"
+  | "chat.contextWindow"
+  | "chat.maxEpochs"
+
+  // UI mode
+  | "ui.simpleMode"
+  | "ui.professionalMode"
 
   // 知识库
   | "knowledge.title"
