@@ -34,9 +34,10 @@ export function createRoutes(context: ServerContext) {
       model?: string;
       provider?: LLMProvider;
       stream?: boolean;
+      maxToolRounds?: number;
     }>();
 
-    const { messages: inputMessages, model, provider, stream = true } = body;
+    const { messages: inputMessages, model, provider, stream = true, maxToolRounds } = body;
 
     // Get available tools from MCP
     const tools = context.sessionManager.getToolsForLLM();
@@ -53,7 +54,7 @@ export function createRoutes(context: ServerContext) {
     }
 
     // Streaming response with full tool loop
-    const MAX_TOOL_ROUNDS = 10;
+    const MAX_TOOL_ROUNDS = Math.min(Math.max(maxToolRounds ?? 10, 1), 50);
 
     return streamSSE(c, async (stream) => {
       // Internal message history for tool loop
@@ -363,7 +364,7 @@ export function createRoutes(context: ServerContext) {
       { id: "uv",     name: "uv",       commands: ["uv --version"] },
       { id: "python", name: "Python",   commands: ["python --version", "python3 --version"] },
       { id: "bun",    name: "Bun",      commands: ["bun --version"] },
-      { id: "mcp",    name: "MCP CLI",  commands: ["mcp --version"] },
+      { id: "mcp",    name: "MCP CLI",  commands: ["mcp version"] },
     ];
 
     const results = await Promise.all(

@@ -9,7 +9,7 @@ import {
 import { Sparkles, Check, ExternalLink } from "lucide-react";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
 
 interface Model {
   id: string;
@@ -24,6 +24,7 @@ const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
   deepseek: { name: "DeepSeek", link: "https://platform.deepseek.com" },
   openai: { name: "OpenAI", link: "https://platform.openai.com" },
   openrouter: { name: "OpenRouter", link: "https://openrouter.ai/models" },
+  moonshot: { name: "Moonshot (Kimi)", link: "https://platform.moonshot.cn" },
 };
 
 interface ModelSelectorProps {
@@ -63,11 +64,18 @@ export function ModelSelector({
     { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
   ], [t]);
 
+  const MOONSHOT_MODELS = useMemo<Model[]>(() => [
+    { id: "moonshot-v1-8k", name: "Moonshot v1 8K", provider: "Moonshot", description: t("models.moonshot.8k.description"), contextWindow: 8000, pricing: "¥12 / 1M tokens" },
+    { id: "moonshot-v1-32k", name: "Moonshot v1 32K", provider: "Moonshot", description: t("models.moonshot.32k.description"), contextWindow: 32000, pricing: "¥24 / 1M tokens" },
+    { id: "moonshot-v1-128k", name: "Moonshot v1 128K", provider: "Moonshot", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60 / 1M tokens" },
+  ], [t]);
+
   const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
     deepseek: DEEPSEEK_MODELS,
     openai: OPENAI_MODELS,
     openrouter: OPENROUTER_MODELS,
-  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS]);
+    moonshot: MOONSHOT_MODELS,
+  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS]);
 
   const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const providerInfo = PROVIDER_INFO[currentProvider];

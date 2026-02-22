@@ -13,8 +13,9 @@ import type {
 } from "@ai-chatbox/shared";
 import { generateId, LLM_PROVIDERS } from "@ai-chatbox/shared";
 import { processToolResultForUICommands } from "../lib/ui-commands";
+import { handleApiError } from "../lib/api-error";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
 
 // TaskLoop 懒加载，避免构建顺序问题
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,6 +70,7 @@ interface ChatState {
   currentProvider: LLMProvider;
   currentModel: string;
   enableMarkdown: boolean;
+  maxEpochs: number;
 
   // 运行时状态（不持久化）
   input: string;
@@ -101,6 +103,7 @@ interface ChatState {
   setCurrentProvider: (provider: LLMProvider) => void;
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;
+  setMaxEpochs: (n: number) => void;
   initFromBackendConfig: (config: { availableProviders: string[]; defaultProvider: string }) => void;
 
   // 内部方法
@@ -123,10 +126,12 @@ export const useChatStore = create<ChatState>()(
         deepseek: "",
         openrouter: "",
         openai: "",
+        moonshot: "",
       },
       currentProvider: "deepseek" as LLMProvider,
       currentModel: "deepseek-chat",
       enableMarkdown: true,
+      maxEpochs: 10,
 
       // 运行时状态
       input: "",
@@ -194,14 +199,19 @@ export const useChatStore = create<ChatState>()(
       },
 
       sendMessage: async (content, systemPrompt) => {
-        const { currentConversationId, currentProvider, currentModel, providerKeys, mcpTools } = get();
+        const { currentConversationId, currentProvider, currentModel, providerKeys, mcpTools, maxEpochs } = get();
 
         // 创建会话（如果需要）
         const convId = currentConversationId || get().createConversation();
 
         // 获取历史消息（使用contextMessages，保证消息格式正确）
+        // 保存生成前的快照，abort/error 时用于回滚，避免不完整消息污染下次上下文
         const conv = get().conversations.find((c) => c.id === convId);
         const history = conv?.contextMessages || [];
+        const contextSnapshot = [...history];
+        // 去掉旧的 system 消息，让 TaskLoop 每次使用最新的 systemPrompt
+        // 避免历史中残留旧 system 消息导致新的 MCP prompt 被忽略
+        const historyWithoutSystem = history.filter(m => m.role !== "system");
 
         // 构建 LLM 配置
         const providerConfig = LLM_PROVIDERS[currentProvider];
@@ -216,9 +226,10 @@ export const useChatStore = create<ChatState>()(
         const TaskLoopClass = await getTaskLoop();
         const taskLoop = new TaskLoopClass({
           chatId: convId,
-          history,
+          history: historyWithoutSystem,
           llmConfig,
           mcpTools,
+          maxEpochs,
           parallelToolCalls: true,
           useBackendProxy: true,  // 使用后端代理
           backendURL: "http://localhost:3001",
@@ -263,6 +274,14 @@ export const useChatStore = create<ChatState>()(
           await taskLoop.start(content);
         } catch (error) {
           console.error("TaskLoop error:", error);
+          // abort 或错误时，done 事件不会触发，contextMessages 可能停留在不完整状态
+          // （如包含未完成 tool_calls 的 assistant 消息），回滚到本次生成前的快照
+          set((state) => ({
+            conversations: state.conversations.map((c) =>
+              c.id === convId ? { ...c, contextMessages: contextSnapshot } : c
+            ),
+          }));
+          handleApiError((error as Error).message, currentProvider);
         } finally {
           unsubscribe();
           set({
@@ -307,6 +326,7 @@ export const useChatStore = create<ChatState>()(
           deepseek: "deepseek-chat",
           openrouter: "anthropic/claude-3.5-sonnet",
           openai: "gpt-4o",
+          moonshot: "moonshot-v1-8k",
         };
         set({
           currentProvider: provider,
@@ -318,6 +338,8 @@ export const useChatStore = create<ChatState>()(
 
       setEnableMarkdown: (enable) => set({ enableMarkdown: enable }),
 
+      setMaxEpochs: (n) => set({ maxEpochs: Math.min(Math.max(n, 1), 50) }),
+
       initFromBackendConfig: (config) => {
         const { availableProviders, defaultProvider } = config;
         // 如果后端配置了 providers，则使用后端的默认 provider
@@ -327,6 +349,7 @@ export const useChatStore = create<ChatState>()(
             deepseek: "deepseek-chat",
             openrouter: "anthropic/claude-3.5-sonnet",
             openai: "gpt-4o",
+            moonshot: "moonshot-v1-8k",
           };
           // 为后端配置的 providers 设置一个标记（使用 "backend" 作为占位符）
           const newProviderKeys: Record<LLMProvider, string> = { ...get().providerKeys };
@@ -464,7 +487,7 @@ export const useChatStore = create<ChatState>()(
 
           case "error":
             set({ cardStatus: "stable", isGenerating: false });
-            // 可以添加错误提示
+            handleApiError(event.error.message, get().currentProvider);
             break;
 
           case "done": {
@@ -696,6 +719,7 @@ export const useChatStore = create<ChatState>()(
         currentProvider: state.currentProvider,
         currentModel: state.currentModel,
         enableMarkdown: state.enableMarkdown,
+        maxEpochs: state.maxEpochs,
       }),
       merge: (persisted, current) => {
         const data = persisted as Record<string, unknown>;

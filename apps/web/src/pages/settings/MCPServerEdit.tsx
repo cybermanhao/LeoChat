@@ -234,7 +234,7 @@ export function MCPServerEditPage() {
 
         {activeTab === "tools" && isConnected && (
           <div className="bg-card rounded-lg border flex-1 min-h-0 flex flex-col overflow-hidden">
-            <MCPToolsTab />
+            <MCPToolsTab filterServerId={serverId} />
           </div>
         )}
 

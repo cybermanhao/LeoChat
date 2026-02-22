@@ -61,6 +61,14 @@ export function LLMSettings() {
       linkText: t("settings.api.linkTextOpenAI"),
       color: "bg-green-500",
     },
+    {
+      id: "moonshot",
+      name: "Moonshot (Kimi)",
+      description: t("settings.api.descriptionMoonshot"),
+      link: "https://platform.moonshot.cn/console/api-keys",
+      linkText: t("settings.api.linkTextMoonshot"),
+      color: "bg-yellow-500",
+    },
   ], [t]);
 
   const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
@@ -79,6 +87,11 @@ export function LLMSettings() {
       { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
       { id: "gpt-4o-mini", name: "GPT-4o Mini", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15/1M" },
       { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10/1M" },
+    ],
+    moonshot: [
+      { id: "moonshot-v1-8k", name: "Moonshot v1 8K", description: t("models.moonshot.8k.description"), contextWindow: 8000, pricing: "¥12/1M tokens" },
+      { id: "moonshot-v1-32k", name: "Moonshot v1 32K", description: t("models.moonshot.32k.description"), contextWindow: 32000, pricing: "¥24/1M tokens" },
+      { id: "moonshot-v1-128k", name: "Moonshot v1 128K", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60/1M tokens" },
     ],
   }), [t]);
 
@@ -117,7 +130,7 @@ export function LLMSettings() {
       {/* --- 区块 A: 服务商选择 --- */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground">{t("settings.model.defaultProvider")}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {PROVIDERS.map((provider) => {
             const isSelected = currentProvider === provider.id;
             const configured = providerKeys[provider.id] && providerKeys[provider.id] !== "";

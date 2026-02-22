@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* 显式扫描 UI 组件文件，确保 Dialog 等组件中的任意值类名被生成 */
+@source "../**/*.tsx";
+@source "../**/*.ts";
+
 /* CSS Variables Theme System for Tailwind v4 */
 @theme {
   /* Primary colors */
@@ -247,5 +251,110 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: theme(colors.muted);
     border-radius: 3px;
+  }
+}
+
+/* tailwindcss-animate 兼容：为 Radix UI 组件提供 animate-in/animate-out 动画支持 */
+/* 使用 @utility 以支持 data-[state=open]:animate-in 等 variant 用法 */
+
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate(
+        var(--tw-enter-translate-x, 0),
+        var(--tw-enter-translate-y, 0)
+      )
+      scale(var(--tw-enter-scale, 1))
+      rotate(var(--tw-enter-rotate, 0));
+  }
+}
+
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate(
+        var(--tw-exit-translate-x, 0),
+        var(--tw-exit-translate-y, 0)
+      )
+      scale(var(--tw-exit-scale, 1))
+      rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+@utility animate-in {
+  animation-name: enter;
+  animation-duration: var(--tw-duration, 150ms);
+  animation-fill-mode: both;
+}
+
+@utility animate-out {
+  animation-name: exit;
+  animation-duration: var(--tw-duration, 150ms);
+  animation-fill-mode: both;
+}
+
+@utility fade-in-0 {
+  --tw-enter-opacity: 0;
+}
+
+@utility fade-out-0 {
+  --tw-exit-opacity: 0;
+}
+
+@utility zoom-in-95 {
+  --tw-enter-scale: .95;
+}
+
+@utility zoom-out-95 {
+  --tw-exit-scale: .95;
+}
+
+@utility slide-in-from-top-2 {
+  --tw-enter-translate-y: -0.5rem;
+}
+
+@utility slide-in-from-bottom-2 {
+  --tw-enter-translate-y: 0.5rem;
+}
+
+@utility slide-in-from-left-2 {
+  --tw-enter-translate-x: -0.5rem;
+}
+
+@utility slide-in-from-right-2 {
+  --tw-enter-translate-x: 0.5rem;
+}
+
+@utility slide-out-to-top-2 {
+  --tw-exit-translate-y: -0.5rem;
+}
+
+@utility slide-out-to-bottom-2 {
+  --tw-exit-translate-y: 0.5rem;
+}
+
+@utility slide-out-to-left-2 {
+  --tw-exit-translate-x: -0.5rem;
+}
+
+@utility slide-out-to-right-2 {
+  --tw-exit-translate-x: 0.5rem;
+}
+
+/* Dialog 专用：从中心位置滑入/滑出（覆盖 Dialog 中使用的特殊值） */
+@layer utilities {
+  /* slide-in-from-left-1/2 和 slide-out-to-left-1/2 */
+  .slide-in-from-left-1\/2 {
+    --tw-enter-translate-x: -50%;
+  }
+  .slide-out-to-left-1\/2 {
+    --tw-exit-translate-x: -50%;
+  }
+  /* slide-in-from-top-[48%] 和 slide-out-to-top-[48%] */
+  .slide-in-from-top-\[48\%\] {
+    --tw-enter-translate-y: -48%;
+  }
+  .slide-out-to-top-\[48\%\] {
+    --tw-exit-translate-y: -48%;
   }
 }

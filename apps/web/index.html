@@ -5,6 +5,28 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Chatbox MCP</title>
+    <!-- 防止主题 FOUC：在 React 加载前立即应用保存的主题 -->
+    <script>
+      (function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem('ai-chatbox-theme') || '{}');
+          var theme = (stored.state && stored.state.currentTheme) || 'light';
+          var darkThemes = { dark: true, 'dark-green': true, 'dark-purple': true };
+          if (darkThemes[theme]) {
+            document.documentElement.classList.add('dark');
+          }
+          // 初始加载时禁用过渡动画，避免颜色跳变
+          document.documentElement.classList.add('no-theme-transition');
+          window.addEventListener('DOMContentLoaded', function () {
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                document.documentElement.classList.remove('no-theme-transition');
+              });
+            });
+          });
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

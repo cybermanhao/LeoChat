@@ -47,6 +47,16 @@ const markdownComponents: Components = {
   ),
   // 粗体
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  // 图片 - 支持 ![alt](url) 渲染
+  img: ({ src, alt }) => (
+    <img
+      src={src}
+      alt={alt || ""}
+      className="rounded-lg my-2 border border-border object-contain"
+      style={{ maxWidth: 200, maxHeight: 300 }}
+      loading="lazy"
+    />
+  ),
 };
 
 export interface StreamingContentProps {

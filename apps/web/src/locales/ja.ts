@@ -88,6 +88,8 @@ const ja: TranslationDictionary = {
       "linkTextDeepSeek": "DeepSeek から取得",
       "linkTextOpenRouter": "OpenRouter から取得",
       "linkTextOpenAI": "OpenAI から取得",
+      "descriptionMoonshot": "Moonshot Kimi、最大128Kトークンの超長コンテキストをサポート",
+      "linkTextMoonshot": "Moonshot から取得",
       "getConfigured": "設定済み",
       "saveSuccess": "保存に成功しました",
       "save": "保存",
@@ -152,6 +154,11 @@ const ja: TranslationDictionary = {
     },
     "google": {
       "geminiPro": { "description": "超長文コンテキストウィンドウ" }
+    },
+    "moonshot": {
+      "8k": { "description": "短い会話向け、高速応答" },
+      "32k": { "description": "長文書処理、バランス型" },
+      "128k": { "description": "超長コンテキスト、本一冊を処理可能" }
     },
     "common": {
       "viaOpenRouter": "OpenRouter 経由でアクセス"

@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   DEEPSEEK: "https://api.deepseek.com",
   OPENAI: "https://api.openai.com/v1",
   ANTHROPIC: "https://api.anthropic.com/v1",
+  MOONSHOT: "https://api.moonshot.cn/v1",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
 
@@ -36,6 +37,12 @@ export const LLM_PROVIDERS = {
     baseURL: "https://api.openai.com/v1",
     models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
     envKey: "OPENAI_API_KEY",
+  },
+  moonshot: {
+    name: "Moonshot",
+    baseURL: "https://api.moonshot.cn/v1",
+    models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+    envKey: "MOONSHOT_API_KEY",
   },
 } as const;
 

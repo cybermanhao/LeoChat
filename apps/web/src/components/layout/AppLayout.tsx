@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { TitleBar } from "./TitleBar";
 import { ActivityBar } from "./ActivityBar";
+import { Toaster } from "../Toaster";
 
 export function AppLayout() {
   return (
@@ -18,6 +19,9 @@ export function AppLayout() {
           <Outlet />
         </div>
       </div>
+
+      {/* Toaster 必须在有实体 DOM 容器内，避免成为 #root 直接子节点被 height:100% 撑开 */}
+      <Toaster />
     </div>
   );
 }

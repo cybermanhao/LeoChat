@@ -88,6 +88,8 @@ const zh: TranslationDictionary = {
       "linkTextDeepSeek": "前往 DeepSeek 获取",
       "linkTextOpenRouter": "前往 OpenRouter 获取",
       "linkTextOpenAI": "前往 OpenAI 获取",
+      "descriptionMoonshot": "月之暗面 Kimi，支持超长上下文，最高 128K tokens",
+      "linkTextMoonshot": "前往 Moonshot 获取",
       "getConfigured": "已配置",
       "saveSuccess": "保存成功",
       "save": "保存",
@@ -152,6 +154,11 @@ const zh: TranslationDictionary = {
     },
     "google": {
       "geminiPro": { "description": "超长上下文窗口" }
+    },
+    "moonshot": {
+      "8k": { "description": "适合短文本对话，响应快速" },
+      "32k": { "description": "适合长文档处理，平衡速度与能力" },
+      "128k": { "description": "超长上下文，可处理整本书" }
     },
     "common": {
       "viaOpenRouter": "通过 OpenRouter 访问"

@@ -554,6 +554,7 @@ export class TaskLoop {
         model: this.llmConfig.model,
         provider: this.llmConfig.provider,
         stream: true,
+        maxToolRounds: this.maxEpochs,
       }),
       signal,
     });

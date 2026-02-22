@@ -32,6 +32,17 @@ import type { MCPServerConfig, MCPTool } from "@ai-chatbox/shared";
 type TransportType = "stdio" | "streamable-http";
 
 // ---------- 环境安装子组件 ----------
+
+/** 清理版本字符串：去掉工具名前缀和 git hash */
+function cleanVersion(raw: string): string {
+  // 去掉 "uvx 0.7.9 (hash date)" → "0.7.9"
+  // 去掉 "Python 3.12.7" → "3.12.7"
+  // 保留 "v22.17.0"、"10.9.2"、"1.2.21" 不变
+  let v = raw.replace(/^[a-zA-Z][a-zA-Z0-9._-]*\s+/, ""); // 去掉单词前缀
+  v = v.replace(/\s*\(.*$/, "");                            // 去掉括号内容（git hash）
+  return v.trim();
+}
+
 const ENV_META: Array<{
   id: string;
   label: string;
@@ -39,11 +50,11 @@ const ENV_META: Array<{
   installCmd: string;
 }> = [
   { id: "npx",    label: "npx",     installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
+  { id: "node",   label: "Node.js", installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
   { id: "uvx",    label: "uvx",     installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
   { id: "uv",     label: "uv",      installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
   { id: "python", label: "Python",  installUrl: "https://www.python.org/downloads/",  installCmd: "winget install Python.Python.3" },
   { id: "bun",    label: "Bun",     installUrl: "https://bun.sh/",                    installCmd: 'powershell -c "irm bun.sh/install.ps1 | iex"' },
-  { id: "node",   label: "Node.js", installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
   { id: "mcp",    label: "MCP CLI", installUrl: "https://github.com/modelcontextprotocol/python-sdk", installCmd: "pip install mcp" },
 ];
 
@@ -123,7 +134,7 @@ function EnvSection() {
                   <span className="text-xs font-medium w-12 shrink-0">{meta.label}</span>
                   {installed && version ? (
                     <span className="flex-1 text-[10px] text-muted-foreground font-mono truncate">
-                      {version.replace(/^(node\s+|Python\s+|uv\s+)/, "")}
+                      {cleanVersion(version)}
                     </span>
                   ) : (
                     <span className="flex-1 text-[10px] text-muted-foreground">未安装</span>
@@ -355,10 +366,10 @@ export function MCPServersTab() {
           </button>
         )}
 
-        {/* 环境安装区块 */}
-        <EnvSection />
-
         <div className="flex-1 overflow-y-auto">
+          {/* 环境安装区块 */}
+          <EnvSection />
+
           {allServers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-xs">
               <Server className="h-6 w-6 mb-1.5 opacity-40" />

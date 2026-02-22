@@ -88,6 +88,8 @@ const fr: TranslationDictionary = {
       "linkTextDeepSeek": "Obtenir depuis DeepSeek",
       "linkTextOpenRouter": "Obtenir depuis OpenRouter",
       "linkTextOpenAI": "Obtenir depuis OpenAI",
+      "descriptionMoonshot": "Moonshot Kimi, supporte un contexte ultra-long jusqu'à 128K tokens",
+      "linkTextMoonshot": "Obtenir depuis Moonshot",
       "getConfigured": "Configuré",
       "saveSuccess": "Enregistré avec succès",
       "save": "Enregistrer",
@@ -152,6 +154,11 @@ const fr: TranslationDictionary = {
     },
     "google": {
       "geminiPro": { "description": "Fenêtre de contexte extra longue" }
+    },
+    "moonshot": {
+      "8k": { "description": "Pour courtes conversations, réponse rapide" },
+      "32k": { "description": "Traite les longs documents, équilibré" },
+      "128k": { "description": "Contexte ultra-long, peut traiter un livre entier" }
     },
     "common": {
       "viaOpenRouter": "Accès via OpenRouter"

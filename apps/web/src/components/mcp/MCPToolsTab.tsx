@@ -11,7 +11,12 @@ interface ToolWithServer {
   serverName: string;
 }
 
-export function MCPToolsTab() {
+interface MCPToolsTabProps {
+  /** 只显示指定服务器的工具，不传则显示所有 */
+  filterServerId?: string;
+}
+
+export function MCPToolsTab({ filterServerId }: MCPToolsTabProps = {}) {
   const { t } = useT();
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
@@ -31,6 +36,7 @@ export function MCPToolsTab() {
   const toolsWithServer = useMemo(() => {
     const result: ToolWithServer[] = [];
     for (const server of allServers) {
+      if (filterServerId && server.id !== filterServerId) continue;
       const state = serverStates[server.id];
       if (state?.session?.status === "connected" && state.session.tools) {
         for (const tool of state.session.tools) {
@@ -43,7 +49,7 @@ export function MCPToolsTab() {
       }
     }
     return result;
-  }, [allServers, serverStates]);
+  }, [allServers, serverStates, filterServerId]);
 
   const filteredTools = useMemo(() => {
     if (!search.trim()) return toolsWithServer;

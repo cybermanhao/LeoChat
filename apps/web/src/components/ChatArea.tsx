@@ -5,14 +5,12 @@ import {
   ChatMessage as ChatMessageComponent,
   MessageActions,
   MCPQuickPanel,
-  PromptPanel,
   Button,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
   cn,
-  type PromptItem,
 } from "@ai-chatbox/ui";
 import {
   StreamingContent,
@@ -21,12 +19,14 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Globe, FileText, Trash2 } from "lucide-react";
+import { Sparkles, Globe, FileText, Trash2, RefreshCw } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
-import { ModelSelector } from "./ModelSelector";
+import { usePromptStore } from "../stores/prompt";
 import { mcpApi } from "../lib/api";
+import { ModelSelector } from "./ModelSelector";
+import { SystemPromptPanel } from "./SystemPromptPanel";
 
 export function ChatArea() {
   const { t } = useT();
@@ -44,6 +44,8 @@ export function ChatArea() {
   const setCurrentModel = useChatStore((s) => s.setCurrentModel);
   const enableMarkdown = useChatStore((s) => s.enableMarkdown);
   const setEnableMarkdown = useChatStore((s) => s.setEnableMarkdown);
+  const maxEpochs = useChatStore((s) => s.maxEpochs);
+  const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const toolCallStates = useChatStore((s) => s.toolCallStates);
   const executeAction = useChatStore((s) => s.executeAction);
 
@@ -130,63 +132,70 @@ export function ChatArea() {
   useEffect(() => {
     const enabledTools = getEnabledTools();
     setMCPTools(enabledTools);
-  }, [getEnabledTools, disabledToolIds, setMCPTools]);
+  }, [getEnabledTools, disabledToolIds, mcpEnabledServerIds, setMCPTools]);
 
   // 对话框状态
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-  const [selectedPrompt, setSelectedPrompt] = useState<string | undefined>();
-  const [selectedPromptContent, setSelectedPromptContent] = useState<string | undefined>();
 
   // 功能开关
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
-  // 从 MCP 服务获取可用的 prompts
-  const availablePrompts = useMemo<PromptItem[]>(() => {
-    const prompts: PromptItem[] = [];
+  // Prompt store
+  const activePrompt = usePromptStore((s) => s.activePrompt);
+  const customPrompts = usePromptStore((s) => s.customPrompts);
+  const mcpPromptCache = usePromptStore((s) => s.mcpPromptCache);
+  const cachePromptContent = usePromptStore((s) => s.cachePromptContent);
+
+  // 自动拉取已连接 MCP 服务器的提示词（无必填参数的）
+  useEffect(() => {
     for (const source of mcpSources) {
       for (const server of source.servers) {
         const state = mcpServerStates[server.id];
-        if (state?.prompts) {
-          for (const prompt of state.prompts) {
-            prompts.push({
-              serverId: server.id,
-              serverName: server.name,
-              name: prompt.name,
-              description: prompt.description,
-            });
-          }
+        if (!state?.prompts?.length) continue;
+        for (const p of state.prompts) {
+          // 跳过有必填参数的提示词
+          if (p.arguments?.some((a) => a.required)) continue;
+          const key = `${server.id}:${p.name}`;
+          if (mcpPromptCache[key]) continue; // 已缓存，跳过
+          mcpApi
+            .getPrompt(server.id, p.name)
+            .then((raw) => {
+              const result = raw as { messages?: Array<{ content: string | { text: string } }> };
+              const parts: string[] = [];
+              if (result.messages?.length) {
+                for (const m of result.messages) {
+                  const c = m.content;
+                  const text = typeof c === "string" ? c : (c as { text: string }).text ?? "";
+                  if (text) parts.push(text);
+                }
+              }
+              const content = parts.join("\n");
+              if (content) cachePromptContent(server.id, p.name, content);
+            })
+            .catch((e) => console.error("Failed to auto-fetch MCP prompt", e));
         }
       }
     }
-    return prompts;
-  }, [mcpSources, mcpServerStates]);
+  }, [mcpSources, mcpServerStates, mcpPromptCache, cachePromptContent]);
 
-  // 处理 prompt 选择
-  const handlePromptSelect = useCallback(async (prompt: PromptItem | null) => {
-    if (!prompt) {
-      setSelectedPrompt(undefined);
-      setSelectedPromptContent(undefined);
-      return;
-    }
-
-    const promptId = `${prompt.serverId}:${prompt.name}`;
-    setSelectedPrompt(promptId);
-
-    // 获取 prompt 内容
-    try {
-      const result = await mcpApi.getPrompt(prompt.serverId, prompt.name);
-      if (result.messages && result.messages.length > 0) {
-        const content = result.messages[0].content;
-        if (typeof content === "string") {
-          setSelectedPromptContent(content);
-        } else if (content && typeof content === "object" && "text" in content) {
-          setSelectedPromptContent((content as { text: string }).text);
+  // 组合最终 system prompt：所有已缓存的 MCP 提示词 + 激活的自定义提示词
+  const selectedPromptContent = useMemo(() => {
+    const parts: string[] = [];
+    for (const source of mcpSources) {
+      for (const server of source.servers) {
+        const state = mcpServerStates[server.id];
+        for (const p of state?.prompts ?? []) {
+          const key = `${server.id}:${p.name}`;
+          if (mcpPromptCache[key]) parts.push(mcpPromptCache[key]);
         }
       }
-    } catch (error) {
-      console.error("Failed to get prompt content:", error);
     }
-  }, []);
+    if (activePrompt?.type === "custom") {
+      const custom = customPrompts.find((p) => p.id === activePrompt.id);
+      if (custom?.content) parts.push(custom.content);
+    }
+    return parts.length > 0 ? parts.join("\n\n") : null;
+  }, [mcpSources, mcpServerStates, mcpPromptCache, activePrompt, customPrompts]);
 
   const handleModelSelect = useCallback(
     (modelId: string) => {
@@ -204,7 +213,7 @@ export function ChatArea() {
 
   const handleSend = () => {
     if (input.trim() && !isGenerating) {
-      sendMessage(input, selectedPromptContent);
+      sendMessage(input, selectedPromptContent ?? undefined);
     }
   };
 
@@ -250,11 +259,7 @@ export function ChatArea() {
         </Tooltip>
 
         {/* 系统提示 */}
-        <PromptPanel
-          prompts={availablePrompts}
-          selectedPrompt={selectedPrompt}
-          onSelect={handlePromptSelect}
-        />
+        <SystemPromptPanel />
 
         {/* 联网搜索 */}
         <Tooltip>
@@ -291,6 +296,27 @@ export function ChatArea() {
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
             {enableMarkdown ? t("chat.markdownRendering") : t("chat.plainText")}
+          </TooltipContent>
+        </Tooltip>
+
+        {/* 最大循环轮数 */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={cn(toolbarButtonClass, "flex items-center gap-1 rounded-md px-2 h-7 cursor-default select-none")}>
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={maxEpochs}
+                onChange={(e) => setMaxEpochs(Number(e.target.value))}
+                className="w-7 bg-transparent text-xs text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                onClick={(e) => e.currentTarget.select()}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            最大工具调用轮数（1-50）
           </TooltipContent>
         </Tooltip>
 

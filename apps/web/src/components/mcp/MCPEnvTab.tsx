@@ -3,6 +3,13 @@ import { CheckCircle2, XCircle, Loader2, ExternalLink, RefreshCw, Copy, Check } 
 import { cn, Button } from "@ai-chatbox/ui";
 import { envApi, type EnvToolStatus } from "../../lib/api";
 
+/** 清理版本字符串：去掉工具名前缀和 git hash */
+function cleanVersion(raw: string): string {
+  let v = raw.replace(/^[a-zA-Z][a-zA-Z0-9._-]*\s+/, ""); // 去掉单词前缀（如 "uvx "）
+  v = v.replace(/\s*\(.*$/, "");                            // 去掉括号内容（git hash）
+  return v.trim();
+}
+
 interface ToolMeta {
   id: string;
   description: string;
@@ -12,14 +19,32 @@ interface ToolMeta {
 
 const TOOL_META: ToolMeta[] = [
   {
-    id: "node",
-    description: "npx 类 MCP 服务器所需的 JavaScript 运行时",
+    id: "npx",
+    description: "Node.js 自带的包执行工具，运行 npx 类 MCP 服务器",
     installUrl: "https://nodejs.org/",
     installCmd: "winget install OpenJS.NodeJS",
   },
   {
+    id: "node",
+    description: "JavaScript 运行时，npx 类 MCP 服务器所需",
+    installUrl: "https://nodejs.org/",
+    installCmd: "winget install OpenJS.NodeJS",
+  },
+  {
+    id: "uvx",
+    description: "Python 包执行工具，运行 uvx 类 MCP 服务器",
+    installUrl: "https://docs.astral.sh/uv/",
+    installCmd: "pip install uv",
+  },
+  {
+    id: "uv",
+    description: "快速 Python 包管理器，uvx 类 MCP 服务器所需",
+    installUrl: "https://docs.astral.sh/uv/",
+    installCmd: "pip install uv",
+  },
+  {
     id: "python",
-    description: "uvx 和 mcp CLI 所需的 Python 运行时",
+    description: "Python 运行时，uvx / mcp CLI 所需",
     installUrl: "https://www.python.org/downloads/",
     installCmd: "winget install Python.Python.3",
   },
@@ -28,12 +53,6 @@ const TOOL_META: ToolMeta[] = [
     description: "快速的 JavaScript/TypeScript 运行时",
     installUrl: "https://bun.sh/",
     installCmd: 'powershell -c "irm bun.sh/install.ps1 | iex"',
-  },
-  {
-    id: "uv",
-    description: "快速 Python 包管理器，uvx 类 MCP 服务器所需",
-    installUrl: "https://docs.astral.sh/uv/",
-    installCmd: "pip install uv",
   },
   {
     id: "mcp",
@@ -136,7 +155,7 @@ export function MCPEnvTab() {
                     <span className="text-xs font-semibold">{name}</span>
                     {version && (
                       <span className="text-[10px] text-muted-foreground font-mono truncate">
-                        {version}
+                        {cleanVersion(version)}
                       </span>
                     )}
                   </div>

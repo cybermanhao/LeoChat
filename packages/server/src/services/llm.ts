@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatMessage, ToolCall } from "@ai-chatbox/shared";
 import { generateId, API_ENDPOINTS, DEFAULT_MODELS } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
 
 export interface ChatRequest {
   messages: ChatMessage[];
@@ -76,6 +76,16 @@ export class LLMService {
       console.log("[LLM] OpenAI client initialized");
     }
 
+    // Moonshot
+    const moonshotKey = process.env.MOONSHOT_API_KEY;
+    if (moonshotKey) {
+      this.clients.set("moonshot", new OpenAI({
+        apiKey: moonshotKey,
+        baseURL: API_ENDPOINTS.MOONSHOT,
+      }));
+      console.log("[LLM] Moonshot client initialized");
+    }
+
     // 确定默认提供商
     if (this.clients.has("deepseek")) {
       this.defaultProvider = "deepseek";
@@ -83,6 +93,8 @@ export class LLMService {
       this.defaultProvider = "openrouter";
     } else if (this.clients.has("openai")) {
       this.defaultProvider = "openai";
+    } else if (this.clients.has("moonshot")) {
+      this.defaultProvider = "moonshot";
     }
 
     console.log(`[LLM] Default provider: ${this.defaultProvider}`);
@@ -98,6 +110,7 @@ export class LLMService {
       deepseek: API_ENDPOINTS.DEEPSEEK,
       openrouter: API_ENDPOINTS.OPENROUTER,
       openai: API_ENDPOINTS.OPENAI,
+      moonshot: API_ENDPOINTS.MOONSHOT,
     };
 
     const options: ConstructorParameters<typeof OpenAI>[0] = {
@@ -148,6 +161,9 @@ export class LLMService {
     }
     if (model.startsWith("gpt-")) {
       return "openai";
+    }
+    if (model.startsWith("moonshot-")) {
+      return "moonshot";
     }
     return this.defaultProvider;
   }

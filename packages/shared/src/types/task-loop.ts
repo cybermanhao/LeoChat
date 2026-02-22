@@ -196,6 +196,7 @@ export type LLMProvider =
   | "anthropic"
   | "google"
   | "deepseek"
+  | "moonshot"
   | "custom";
 
 /**
