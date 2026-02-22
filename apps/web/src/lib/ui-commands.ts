@@ -460,15 +460,42 @@ export async function processToolResultForUICommands(
     }
   }
 
-  // 如果结果是字符串，尝试解析 UI 命令
+  // 如果结果是字符串，尝试多种解析方式
   if (typeof result === "string") {
-    const command = parseUICommand(result);
-    if (command) {
-      const commandResult = await executeUICommand(command);
+    // 先尝试直接解析为 UICommand
+    const directCommand = parseUICommand(result);
+    if (directCommand) {
+      const commandResult = await executeUICommand(directCommand);
       return {
         processedResult: commandResult.message,
         uiCommandExecuted: commandResult.executed,
       };
+    }
+
+    // 再尝试：字符串可能是 JSON 序列化的 MCP 结果对象（含 content[]）
+    // 解析后用 extractTextFromMCPResult 提取内部文本再解析 UICommand
+    try {
+      const parsedObj = JSON.parse(result);
+      const innerText = extractTextFromMCPResult(parsedObj);
+      if (innerText) {
+        const command = parseUICommand(innerText);
+        if (command) {
+          const commandResult = await executeUICommand(command);
+          return {
+            processedResult: commandResult.message,
+            uiCommandExecuted: commandResult.executed,
+          };
+        }
+      }
+      if (isUICommand(parsedObj)) {
+        const commandResult = await executeUICommand(parsedObj);
+        return {
+          processedResult: commandResult.message,
+          uiCommandExecuted: commandResult.executed,
+        };
+      }
+    } catch {
+      // 不是合法 JSON，忽略
     }
   }
 
