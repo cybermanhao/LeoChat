@@ -29,6 +29,8 @@ type CommandName =
   | "open_url"
   | "scroll_to_message"
   | "set_input"
+  // @deprecated render_cards is deprecated — cards are now structured content,
+  // not UI commands. Remove this union member in a future cleanup pass.
   | "render_cards";
 
 interface UICommand {
@@ -136,8 +138,8 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
   return {
     prompts: [
       {
-        name: "leochat_assistant",
-        description: "LeoChat UI 控制助手 - 启用主题、通知、面板等 UI 控制能力",
+        name: "leochat_tool_guide",
+        description: "LeoChat UI 工具使用指南 - 描述主题、通知、面板等 UI 控制工具的用法模板",
       },
     ],
   };
@@ -146,7 +148,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   const { name } = request.params;
 
-  if (name === "leochat_assistant") {
+  if (name === "leochat_tool_guide") {
     return {
       messages: [
         {
@@ -332,9 +334,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      /**
+       * @deprecated 此工具已废弃，将在未来版本中移除。
+       */
       {
         name: "test_tool_call",
-        description: "测试工具调用 UI 渲染。用于测试工具调用的读条动画效果。当用户说'测试tool调用'时使用此工具。",
+        description: "【已废弃】测试工具调用 UI 渲染。用于测试工具调用的读条动画效果。当用户说'测试tool调用'时使用此工具。",
         inputSchema: {
           type: "object",
           properties: {
@@ -353,35 +358,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
-      // TODO: render_cards - 前端注入卡片到消息气泡，需要完成 UI command pipeline 调试后启用
-      // {
-      //   name: "render_cards",
-      //   description: "渲染卡片组件，用于展示结构化信息（如搜索结果、产品、文章等）。支持左图右信息布局，可点击跳转。",
-      //   inputSchema: {
-      //     type: "object",
-      //     properties: {
-      //       cards: {
-      //         type: "array",
-      //         description: "卡片数据数组",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             title: { type: "string", description: "卡片标题" },
-      //             description: { type: "string", description: "卡片描述" },
-      //             image: { type: "string", description: "图片 URL" },
-      //             link: { type: "string", description: "点击跳转链接" },
-      //             linkText: { type: "string", description: "链接文字，默认'查看详情'" },
-      //           },
-      //         },
-      //       },
-      //       columns: { type: "number", enum: [1, 2, 3], description: "列数，默认 2" },
-      //     },
-      //     required: ["cards"],
-      //   },
-      // },
+      // -----------------------------------------------------------------------
+      // render_cards — PERMANENTLY REMOVED. DO NOT RESTORE.
+      //
+      // Cards are now structured message content (see card-spec.md), not UI
+      // commands.  The command-based render_cards approach is superseded by
+      // first-class card content items in the message schema.  Any future
+      // card rendering must go through the structured content path, not
+      // through this MCP tool.
+      // -----------------------------------------------------------------------
       {
         name: "generate_waifu",
-        description: "生成随机二次元图片（waifu/头像等）。返回图片URL，可直接用于头像、示例图片等场景。",
+        description: "生成随机二次元图片（waifu/头像等），以 LeoCard 卡片形式返回。",
         inputSchema: {
           type: "object",
           properties: {
@@ -393,10 +381,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             count: {
               type: "number",
               description: "生成数量(1-5)，默认1",
-            },
-            asCard: {
-              type: "boolean",
-              description: "是否以卡片形式返回（包含预览），默认true",
             },
           },
         },
@@ -502,86 +486,121 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // 抛出错误让 MCP 协议返回错误状态
         throw new Error(message || `测试工具调用失败（模拟）`);
       }
+
+      // 返回一个示例 leo-card 结构化卡片 payload，用于验证卡片渲染管线
+      const cardPayload = {
+        type: "leochat-card",
+        card: {
+          id: `test_card_${Date.now()}`,
+          kind: "summary",
+          title: "工具调用测试完成",
+          subtitle: `用时 ${duration} 秒`,
+          tone: "success",
+          body: [
+            {
+              type: "fields",
+              fields: [
+                { label: "状态", value: "成功" },
+                { label: "耗时", value: `${duration}s` },
+                { label: "消息", value: message || "默认测试" },
+              ],
+            },
+            {
+              type: "text",
+              text: "这是一张由 test_tool_call 生成的示例卡片，用于验证 LeoChat 卡片系统。",
+            },
+          ],
+          actions: [
+            {
+              id: "action_notify",
+              label: "发送通知",
+              kind: "primary",
+              action: {
+                type: "ui-command",
+                command: "show_notification",
+                payload: { message: "卡片动作测试成功！", type: "success" },
+              },
+            },
+            {
+              id: "action_link",
+              label: "打开文档",
+              kind: "secondary",
+              action: {
+                type: "link",
+                url: "https://github.com",
+              },
+            },
+          ],
+        },
+      };
+
       return {
-        content: [{ type: "text" as const, text: message || `测试工具调用成功！用时 ${duration} 秒` }],
+        content: [{ type: "text" as const, text: JSON.stringify(cardPayload) }],
       };
     }
 
-    // TODO: render_cards - 需要完成前端 UI command pipeline 调试后启用
-    // case "render_cards": { ... }
+    // render_cards — PERMANENTLY REMOVED. DO NOT RESTORE.
+    // Cards are now structured content, not UI commands. See card-spec.md.
 
     case "generate_waifu": {
-      const { category = "waifu", count = 1, asCard = true } = args as {
+      const { category = "waifu", count = 1 } = args as {
         category?: string;
         count?: number;
-        asCard?: boolean;
       };
 
       const validCategories = ["waifu", "neko", "shinobu", "megumin", "awoo", "smile", "happy", "wink", "blush", "smug", "dance"];
       const cat = validCategories.includes(category) ? category : "waifu";
       const num = Math.min(Math.max(count, 1), 5);
 
-      // 使用 waifu.pics API
-      const urls: string[] = [];
-      for (let i = 0; i < num; i++) {
-        try {
-          const response = await fetch(`https://api.waifu.pics/sfw/${cat}`);
-          if (response.ok) {
-            const data = await response.json() as { url: string };
-            urls.push(data.url);
-          }
-        } catch {
-          // 忽略单个请求错误
-        }
-      }
+      const categoryNames: Record<string, string> = {
+        waifu: "Waifu",
+        neko: "猫娘",
+        shinobu: "忍野忍",
+        megumin: "惠惠",
+        awoo: "Awoo",
+        smile: "微笑",
+        happy: "开心",
+        wink: "眨眼",
+        blush: "害羞",
+        smug: "得意",
+        dance: "跳舞",
+      };
+
+      // 并发请求 waifu.pics API
+      const results = await Promise.allSettled(
+        Array.from({ length: num }, () =>
+          fetch(`https://api.waifu.pics/sfw/${cat}`)
+            .then(r => r.ok ? r.json() as Promise<{ url: string }> : null)
+        )
+      );
+      const urls = results
+        .filter((r): r is PromiseFulfilledResult<{ url: string }> => r.status === "fulfilled" && r.value !== null)
+        .map(r => r.value.url);
 
       if (urls.length === 0) {
         return makeError("获取图片失败，请稍后重试");
       }
 
-      // 返回格式
-      if (asCard) {
-        const categoryNames: Record<string, string> = {
-          waifu: "Waifu",
-          neko: "猫娘",
-          shinobu: "忍野忍",
-          megumin: "惠惠",
-          awoo: "Awoo",
-          smile: "微笑",
-          happy: "开心",
-          wink: "眨眼",
-          blush: "害羞",
-          smug: "得意",
-          dance: "跳舞",
-        };
+      // 构建 LeoCard
+      const card = {
+        id: `waifu_${Date.now()}`,
+        kind: "media",
+        title: `${categoryNames[cat] || cat}`,
+        subtitle: urls.length > 1 ? `${urls.length} 张图片` : undefined,
+        tone: "default",
+        body: urls.length === 1
+          ? [{ type: "image", image: { url: urls[0], alt: categoryNames[cat] || cat } }]
+          : [{ type: "images", images: urls.map((url, i) => ({ url, alt: `${categoryNames[cat] || cat} #${i + 1}` })) }],
+        actions: urls.map((url, i) => ({
+          id: `view_${i}`,
+          label: urls.length === 1 ? "查看原图" : `原图 #${i + 1}`,
+          kind: "secondary",
+          action: { type: "link", url },
+        })),
+      };
 
-        const cards = urls.map((url, i) => {
-          const attrs = [
-            `title="${escapeAttr(categoryNames[cat] || cat)}${num > 1 ? ` #${i + 1}` : ""}"`,
-            `image="${escapeAttr(url)}"`,
-            `link="${escapeAttr(url)}"`,
-            `linkText="查看原图"`,
-          ];
-          return `<card ${attrs.join(" ")} />`;
-        });
-
-        const output = cards.length > 1
-          ? `<cards columns="2">\n${cards.join("\n")}\n</cards>`
-          : cards[0];
-
-        return {
-          content: [{ type: "text" as const, text: output }],
-        };
-      }
-
-      // 纯文本返回
       return {
-        content: [{
-          type: "text" as const,
-          text: urls.length === 1
-            ? `图片URL: ${urls[0]}`
-            : `生成了 ${urls.length} 张图片:\n${urls.map((u, i) => `${i + 1}. ${u}`).join("\n")}`,
-        }],
+        content: [{ type: "text" as const, text: JSON.stringify(card) }],
       };
     }
 

@@ -3,7 +3,8 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { ToolCallBlock, type ToolCallStatus } from "./tool-call-block";
-import type { DisplayMessage, ToolCall, MessageContentItem } from "@ai-chatbox/shared";
+import type { DisplayMessage, ToolCall, MessageContentItem, LeoCard, LeoCardAction } from "@ai-chatbox/shared";
+import { LeoCardView } from "./leo-card";
 
 /**
  * 工具调用状态
@@ -26,12 +27,14 @@ export interface ChatMessageProps {
   renderContent?: (content: string, isLastTextItem: boolean) => React.ReactNode;
   /** 在内容区顶部显示的操作按钮 */
   actions?: React.ReactNode;
+  /** 卡片动作回调 */
+  onCardAction?: (action: LeoCardAction) => void;
   /** @deprecated 使用 renderContent 代替 */
   children?: React.ReactNode;
 }
 
 const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
-  ({ message, isStreaming, toolCallStates, renderContent, actions, children }, ref) => {
+  ({ message, isStreaming, toolCallStates, renderContent, onCardAction, actions, children }, ref) => {
     const [reasoningExpanded, setReasoningExpanded] = React.useState(false);
 
     const isUser = message.role === "user";
@@ -109,6 +112,15 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
               error={state?.error}
               duration={state?.duration}
             />
+          </div>
+        );
+      }
+
+      if (item.type === 'leo-card') {
+        const card = item.content as LeoCard;
+        return (
+          <div key={item.id} className="px-4 py-2">
+            <LeoCardView card={card} onAction={onCardAction} />
           </div>
         );
       }

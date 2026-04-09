@@ -7,6 +7,7 @@ import { useMCPStore } from "./stores/mcp";
 import { TooltipProvider } from "@ai-chatbox/ui";
 import { chatApi } from "./lib/api";
 import { initializeI18n } from "./i18n";
+import { migrateFromLocalStorage, getChatStorageAdapter } from "./lib/chat-persistence";
 
 // Electron production uses file:// protocol, which requires HashRouter
 const isFileProtocol = window.location.protocol === "file:";
@@ -38,6 +39,16 @@ function AppInit({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyTheme(currentTheme);
   }, [currentTheme, applyTheme]);
+
+  useEffect(() => {
+    migrateFromLocalStorage("ai-chatbox-chat", getChatStorageAdapter());
+    if (import.meta.env.DEV) {
+      (window as any).__devClearHistory = () => {
+        useChatStore.getState().clearAllConversations();
+        console.log("[Dev] All chat history cleared");
+      };
+    }
+  }, []);
 
   // 初始化国际化系统
   useEffect(() => {

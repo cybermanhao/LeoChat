@@ -1,3 +1,5 @@
+import type { LeoCard } from "./card";
+
 // ============ 消息状态枚举 ============
 
 /**
@@ -52,6 +54,7 @@ export type ContentItemType =
   | 'tool-result'
   | 'ui-command'
   | 'card'
+  | 'leo-card'
   | 'action-button';
 
 /**
@@ -60,7 +63,7 @@ export type ContentItemType =
 export interface ContentItem {
   id: string;
   type: ContentItemType;
-  content: string | ToolCall | ToolResult | UICommand | CardData | ActionButtonData;
+  content: string | ToolCall | ToolResult | UICommand | CardData | ActionButtonData | LeoCard;
   timestamp: number;
   status?: 'pending' | 'running' | 'completed' | 'error';
 }
@@ -173,11 +176,11 @@ export interface ToolResult {
 
 // UI命令类型
 export interface UICommand {
-  command: 'update_theme' | 'show_notification' | 'show_confirm' | 'open_panel' | 'close_panel' | 'copy_to_clipboard' | 'open_url' | 'scroll_to_message' | 'set_input' | 'render_cards';
+  command: 'update_theme' | 'show_notification' | 'show_confirm' | 'open_panel' | 'close_panel' | 'copy_to_clipboard' | 'open_url' | 'scroll_to_message' | 'set_input' | /** @deprecated Use leo-card content items instead */ 'render_cards';
   payload: Record<string, unknown>;
 }
 
-// 卡片数据类型
+/** @legacy Use leo-card content items instead */
 export interface CardData {
   title?: string;
   description?: string;
@@ -383,3 +386,6 @@ export * from "./retry";
 
 // Re-export Checkpoint types
 export * from "./checkpoint";
+
+// Re-export Card types
+export * from "./card";

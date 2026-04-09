@@ -19,6 +19,19 @@ interface PromptState {
   /** MCP 提示词内容缓存，key: "${serverId}:${promptName}"，不持久化（session 级） */
   mcpPromptCache: Record<string, string>;
 
+  /** 已显式附加的 MCP 模板 key 列表，按附加顺序排列。key 格式: "${serverId}:${promptName}" */
+  attachedMcpPrompts: string[];
+
+  /** 全局系统提示词（基础指令） */
+  systemPrompt: string;
+
+  /**
+   * 迁移版本标记。
+   * - 0: 迁移前用户（自动注入时代）
+   * - 1: 已迁移到显式附加模型
+   */
+  promptVersion: number;
+
   // Actions
   addCustomPrompt: (name: string, content: string) => string;
   updateCustomPrompt: (id: string, name: string, content: string) => void;
@@ -27,6 +40,12 @@ interface PromptState {
   clearActivePrompt: () => void;
   getActiveContent: () => string | null;
   cachePromptContent: (serverId: string, promptName: string, content: string) => void;
+
+  // 新 Actions
+  attachMcpPrompt: (serverId: string, promptName: string) => void;
+  detachMcpPrompt: (serverId: string, promptName: string) => void;
+  isAttached: (serverId: string, promptName: string) => boolean;
+  setSystemPrompt: (content: string) => void;
 }
 
 export const usePromptStore = create<PromptState>()(
@@ -35,6 +54,9 @@ export const usePromptStore = create<PromptState>()(
       customPrompts: [],
       activePrompt: null,
       mcpPromptCache: {},
+      attachedMcpPrompts: [],
+      systemPrompt: "",
+      promptVersion: 0,
 
       addCustomPrompt: (name, content) => {
         const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -85,12 +107,39 @@ export const usePromptStore = create<PromptState>()(
         const key = `${serverId}:${promptName}`;
         set((s) => ({ mcpPromptCache: { ...s.mcpPromptCache, [key]: content } }));
       },
+
+      attachMcpPrompt: (serverId, promptName) => {
+        const key = `${serverId}:${promptName}`;
+        set((s) => {
+          if (s.attachedMcpPrompts.includes(key)) return s;
+          return { attachedMcpPrompts: [...s.attachedMcpPrompts, key] };
+        });
+      },
+
+      detachMcpPrompt: (serverId, promptName) => {
+        const key = `${serverId}:${promptName}`;
+        set((s) => ({
+          attachedMcpPrompts: s.attachedMcpPrompts.filter((k) => k !== key),
+        }));
+      },
+
+      isAttached: (serverId, promptName) => {
+        const key = `${serverId}:${promptName}`;
+        return get().attachedMcpPrompts.includes(key);
+      },
+
+      setSystemPrompt: (content) => {
+        set({ systemPrompt: content });
+      },
     }),
     {
       name: "leochat-prompts",
       partialize: (s) => ({
         customPrompts: s.customPrompts,
         activePrompt: s.activePrompt,
+        attachedMcpPrompts: s.attachedMcpPrompts,
+        systemPrompt: s.systemPrompt,
+        promptVersion: s.promptVersion,
         // mcpPromptCache 不持久化，每次启动重新拉取
       }),
     }

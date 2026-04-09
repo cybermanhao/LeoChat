@@ -4,10 +4,12 @@ import {
   CodeBlock,
   ActionButtonGroup,
   ActionCardGroup,
+  LeoCardView,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import type { DisplayMessage, MessageContentItem, MessageContentType, ToolCall, ToolResult, UICommand, CardData, ActionButtonData } from "@ai-chatbox/shared";
+import type { DisplayMessage, MessageContentItem, MessageContentType, ToolCall, ToolResult, UICommand, CardData, ActionButtonData, LeoCard } from "@ai-chatbox/shared";
 import { useChatStore } from "../stores/chat";
+import { executeLeoCardAction } from "../lib/card-actions";
 
 interface MessageContentProps {
   message: DisplayMessage;
@@ -144,6 +146,15 @@ export function MessageContent({ message, isStreaming = false, enableMarkdown = 
               isStreaming={isStreaming}
               onAction={handleAction}
             />
+          </div>
+        );
+
+      case 'leo-card':
+        // 渲染 LeoCard 结构化卡片（不经过 markdown 解析）
+        const leoCard = item.content as LeoCard;
+        return (
+          <div key={item.id} className="mt-2">
+            <LeoCardView card={leoCard} onAction={executeLeoCardAction} />
           </div>
         );
 

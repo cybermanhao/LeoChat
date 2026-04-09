@@ -1,0 +1,19 @@
+{
+  "name": "@leochat/pokemon-quiz-mcp",
+  "version": "0.1.0",
+  "description": "Interactive Pokemon quiz game MCP server with LeoCard support",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

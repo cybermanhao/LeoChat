@@ -84,7 +84,13 @@
       "Bash(curl -s https://api.github.com/repos/negokaz/excel-mcp-server/releases/latest | python3 -c \"import json,sys; assets=json.load\\(sys.stdin\\)['assets']; [print\\(a['name'], a['browser_download_url']\\) for a in assets]\" 2>&1)",
       "Bash(echo download done:*)",
       "Bash(cd /c/code/LeoChat/mcp-servers/excel-mcp-server/dist && unzip -o /tmp/excel-mcp-server-win.zip && ls -la 2>&1)",
-      "Bash(uvx:*)"
+      "Bash(uvx:*)",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(npx tsup:*)",
+      "WebFetch(domain:openai.github.io)",
+      "WebFetch(domain:mastra.ai)",
+      "WebFetch(domain:ai-sdk.dev)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   ChatMessage,
   CardStatus,
@@ -12,8 +12,11 @@ import type {
   MessageContentItem,
 } from "@ai-chatbox/shared";
 import { generateId, LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP } from "@ai-chatbox/shared";
+import { normalizeLeoCard } from "@ai-chatbox/shared";
 import { processToolResultForUICommands } from "../lib/ui-commands";
 import { handleApiError } from "../lib/api-error";
+import { sendOSNotification } from "../lib/os-notification";
+import { getChatStorageAdapter } from "../lib/chat-persistence";
 
 export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
 
@@ -95,6 +98,7 @@ interface ChatState {
   createConversation: () => string;
   setCurrentConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
+  clearAllConversations: () => void;
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
@@ -207,6 +211,8 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
+      clearAllConversations: () => set({ conversations: [], currentConversationId: null }),
+
       sendMessage: async (content, systemPrompt) => {
         const { currentConversationId, currentProvider, currentModel, providerKeys, mcpTools, maxEpochs, contextLevel, temperature } = get();
 
@@ -297,7 +303,8 @@ export const useChatStore = create<ChatState>()(
               c.id === convId ? { ...c, contextMessages: contextSnapshot } : c
             ),
           }));
-          handleApiError((error as Error).message, currentProvider);
+          // 注意：task-loop 在 emit("error") 之后会 throw，
+          // 而 case "error" 事件已经调用了 handleApiError，此处不再重复弹 toast
         } finally {
           unsubscribe();
           set({
@@ -439,11 +446,6 @@ export const useChatStore = create<ChatState>()(
             break;
 
           case "toolcall": {
-            // 使用事件携带的内容，避免查询可能被污染的前端状态
-            if (event.contentBeforeToolCall) {
-              console.log("[ToolCall] 工具调用前的内容:", event.contentBeforeToolCall.slice(0, 200) + (event.contentBeforeToolCall.length > 200 ? "..." : ""));
-            }
-            console.log("[ToolCall] 工具调用开始:", event.toolCall.name, "ID:", event.toolCall.id);
             set((state) => ({
               toolCallStates: {
                 ...state.toolCallStates,
@@ -466,13 +468,10 @@ export const useChatStore = create<ChatState>()(
               : JSON.stringify(event.result, null, 2);
             const endTime = Date.now();
 
-            console.log("[ToolResult] 工具调用完成:", event.toolCallId);
-            console.log("[ToolResult] 结果:", rawResult.slice(0, 200) + (rawResult.length > 200 ? "..." : ""));
-            if (event.error) {
-              console.log("[ToolResult] 错误:", event.error);
-            }
-
             // 同步立即更新状态，避免竞态条件导致状态丢失
+            // 同时将最终 status 写入 contentItems，使其随对话持久化（重启后不会回到 pending）
+            const finalStatus = event.error ? "error" : "success";
+            const contentItemStatus = event.error ? "error" : "completed";
             set((state) => {
               const prevState = state.toolCallStates[event.toolCallId];
               return {
@@ -480,13 +479,26 @@ export const useChatStore = create<ChatState>()(
                   ...state.toolCallStates,
                   [event.toolCallId]: {
                     ...prevState,
-                    status: event.error ? "error" : "success",
+                    status: finalStatus,
                     result: event.error ? undefined : rawResult,
                     error: event.error,
                     endTime,
                     duration: event.duration,
                   },
                 },
+                conversations: state.conversations.map((c) =>
+                  c.id !== chatId ? c : {
+                    ...c,
+                    displayMessages: c.displayMessages.map((msg) => ({
+                      ...msg,
+                      contentItems: msg.contentItems.map((item) =>
+                        item.type === "tool-call" && (item.content as ToolCall).id === event.toolCallId
+                          ? { ...item, status: contentItemStatus }
+                          : item
+                      ),
+                    })),
+                  }
+                ),
               };
             });
 
@@ -504,6 +516,68 @@ export const useChatStore = create<ChatState>()(
                 }));
               }
             });
+
+            // 检测结构化卡片 payload 并追加 leo-card 内容项
+            {
+              let cardSource: unknown = event.result;
+
+              // 如果结果是字符串，尝试 JSON 解析
+              if (typeof cardSource === "string") {
+                try { cardSource = JSON.parse(cardSource); } catch { /* 非 JSON，忽略 */ }
+              }
+
+              // 尝试从 MCP content[].text 格式中提取
+              // MCP 工具结果常包裹在 { content: [{ type: "text", text: "..." }] }
+              if (typeof cardSource === "object" && cardSource !== null && "content" in cardSource) {
+                const mcpContent = (cardSource as { content: unknown[] }).content;
+                if (Array.isArray(mcpContent)) {
+                  for (const item of mcpContent) {
+                    if (typeof item === "object" && item !== null && "type" in item && "text" in item) {
+                      const textItem = item as { type: string; text: string };
+                      if (textItem.type === "text") {
+                        const innerCard = normalizeLeoCard(textItem.text);
+                        if (innerCard) { cardSource = innerCard; break; }
+                      }
+                    }
+                  }
+                }
+              }
+              const card = normalizeLeoCard(cardSource);
+              if (card) {
+                const cardItemId = `${event.toolCallId}-card-${card.id}`;
+                set((state) => ({
+                  conversations: state.conversations.map((c) =>
+                    c.id !== chatId ? c : {
+                      ...c,
+                      displayMessages: c.displayMessages.map((msg) => {
+                        // 追加到最后一条 assistant 消息
+                        if (msg.role !== "assistant") return msg;
+                        // 确保是最后一条 assistant 消息
+                        const lastAssistantIdx = c.displayMessages
+                          .map((m, i) => m.role === "assistant" ? i : -1)
+                          .filter((i) => i >= 0)
+                          .pop();
+                        if (c.displayMessages.indexOf(msg) !== lastAssistantIdx) return msg;
+                        // 避免重复添加
+                        if (msg.contentItems.some((item) => item.id === cardItemId)) return msg;
+                        return {
+                          ...msg,
+                          contentItems: [
+                            ...msg.contentItems,
+                            {
+                              id: cardItemId,
+                              type: "leo-card" as const,
+                              content: card,
+                              timestamp: Date.now(),
+                            },
+                          ],
+                        };
+                      }),
+                    }
+                  ),
+                }));
+              }
+            }
             break;
           }
 
@@ -513,29 +587,6 @@ export const useChatStore = create<ChatState>()(
             break;
 
           case "done": {
-            console.log("[Done] 对话完成，轮次:", event.epochCount);
-            if (event.internalMessages) {
-              console.log("[Done] 内部消息历史数量:", event.internalMessages.length);
-              console.log("[Done] 消息角色序列:", event.internalMessages.map(m => m.role).join(" -> "));
-            }
-            // 输出最终合并的消息内容
-            const conv = get().conversations.find((c) => c.id === chatId);
-            const lastMsg = conv?.displayMessages[conv.displayMessages.length - 1];
-            if (lastMsg?.role === "assistant") {
-              // 查找最后一条消息中的文本内容
-              const textItem = lastMsg.contentItems.find(item => item.type === 'text');
-              const content = textItem ? (textItem.content as string) : '';
-              console.log("[Done] 合并后的内容:", content?.slice(0, 100) + (content && content.length > 100 ? "..." : ""));
-
-              // 查找工具调用
-              const toolCallItems = lastMsg.contentItems.filter(item => item.type === 'tool-call');
-              if (toolCallItems.length > 0) {
-                console.log("[Done] 工具调用:", toolCallItems.map(item => {
-                  const toolCall = item.content as ToolCall;
-                  return `${toolCall.name}(${toolCall.id})`;
-                }));
-              }
-            }
             // 保存完整的内部消息历史（用于下次发送给 LLM）
             if (event.internalMessages) {
               set((state) => ({
@@ -562,6 +613,7 @@ export const useChatStore = create<ChatState>()(
             } else {
               set({ cardStatus: "stable", isGenerating: false });
             }
+            sendOSNotification("LeoChat", "AI 回复完成");
             break;
           }
 
@@ -734,6 +786,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: "ai-chatbox-chat",
+      storage: createJSONStorage(() => getChatStorageAdapter()),
       partialize: (state) => ({
         conversations: state.conversations,
         currentConversationId: state.currentConversationId,

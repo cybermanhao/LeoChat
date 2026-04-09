@@ -25,6 +25,8 @@ import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { usePromptStore } from "../stores/prompt";
 import { mcpApi } from "../lib/api";
+import { assembleSystemPrompt } from "../lib/prompt-assembly";
+import { executeLeoCardAction } from "../lib/card-actions";
 import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 
@@ -96,10 +98,13 @@ export function ChatArea() {
       return toolCallItems.map((item) => {
         const toolCall = item.content as ToolCall;
         const state = toolCallStates[toolCall.id];
+        // ContentItem 用 'completed'，ToolCallState 用 'success'，需要转换
+        // 重启后 toolCallStates 为空，从持久化的 contentItems.status 恢复显示状态
+        const persistedStatus = item.status === "completed" ? "success" : item.status;
         return {
           id: toolCall.id,
           name: toolCall.name || '',
-          status: (state?.status || "pending") as "pending" | "running" | "success" | "error",
+          status: (state?.status || persistedStatus || "pending") as "pending" | "running" | "success" | "error",
           arguments: toolCall.arguments,
           result: state?.result,
           error: state?.error,
@@ -159,6 +164,10 @@ export function ChatArea() {
   const customPrompts = usePromptStore((s) => s.customPrompts);
   const mcpPromptCache = usePromptStore((s) => s.mcpPromptCache);
   const cachePromptContent = usePromptStore((s) => s.cachePromptContent);
+  const systemPrompt = usePromptStore((s) => s.systemPrompt);
+  const attachedMcpPrompts = usePromptStore((s) => s.attachedMcpPrompts);
+  const promptVersion = usePromptStore((s) => s.promptVersion);
+  const attachMcpPrompt = usePromptStore((s) => s.attachMcpPrompt);
 
   // 自动拉取已连接 MCP 服务器的提示词（无必填参数的）
   useEffect(() => {
@@ -192,24 +201,63 @@ export function ChatArea() {
     }
   }, [mcpSources, mcpServerStates, mcpPromptCache, cachePromptContent]);
 
-  // 组合最终 system prompt：所有已缓存的 MCP 提示词 + 激活的自定义提示词
-  const selectedPromptContent = useMemo(() => {
-    const parts: string[] = [];
-    for (const source of mcpSources) {
-      for (const server of source.servers) {
-        const state = mcpServerStates[server.id];
-        for (const p of state?.prompts ?? []) {
-          const key = `${server.id}:${p.name}`;
-          if (mcpPromptCache[key]) parts.push(mcpPromptCache[key]);
+  // 迁移逻辑：promptVersion === 0 时自动附加所有已缓存的无参 MCP 提示词
+  useEffect(() => {
+    if (promptVersion !== 0) return;
+    // 等待至少有一个 MCP 提示词被缓存后再迁移
+    const cachedKeys = Object.keys(mcpPromptCache);
+    if (cachedKeys.length === 0) {
+      // 检查是否有任何可缓存的无参提示词——如果没有，直接迁移
+      let hasNoArgPrompts = false;
+      for (const source of mcpSources) {
+        for (const server of source.servers) {
+          const state = mcpServerStates[server.id];
+          if (!state?.prompts?.length) continue;
+          for (const p of state.prompts) {
+            if (!p.arguments?.some((a: { required?: boolean }) => a.required)) {
+              hasNoArgPrompts = true;
+            }
+          }
         }
       }
+      if (!hasNoArgPrompts) {
+        // 没有无参 MCP 提示词，直接设置版本号
+        usePromptStore.setState({ promptVersion: 1 });
+      }
+      return;
     }
-    if (activePrompt?.type === "custom") {
-      const custom = customPrompts.find((p) => p.id === activePrompt.id);
-      if (custom?.content) parts.push(custom.content);
+
+    // 自动附加所有已缓存的无参 MCP 提示词
+    for (const key of cachedKeys) {
+      const [serverId, ...rest] = key.split(":");
+      const promptName = rest.join(":");
+      attachMcpPrompt(serverId, promptName);
     }
-    return parts.length > 0 ? parts.join("\n\n") : null;
-  }, [mcpSources, mcpServerStates, mcpPromptCache, activePrompt, customPrompts]);
+    usePromptStore.setState({ promptVersion: 1 });
+  }, [promptVersion, mcpPromptCache, mcpSources, mcpServerStates, attachMcpPrompt]);
+
+  // 组合最终 system prompt：系统提示 + 已附加的 MCP 模板 + 激活的自定义提示词
+  const assembledPrompt = useMemo(() => {
+    return assembleSystemPrompt({
+      systemPrompt,
+      attachedMcpPrompts,
+      mcpPromptCache,
+      activePrompt,
+      customPrompts,
+    });
+  }, [systemPrompt, attachedMcpPrompts, mcpPromptCache, activePrompt, customPrompts]);
+
+  // 监听 send_message ui-command 事件（用于卡片交互式游戏等）
+  useEffect(() => {
+    const handleSendMessage = (e: Event) => {
+      const { text } = (e as CustomEvent<{ text: string }>).detail;
+      if (text && !isGenerating) {
+        sendMessage(text, assembledPrompt);
+      }
+    };
+    window.addEventListener("ui-command:send-message", handleSendMessage);
+    return () => window.removeEventListener("ui-command:send-message", handleSendMessage);
+  }, [isGenerating, sendMessage, assembledPrompt]);
 
   // 点击外部关闭 Temperature Popover
   useEffect(() => {
@@ -266,7 +314,11 @@ export function ChatArea() {
 
   const handleSend = () => {
     if (input.trim() && !isGenerating) {
-      sendMessage(input, selectedPromptContent ?? undefined);
+      // 在用户手势中请求通知权限（首次），之后静默跳过
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+      sendMessage(input, assembledPrompt);
     }
   };
 
@@ -477,7 +529,7 @@ export function ChatArea() {
       onSend={handleSend}
       onCancel={cancelGeneration}
       isLoading={isGenerating}
-      placeholder={selectedPromptContent ? t("chat.placeholderWithPrompt") : t("chat.placeholderDefault")}
+      placeholder={assembledPrompt ? t("chat.placeholderWithPrompt") : t("chat.placeholderDefault")}
       toolbar={toolbar}
     />
   );
@@ -553,6 +605,7 @@ export function ChatArea() {
                 message.role === "assistant"
               }
               toolCallStates={getToolCallStatesForMessage(message)}
+              onCardAction={executeLeoCardAction}
               actions={
                 message.role === "assistant" ? (
                   <MessageActions

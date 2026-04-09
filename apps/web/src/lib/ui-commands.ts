@@ -21,6 +21,7 @@
  */
 
 import { useThemeStore } from "../stores/theme";
+import { sendOSNotification } from "./os-notification";
 
 // ============================================================================
 // 类型定义
@@ -86,6 +87,11 @@ export interface CommandPayloadMap {
   set_input: {
     text: string;
     append?: boolean;
+  };
+
+  // 直接发送消息（用于卡片交互式游戏等场景）
+  send_message: {
+    text: string;
   };
 }
 
@@ -205,6 +211,8 @@ registerCommandHandler("show_notification", (payload) => {
     setTimeout(() => notification.remove(), 300);
   }, duration);
 
+  sendOSNotification("LeoChat", message);
+
   return {
     executed: true,
     message: `Notification shown: ${message}`,
@@ -300,6 +308,21 @@ registerCommandHandler("scroll_to_message", (payload) => {
   return {
     executed: false,
     message: "Chat container not found",
+  };
+});
+
+/**
+ * send_message - 直接发送消息（用于卡片交互）
+ */
+registerCommandHandler("send_message", (payload) => {
+  const { text } = payload;
+  const event = new CustomEvent("ui-command:send-message", {
+    detail: { text },
+  });
+  window.dispatchEvent(event);
+  return {
+    executed: true,
+    message: `Message sent: ${text.substring(0, 50)}`,
   };
 });
 

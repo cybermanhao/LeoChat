@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
+import { readFile, writeFile, unlink, mkdir } from "fs/promises";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { createServer, startServer } from "@ai-chatbox/server";
 import { createSessionManager } from "@ai-chatbox/mcp-core";
@@ -114,6 +115,28 @@ function setupIPC(): void {
       return sessionManager.callTool(toolName, args);
     }
   );
+
+  // Storage handlers (replace localStorage with file-based storage)
+  const storageDir = join(app.getPath("userData"), "leochat-storage");
+
+  ipcMain.handle("storage:getItem", async (_, key: string) => {
+    try {
+      return await readFile(join(storageDir, `${key}.json`), "utf-8");
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle("storage:setItem", async (_, key: string, value: string) => {
+    await mkdir(storageDir, { recursive: true });
+    await writeFile(join(storageDir, `${key}.json`), value, "utf-8");
+  });
+
+  ipcMain.handle("storage:removeItem", async (_, key: string) => {
+    try {
+      await unlink(join(storageDir, `${key}.json`));
+    } catch {}
+  });
 
   // LLM chat (proxy to server)
   ipcMain.handle(IPC_CHANNELS.LLM_CHAT, async (_, messages, options) => {

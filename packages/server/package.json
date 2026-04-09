@@ -24,6 +24,10 @@
     "@ai-chatbox/mcp-core": "workspace:*",
     "@ai-chatbox/shared": "workspace:*",
     "@hono/node-server": "^1.13.7",
+    "@modelcontextprotocol/server-everything": "latest",
+    "@modelcontextprotocol/server-filesystem": "latest",
+    "@modelcontextprotocol/server-memory": "latest",
+    "@tokenizin/mcp-npx-fetch": "latest",
     "dotenv": "^17.2.3",
     "hono": "^4.6.14",
     "openai": "^4.77.0"

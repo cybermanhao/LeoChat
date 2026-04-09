@@ -3,6 +3,7 @@ import {
   MessageSquareText,
   Check,
   CheckCircle2,
+  Circle,
   Plus,
   Pencil,
   Trash2,
@@ -11,6 +12,7 @@ import {
   User,
   ChevronDown,
   ChevronRight,
+  Settings2,
 } from "lucide-react";
 import { Button, Popover, PopoverContent, PopoverTrigger, cn } from "@ai-chatbox/ui";
 import { usePromptStore } from "../stores/prompt";
@@ -84,6 +86,7 @@ function EditForm({ initialName = "", initialContent = "", onSave, onCancel }: E
 // ---- 主组件 ----
 export function SystemPromptPanel() {
   const [open, setOpen] = useState(false);
+  const [systemSectionOpen, setSystemSectionOpen] = useState(true);
   const [mcpSectionOpen, setMcpSectionOpen] = useState(true);
   const [customSectionOpen, setCustomSectionOpen] = useState(true);
 
@@ -95,12 +98,21 @@ export function SystemPromptPanel() {
     customPrompts,
     activePrompt,
     mcpPromptCache,
+    attachedMcpPrompts,
+    systemPrompt,
     addCustomPrompt,
     updateCustomPrompt,
     deleteCustomPrompt,
     setActiveCustomPrompt,
     clearActivePrompt,
+    attachMcpPrompt,
+    detachMcpPrompt,
+    setSystemPrompt,
   } = usePromptStore();
+
+  // 系统提示词本地编辑状态
+  const [localSystemPrompt, setLocalSystemPrompt] = useState<string | null>(null);
+  const currentSystemPrompt = localSystemPrompt !== null ? localSystemPrompt : systemPrompt;
 
   // 从 MCP Store 获取 prompts
   const mcpSources = useMCPStore((s) => s.sources);
@@ -128,12 +140,8 @@ export function SystemPromptPanel() {
     return list;
   }, [mcpSources, mcpServerStates]);
 
-  // 已自动包含的 MCP 提示词数量（已缓存且来自当前连接服务器）
-  const activeMcpCount = useMemo(() => {
-    return mcpPrompts.filter(
-      (p) => !p.hasRequiredArgs && !!mcpPromptCache[`${p.serverId}:${p.name}`]
-    ).length;
-  }, [mcpPrompts, mcpPromptCache]);
+  // 已附加的 MCP 提示词数量
+  const activeMcpCount = attachedMcpPrompts.length;
 
   const handleSelectCustom = useCallback(
     (id: string) => {
@@ -170,18 +178,49 @@ export function SystemPromptPanel() {
     }
   };
 
+  // MCP 模板附加/取消附加
+  const handleToggleMcpPrompt = (serverId: string, promptName: string) => {
+    const key = `${serverId}:${promptName}`;
+    if (attachedMcpPrompts.includes(key)) {
+      detachMcpPrompt(serverId, promptName);
+    } else {
+      attachMcpPrompt(serverId, promptName);
+    }
+  };
+
+  // 系统提示词失焦保存
+  const handleSystemPromptBlur = () => {
+    if (localSystemPrompt !== null) {
+      setSystemPrompt(localSystemPrompt);
+      setLocalSystemPrompt(null);
+    }
+  };
+
   // 当前激活的名称（用于触发器按钮展示）
   const activeName = useMemo(() => {
-    const customName =
-      activePrompt?.type === "custom"
-        ? customPrompts.find((p) => p.id === activePrompt.id)?.name ?? null
-        : null;
-    if (customName && activeMcpCount > 0) return `${customName} +MCP`;
-    if (activeMcpCount > 0) return `MCP ×${activeMcpCount}`;
-    return customName;
-  }, [activePrompt, customPrompts, activeMcpCount]);
+    const parts: string[] = [];
 
-  const isActive = !!activePrompt || activeMcpCount > 0;
+    // 系统提示词指示
+    if (systemPrompt.trim()) {
+      parts.push("\u00b7"); // middle dot
+    }
+
+    // MCP 附加数量
+    if (activeMcpCount > 0) {
+      parts.push(`MCP\u00d7${activeMcpCount}`);
+    }
+
+    // 自定义提示词名称
+    if (activePrompt?.type === "custom") {
+      const customName = customPrompts.find((p) => p.id === activePrompt.id)?.name;
+      if (customName) parts.push(customName);
+    }
+
+    if (parts.length === 0) return null;
+    return parts.join(" \u00b7 ");
+  }, [systemPrompt, activeMcpCount, activePrompt, customPrompts]);
+
+  const isActive = !!activePrompt || activeMcpCount > 0 || systemPrompt.trim().length > 0;
 
   // ---- 触发器按钮 ----
   const trigger = (
@@ -196,13 +235,13 @@ export function SystemPromptPanel() {
     >
       <MessageSquareText className="h-4 w-4" />
       <span className="hidden sm:inline truncate max-w-[120px]">
-        {activeName ?? "系统提示"}
+        {activeName ? `提示词 ${activeName}` : "提示词"}
       </span>
     </Button>
   );
 
   return (
-    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditingId(null); }}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); handleSystemPromptBlur(); } }}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         side="top"
@@ -214,7 +253,7 @@ export function SystemPromptPanel() {
         <div className="flex items-center justify-between h-10 px-3 border-b">
           <div className="flex items-center gap-1.5">
             <MessageSquareText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">系统提示词</span>
+            <span className="text-sm font-medium">提示词</span>
           </div>
           {/* 仅在有激活的自定义提示词时显示清除按钮 */}
           {activePrompt?.type === "custom" && (
@@ -230,7 +269,42 @@ export function SystemPromptPanel() {
 
         <div className="max-h-[420px] overflow-y-auto">
 
-          {/* ---- MCP 提供的 Prompt（自动包含） ---- */}
+          {/* ---- 系统提示（基础指令） ---- */}
+          <div>
+            <button
+              className="flex items-center gap-1.5 w-full h-7 px-3 text-[11px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+              onClick={() => setSystemSectionOpen((v) => !v)}
+            >
+              {systemSectionOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <Settings2 className="h-3 w-3" />
+              系统提示
+              {systemPrompt.trim() && (
+                <span className="ml-1 text-[10px] text-green-600 font-medium">
+                  已设置
+                </span>
+              )}
+            </button>
+
+            {systemSectionOpen && (
+              <div className="px-3 py-2">
+                <textarea
+                  value={currentSystemPrompt}
+                  onChange={(e) => setLocalSystemPrompt(e.target.value)}
+                  onBlur={handleSystemPromptBlur}
+                  placeholder="输入基础系统指令..."
+                  rows={3}
+                  className="w-full resize-none rounded border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed text-foreground placeholder:text-muted-foreground"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  基础指令，始终在最前面
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t" />
+
+          {/* ---- MCP 模板 ---- */}
           <div>
             <button
               className="flex items-center gap-1.5 w-full h-7 px-3 text-[11px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
@@ -238,10 +312,10 @@ export function SystemPromptPanel() {
             >
               {mcpSectionOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               <Server className="h-3 w-3" />
-              MCP 提供（自动）
+              MCP 模板
               {activeMcpCount > 0 && (
                 <span className="ml-1 text-[10px] text-green-600 font-medium">
-                  {activeMcpCount} 已激活
+                  {activeMcpCount} 已附加
                 </span>
               )}
               <span className="ml-auto text-[10px]">{mcpPrompts.length}</span>
@@ -257,18 +331,29 @@ export function SystemPromptPanel() {
                   mcpPrompts.map((prompt) => {
                     const key = `${prompt.serverId}:${prompt.name}`;
                     const isCached = !!mcpPromptCache[key];
+                    const isAttached = attachedMcpPrompts.includes(key);
                     const isLoading = !prompt.hasRequiredArgs && !isCached;
 
                     return (
                       <div
                         key={key}
-                        className="flex items-center gap-2 px-3 py-2"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 transition-colors",
+                          !prompt.hasRequiredArgs && isCached && "cursor-pointer hover:bg-muted/50"
+                        )}
+                        onClick={() => {
+                          if (!prompt.hasRequiredArgs && isCached) {
+                            handleToggleMcpPrompt(prompt.serverId, prompt.name);
+                          }
+                        }}
                       >
                         <div className="w-4 h-4 flex items-center justify-center shrink-0">
                           {prompt.hasRequiredArgs ? (
                             <span className="h-3 w-3 rounded-full border border-muted-foreground/40 block" />
-                          ) : isCached ? (
+                          ) : isAttached ? (
                             <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                          ) : isCached ? (
+                            <Circle className="h-3.5 w-3.5 text-muted-foreground/50" />
                           ) : (
                             <span className="h-3 w-3 rounded-full border border-muted-foreground/40 block animate-pulse" />
                           )}
@@ -283,10 +368,6 @@ export function SystemPromptPanel() {
                         {prompt.hasRequiredArgs ? (
                           <span className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
                             需要参数
-                          </span>
-                        ) : isCached ? (
-                          <span className="text-[9px] text-green-600 font-medium bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">
-                            自动
                           </span>
                         ) : isLoading ? (
                           <span className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
@@ -373,7 +454,7 @@ export function SystemPromptPanel() {
                           {prompt.name}
                         </div>
                         <div className="text-[10px] text-muted-foreground truncate">
-                          {prompt.content.slice(0, 60)}{prompt.content.length > 60 ? "…" : ""}
+                          {prompt.content.slice(0, 60)}{prompt.content.length > 60 ? "..." : ""}
                         </div>
                       </button>
                       {/* 操作按钮 */}
