@@ -72,6 +72,17 @@ export class LeoAgent {
     return this;
   }
 
+  /** 覆盖模型名称（保留其他 LLM 配置不变） */
+  setModel(model: string): this {
+    if (this.llmConfig) {
+      this.llmConfig = { ...this.llmConfig, model };
+    } else {
+      // 没有现有配置时，创建最小配置（provider/apiKey 需从配置文件或环境变量获取）
+      this.llmConfig = { provider: "openrouter" as any, model, apiKey: "" };
+    }
+    return this;
+  }
+
   /** 设置基础 system prompt */
   setSystemPrompt(prompt: string): this {
     this.systemPromptBase = prompt;
@@ -177,6 +188,64 @@ export class LeoAgent {
 
     // 6. 执行并收集结果
     return this.runLoop(loop, userMessage);
+  }
+
+  /**
+   * 检查所有已配置的 MCP server 连接状态。
+   * 返回每个 server 的连接结果（名称、状态、工具数、错误信息）。
+   */
+  async checkConnections(): Promise<Array<{
+    name: string;
+    status: "connected" | "error";
+    tools: number;
+    error?: string;
+  }>> {
+    const results: Array<{
+      name: string;
+      status: "connected" | "error";
+      tools: number;
+      error?: string;
+    }> = [];
+
+    // 强制重连以获取最新状态
+    this.connected = false;
+
+    for (const { name, config } of this.mcpServerConfigs) {
+      const serverConfig: MCPServerConfig = {
+        id: name,
+        name,
+        transport: config.transport ?? (config.url ? "streamable-http" : "stdio"),
+        command: config.command,
+        args: config.args,
+        cwd: config.cwd,
+        url: config.url,
+        env: config.env,
+      };
+      const client = new MCPClient({ config: serverConfig });
+      try {
+        await client.connect();
+        results.push({
+          name,
+          status: "connected",
+          tools: client.availableTools.length,
+        });
+        await client.disconnect().catch(() => {});
+      } catch (e) {
+        results.push({
+          name,
+          status: "error",
+          tools: 0,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /** 获取当前 LLM 配置（用于诊断） */
+  getLLMConfig(): LLMConfig | undefined {
+    return this.llmConfig;
   }
 
   /** 断开所有 MCP 连接 */

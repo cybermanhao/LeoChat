@@ -35,9 +35,7 @@ program
 
     // 2. 模型覆盖
     if (opts.model) {
-      // --model 只覆盖 model 字段，其余 LLM 配置来自 config 文件
-      // 如果没有 config，model 必须通过环境变量或代码配置
-      agent.onToolCall((tc) => tc); // no-op，确保链不中断
+      agent.setModel(opts.model);
     }
 
     // 3. 系统 prompt 覆盖
@@ -123,6 +121,7 @@ program
 
     const agent = new LeoAgent();
 
+    // 1. Config file
     if (opts.config) {
       try {
         agent.loadConfig(opts.config);
@@ -131,8 +130,21 @@ program
         process.stderr.write(`\x1b[31m✗\x1b[0m Config error: ${(e as Error).message}\n`);
         process.exit(1);
       }
+    } else {
+      process.stderr.write(`\x1b[33m⚠\x1b[0m No config file specified (use --config)\n`);
     }
 
+    // 2. LLM config
+    const llm = agent.getLLMConfig();
+    if (llm) {
+      const hasKey = llm.apiKey && llm.apiKey.length > 0;
+      const keyStatus = hasKey ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
+      process.stderr.write(`${keyStatus} LLM: ${llm.provider} / ${llm.model}${hasKey ? "" : " (no API key)"}\n`);
+    } else {
+      process.stderr.write(`\x1b[33m⚠\x1b[0m No LLM configured\n`);
+    }
+
+    // 3. Skills
     if (opts.skillsDir) {
       agent.loadSkills(opts.skillsDir);
       const skills = agent.listSkills();
@@ -143,9 +155,21 @@ program
       }
     }
 
-    // 触发 MCP 连接验证（通过 ainvoke 一个轻量探测不可行，直接检查连接状态）
-    process.stderr.write("\nMCP server connection test is not yet implemented in v1.\n");
-    process.stderr.write("Use --config to validate JSON format and env var expansion.\n");
+    // 4. MCP server connections
+    process.stderr.write("\nTesting MCP server connections...\n");
+    const results = await agent.checkConnections();
+
+    if (results.length === 0) {
+      process.stderr.write(`\x1b[33m⚠\x1b[0m No MCP servers configured\n`);
+    } else {
+      for (const r of results) {
+        if (r.status === "connected") {
+          process.stderr.write(`\x1b[32m✓\x1b[0m ${r.name} — ${r.tools} tool(s)\n`);
+        } else {
+          process.stderr.write(`\x1b[31m✗\x1b[0m ${r.name} — ${r.error}\n`);
+        }
+      }
+    }
 
     await agent.disconnect().catch(() => {});
     process.stderr.write("\nDone.\n");
