@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ecommerce": {
+      "command": "node",
+      "args": ["mcp-servers/ecommerce/dist/index.js"],
+      "cwd": "${PWD}"
+    }
+  },
+  "defaultLLM": {
+    "provider": "deepseek",
+    "apiKey": "${DEEPSEEK_API_KEY}",
+    "model": "deepseek-chat",
+    "maxTokens": 1024
+  }
+}
