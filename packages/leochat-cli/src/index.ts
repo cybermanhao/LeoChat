@@ -1,3 +1,4 @@
+import { fileURLToPath } from "url";
 import { Command } from "commander";
 import { LeoAgent } from "@leochat/sdk";
 import type { AgentResult } from "@leochat/sdk";
@@ -95,10 +96,7 @@ program
     } else {
       printChunk(result.text);
       printDone();
-
-      if (opts.output !== "json") {
-        printToolSummary(result.toolCalls);
-      }
+      printToolSummary(result.toolCalls);
 
       // 打印 token 统计到 stderr
       if (result.usage.input > 0 || result.usage.output > 0) {
@@ -175,4 +173,11 @@ program
     process.stderr.write("\nDone.\n");
   });
 
-program.parseAsync(process.argv);
+export async function run(argv: string[] = process.argv): Promise<void> {
+  await program.parseAsync(argv);
+}
+
+// Only auto-run when executed directly (ESM main module detection)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  run();
+}
