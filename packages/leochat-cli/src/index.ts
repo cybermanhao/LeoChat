@@ -82,6 +82,7 @@ program
     } catch (e) {
       process.stderr.write(`\x1b[31mError: ${(e as Error).message}\x1b[0m\n`);
       process.exit(1);
+      return;
     } finally {
       await agent.disconnect().catch(() => {});
     }
