@@ -15,6 +15,7 @@
     "build:electron": "pnpm --filter @ai-chatbox/electron build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm --filter @leochat/sdk --filter @leochat/cli test",
     "clean": "pnpm -r run clean && rimraf node_modules"
   },
   "devDependencies": {
