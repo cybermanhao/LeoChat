@@ -271,7 +271,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
 
       case "done": {
-        if (event.internalMessages) {
+        const internalMessages = event.internalMessages;
+        if (internalMessages) {
           set((state) => ({
             cardStatus: "stable",
             isGenerating: false,
@@ -279,7 +280,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
               c.id === chatId
                 ? {
                     ...c,
-                    contextMessages: event.internalMessages.map((msg: ChatMessage) => ({
+                    contextMessages: internalMessages.map((msg: ChatMessage) => ({
                       id: msg.id,
                       role: msg.role,
                       content: msg.content || "",

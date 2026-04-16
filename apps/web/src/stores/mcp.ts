@@ -548,7 +548,7 @@ export const useMCPStore = create<MCPState>()(
               newServerStates[session.serverId] = {
                 ...newServerStates[session.serverId],
                 serverId: session.serverId,
-                enabled: session.status === "connected" || session.status === "reconnecting",
+                enabled: session.status === "connected",
                 session,
               };
             }

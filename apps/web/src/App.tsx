@@ -42,7 +42,7 @@ function AppInit({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     migrateFromLocalStorage("ai-chatbox-chat", getChatStorageAdapter());
-    if (import.meta.env.DEV) {
+    if ((import.meta as any).env?.DEV) {
       (window as any).__devClearHistory = () => {
         useChatStore.getState().clearAllConversations();
         console.log("[Dev] All chat history cleared");

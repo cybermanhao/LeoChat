@@ -11,7 +11,7 @@ import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
 
 interface ProviderConfig {
   name: string;
@@ -50,6 +50,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       link: "https://platform.openai.com/api-keys",
       linkText: t("settings.api.linkTextOpenAI"),
     },
+    moonshot: {
+      name: "Moonshot",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionMoonshot"),
+      link: "https://platform.moonshot.cn/console/api-keys",
+      linkText: t("settings.api.linkTextMoonshot"),
+    },
   }), [t]);
   const { providerKeys, setProviderKey, currentProvider, setCurrentProvider } = useChatStore();
 
@@ -57,11 +64,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     deepseek: "",
     openrouter: "",
     openai: "",
+    moonshot: "",
   });
   const [showKeys, setShowKeys] = useState<Record<LLMProvider, boolean>>({
     deepseek: false,
     openrouter: false,
     openai: false,
+    moonshot: false,
   });
   const [saved, setSaved] = useState(false);
 
@@ -71,6 +80,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         deepseek: providerKeys.deepseek || "",
         openrouter: providerKeys.openrouter || "",
         openai: providerKeys.openai || "",
+        moonshot: providerKeys.moonshot || "",
       });
       setSaved(false);
     }
