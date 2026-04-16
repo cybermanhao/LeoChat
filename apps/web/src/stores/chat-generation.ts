@@ -353,7 +353,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
 
       case "done": {
-        if (event.internalMessages) {
+        const internalMessages = event.internalMessages;
+        if (internalMessages) {
           set((state) => ({
             cardStatus: "stable",
             isGenerating: false,
