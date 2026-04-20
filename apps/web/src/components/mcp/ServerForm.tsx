@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Resolver } from "react-hook-form";
 import {
   MCPServerConfigSchema,
   type MCPServerConfigValidated,
@@ -142,6 +143,13 @@ function ArgsInput({
   const [items, setItems] = useState<string[]>(
     defaultValue && defaultValue.length > 0 ? defaultValue : [""]
   );
+  const argFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (argFocusTimerRef.current) clearTimeout(argFocusTimerRef.current);
+    };
+  }, []);
 
   const hint = useMemo(() => detectMCPHint(items), [items]);
 
@@ -177,7 +185,8 @@ function ArgsInput({
       const next = [...items];
       next.splice(index + 1, 0, "");
       setItems(next);
-      setTimeout(() => {
+      if (argFocusTimerRef.current) clearTimeout(argFocusTimerRef.current);
+      argFocusTimerRef.current = setTimeout(() => {
         const el = document.getElementById(`arg-${index + 1}`);
         el?.focus();
       }, 0);
@@ -185,7 +194,8 @@ function ArgsInput({
     if (e.key === "Backspace" && items[index] === "" && items.length > 1) {
       e.preventDefault();
       handleRemove(index);
-      setTimeout(() => {
+      if (argFocusTimerRef.current) clearTimeout(argFocusTimerRef.current);
+      argFocusTimerRef.current = setTimeout(() => {
         const target = Math.max(0, index - 1);
         const el = document.getElementById(`arg-${target}`);
         el?.focus();
@@ -217,7 +227,7 @@ function ArgsInput({
       <Label className="text-sm font-medium">{t("mcp.form.args")}</Label>
       <div className="mt-1.5 space-y-2">
         {items.map((item, index) => (
-          <div key={index} className="flex items-center gap-2">
+          <div key={`arg-${index}`} className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground w-5 text-right shrink-0">
               {index + 1}
             </span>
@@ -255,7 +265,7 @@ function ArgsInput({
       {hint && (needsExtraArgs || (hint.envHints && hint.envHints.length > 0)) && (
         <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs space-y-2">
           {needsExtraArgs && hint.extraArgs.map((extra, i) => (
-            <div key={i} className="flex items-start gap-2">
+            <div key={`extra-${i}`} className="flex items-start gap-2">
               <span className="text-blue-500 mt-0.5">*</span>
               <span className="text-blue-700">
                 {extra.description}
@@ -294,6 +304,13 @@ function EnvInput({
   );
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const envFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (envFocusTimerRef.current) clearTimeout(envFocusTimerRef.current);
+    };
+  }, []);
 
   const syncToForm = useCallback(
     (updated: { key: string; value: string }[]) => {
@@ -323,7 +340,8 @@ function EnvInput({
     setNewKey("");
     setNewValue("");
     // 聚焦回 key 输入框
-    setTimeout(() => document.getElementById("env-new-key")?.focus(), 0);
+    if (envFocusTimerRef.current) clearTimeout(envFocusTimerRef.current);
+    envFocusTimerRef.current = setTimeout(() => document.getElementById("env-new-key")?.focus(), 0);
   };
 
   const handleRemove = (index: number) => {
@@ -351,7 +369,7 @@ function EnvInput({
       {items.length > 0 && (
         <div className="mt-1.5 space-y-2">
           {items.map((item, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={`env-${item.key}-${index}`} className="flex items-center gap-2">
               <input
                 value={item.key}
                 onChange={(e) => handleItemChange(index, "key", e.target.value)}
@@ -438,7 +456,7 @@ export function ServerForm({
     setValue,
     formState: { errors, isDirty },
   } = useForm<MCPServerConfigValidated>({
-    resolver: zodResolver(MCPServerConfigSchema),
+    resolver: zodResolver(MCPServerConfigSchema) as Resolver<MCPServerConfigValidated, any>,
     defaultValues: {
       transport: "stdio",
       command: "npx",

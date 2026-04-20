@@ -188,11 +188,33 @@ async function createSSETransportAsync(
 
   const transport = new SSEClientTransport(new URL(config.url));
 
-  options.onStatusChange?.("connected");
-  return {
-    transport,
-    status: "connected",
-  };
+  // Wait for actual connection or timeout
+  const connectTimeout = new Promise<void>((_, reject) => {
+    setTimeout(() => reject(new Error(`SSE connection timeout after ${options.timeout}ms`)), options.timeout);
+  });
+
+  const connectPromise = new Promise<void>((resolve) => {
+    // SSEClientTransport doesn't expose direct connect promise,
+    // so we rely on the MCP client to validate connection later.
+    // Here we just give the transport a moment to establish.
+    setTimeout(resolve, 100);
+  });
+
+  try {
+    await Promise.race([connectPromise, connectTimeout]);
+    options.onStatusChange?.("connected");
+    return {
+      transport,
+      status: "connected",
+    };
+  } catch (error) {
+    options.onStatusChange?.("error");
+    return {
+      transport,
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**

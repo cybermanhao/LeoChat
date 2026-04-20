@@ -12,8 +12,11 @@ import {
 
 export function Sidebar() {
   const { t } = useT();
-  const { conversations, currentConversationId, setCurrentConversation, createConversation, deleteConversation } =
-    useChatStore();
+  const conversations = useChatStore((s) => s.conversations);
+  const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
+  const createConversation = useChatStore((s) => s.createConversation);
+  const deleteConversation = useChatStore((s) => s.deleteConversation);
 
   return (
     <LeftDrawer>

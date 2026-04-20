@@ -308,9 +308,9 @@ export const useMCPStore = create<MCPState>()(
         }));
       },
 
-      removeServer: (serverId) => {
-        // 先断开连接
-        get().disconnectServer(serverId);
+      removeServer: async (serverId) => {
+        // 先等待断开连接完成，避免状态与后端不一致
+        await get().disconnectServer(serverId);
 
         set((state) => ({
           sources: state.sources.map((source) => ({
@@ -347,7 +347,10 @@ export const useMCPStore = create<MCPState>()(
       },
 
       connectServer: async (serverId) => {
-        const { sources, setConnecting, fetchServerVersion } = get();
+        const { sources, setConnecting, fetchServerVersion, enabledServerIds, connectingServerIds } = get();
+        if (enabledServerIds.includes(serverId) || connectingServerIds.has(serverId)) {
+          return;
+        }
 
         // 找到服务配置
         let serverConfig: MCPServerConfig | undefined;
@@ -416,7 +419,7 @@ export const useMCPStore = create<MCPState>()(
           serverStates: {
             ...state.serverStates,
             [serverId]: {
-              ...state.serverStates[serverId],
+              ...(state.serverStates[serverId] || {}),
               serverId,
               enabled: false,
               session: undefined,

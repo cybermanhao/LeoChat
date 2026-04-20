@@ -46,7 +46,19 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const isBusy = sendState !== "idle";
 
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-    const combinedRef = ref || textareaRef;
+
+    // Merge forwarded ref with local ref to support both callback and object refs
+    const setRefs = React.useCallback(
+      (node: HTMLTextAreaElement | null) => {
+        textareaRef.current = node;
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+        }
+      },
+      [ref]
+    );
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -88,7 +100,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
           )}
 
           <textarea
-            ref={combinedRef as React.RefObject<HTMLTextAreaElement>}
+            ref={setRefs}
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}

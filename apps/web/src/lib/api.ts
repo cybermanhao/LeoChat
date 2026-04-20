@@ -111,11 +111,13 @@ export const chatApi = {
 
   async getMCPSessions() {
     const response = await fetch(`${API_BASE}/mcp/sessions`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
   async getMCPTools() {
     const response = await fetch(`${API_BASE}/mcp/tools`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -127,6 +129,10 @@ export const chatApi = {
       },
       body: JSON.stringify(args),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 
@@ -136,6 +142,7 @@ export const chatApi = {
     backendConfigured: boolean;
   }> {
     const response = await fetch(`${API_BASE}/llm/config`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -145,6 +152,10 @@ export const chatApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider, apiKey }),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 };
@@ -154,6 +165,7 @@ export const mcpApi = {
   // Server management
   async getServers(): Promise<MCPServerConfig[]> {
     const response = await fetch(`${API_BASE}/mcp/servers`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -163,6 +175,10 @@ export const mcpApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 
@@ -170,6 +186,7 @@ export const mcpApi = {
     const response = await fetch(`${API_BASE}/mcp/servers/${serverId}`, {
       method: "DELETE",
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -178,6 +195,10 @@ export const mcpApi = {
     const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/connect`, {
       method: "POST",
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 
@@ -185,11 +206,13 @@ export const mcpApi = {
     const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/disconnect`, {
       method: "POST",
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
   async getSessions(): Promise<MCPSession[]> {
     const response = await fetch(`${API_BASE}/mcp/sessions`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -201,6 +224,7 @@ export const mcpApi = {
     prompts: MCPPrompt[];
   }> {
     const response = await fetch(`${API_BASE}/mcp/servers/${serverId}/details`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -211,6 +235,10 @@ export const mcpApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uri }),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 
@@ -225,12 +253,17 @@ export const mcpApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, args }),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 
   // Tools
   async getTools(): Promise<unknown[]> {
     const response = await fetch(`${API_BASE}/mcp/tools`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   },
 
@@ -240,6 +273,10 @@ export const mcpApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(args),
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
     return response.json();
   },
 };
@@ -252,9 +289,10 @@ export interface EnvToolStatus {
 }
 
 // Environment API
+// Note: /env/check endpoint was removed for security (information disclosure).
+// Client-side env checks are no longer supported.
 export const envApi = {
   async check(): Promise<EnvToolStatus[]> {
-    const response = await fetch(`${API_BASE}/env/check`);
-    return response.json();
+    return [];
   },
 };

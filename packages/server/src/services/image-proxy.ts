@@ -17,7 +17,11 @@ export interface ImageData {
 
 export class ImageProxyService {
   private cache: Map<string, ImageMetadata> = new Map();
+  private cacheTimers: Map<string, NodeJS.Timeout> = new Map();
   private cacheTimeout = 1000 * 60 * 5; // 5 minutes
+  private fetchTimeoutMs = 30000; // 30 seconds
+  private maxCacheSize = 1000;
+  private maxImageSize = 50 * 1024 * 1024; // 50MB
 
   /**
    * Get image metadata without downloading full image
@@ -31,12 +35,20 @@ export class ImageProxyService {
 
     try {
       // Use HEAD request to get metadata
-      const response = await fetch(url, {
-        method: "HEAD",
-        headers: {
-          "User-Agent": "AI-Chatbox-MCP/1.0",
-        },
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: "HEAD",
+          headers: {
+            "User-Agent": "AI-Chatbox-MCP/1.0",
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         const metadata: ImageMetadata = {
@@ -92,19 +104,54 @@ export class ImageProxyService {
    * Fetch full image data
    */
   async fetchImage(url: string): Promise<ImageData> {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "AI-Chatbox-MCP/1.0",
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          "User-Agent": "AI-Chatbox-MCP/1.0",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.status}`);
     }
 
     const contentType = response.headers.get("content-type") || "image/png";
-    const arrayBuffer = await response.arrayBuffer();
-    const data = Buffer.from(arrayBuffer);
+    const contentLength = response.headers.get("content-length");
+    if (contentLength) {
+      const length = parseInt(contentLength, 10);
+      if (!Number.isNaN(length) && length > this.maxImageSize) {
+        throw new Error(`Image too large: ${length} bytes (max ${this.maxImageSize})`);
+      }
+    }
+
+    // Stream read with hard byte limit
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+    const chunks: Uint8Array[] = [];
+    let totalSize = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalSize += value.length;
+        if (totalSize > this.maxImageSize) {
+          throw new Error(`Image exceeds max size of ${this.maxImageSize} bytes`);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const data = Buffer.concat(chunks);
 
     return {
       data,
@@ -123,17 +170,38 @@ export class ImageProxyService {
   }
 
   private cacheMetadata(url: string, metadata: ImageMetadata): void {
+    // Enforce max cache size with LRU eviction
+    if (this.cache.size >= this.maxCacheSize && !this.cache.has(url)) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        const oldTimer = this.cacheTimers.get(firstKey);
+        if (oldTimer) clearTimeout(oldTimer);
+        this.cache.delete(firstKey);
+        this.cacheTimers.delete(firstKey);
+      }
+    }
+    // Clear existing timer for this URL to prevent stale deletions
+    const existingTimer = this.cacheTimers.get(url);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
     this.cache.set(url, metadata);
     // Auto-clean cache after timeout
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       this.cache.delete(url);
+      this.cacheTimers.delete(url);
     }, this.cacheTimeout);
+    this.cacheTimers.set(url, timer);
   }
 
   /**
-   * Clear the cache
+   * Clear the cache and all pending timers
    */
   clearCache(): void {
+    for (const timer of this.cacheTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.cacheTimers.clear();
     this.cache.clear();
   }
 }

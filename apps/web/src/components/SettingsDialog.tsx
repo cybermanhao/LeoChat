@@ -28,7 +28,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useT();
-  const PROVIDER_CONFIGS = useMemo<Record<LLMProvider, ProviderConfig>>(() => ({
+  const PROVIDER_CONFIGS = useMemo<Partial<Record<LLMProvider, ProviderConfig>>>(() => ({
     deepseek: {
       name: "DeepSeek",
       placeholder: t("settings.api.keyPlaceholder"),
@@ -74,7 +74,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   }), [t]);
   const { providerKeys, setProviderKey, currentProvider, setCurrentProvider } = useChatStore();
 
-  const [localKeys, setLocalKeys] = useState<Record<LLMProvider, string>>({
+  const [localKeys, setLocalKeys] = useState<Partial<Record<LLMProvider, string>>>({
     deepseek: "",
     openrouter: "",
     openai: "",
@@ -82,7 +82,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     "kimi-code": "",
     google: "",
   });
-  const [showKeys, setShowKeys] = useState<Record<LLMProvider, boolean>>({
+  const [showKeys, setShowKeys] = useState<Partial<Record<LLMProvider, boolean>>>({
     deepseek: false,
     openrouter: false,
     openai: false,
@@ -116,8 +116,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
     // 如果当前提供商没有 key，自动切换到有 key 的提供商
     if (!localKeys[currentProvider]?.trim()) {
-      const availableProvider = (Object.entries(localKeys) as [LLMProvider, string][])
-        .find(([, key]) => key.trim())?.[0];
+      const availableProvider = Object.entries(localKeys)
+        .find(([, key]) => key.trim())?.[0] as LLMProvider | undefined;
       if (availableProvider) {
         setCurrentProvider(availableProvider);
       }
@@ -163,7 +163,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       : "border-border hover:bg-muted/50"
                   }`}
                 >
-                  {PROVIDER_CONFIGS[provider].name}
+                  {PROVIDER_CONFIGS[provider]?.name}
                 </button>
               ))}
             </div>

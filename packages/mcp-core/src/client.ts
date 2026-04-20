@@ -119,7 +119,7 @@ export class MCPClient {
   private async connectInternal(): Promise<void> {
     // Create transport based on config (async)
     const transportResult = await createTransportAsync(this.config, {
-      hostMode: typeof process !== "undefined" ? "electron" : "web",
+      hostMode: typeof process !== "undefined" && !!process.versions?.node ? "electron" : "web",
       connectionTimeout: this.config.timeout,
       onStatusChange: (status) => {
         if (status === "error") {
@@ -169,7 +169,9 @@ export class MCPClient {
     this.client.onclose = () => {
       if (!this.intentionalDisconnect) {
         console.log(`[MCP] Connection lost for ${this.config.name}, initiating reconnect...`);
-        this.handleUnexpectedClose();
+        this.handleUnexpectedClose().catch((err) => {
+          this.onError?.(err instanceof Error ? err : new Error(String(err)));
+        });
       }
     };
 
@@ -203,13 +205,15 @@ export class MCPClient {
       if (this.client) {
         await this.client.close();
       }
+    } catch (error) {
+      this.onError?.(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      // Always clean up state even if close() fails
       this.client = null;
       this.transport = null;
       this.tools = [];
       this.capabilities = null;
       this.setStatus("disconnected");
-    } catch (error) {
-      this.onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   }
 

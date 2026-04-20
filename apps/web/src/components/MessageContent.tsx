@@ -32,7 +32,7 @@ export function MessageContent({ message, isStreaming = false, enableMarkdown = 
   };
 
   // 渲染单个内容项
-  const renderItem = (item: MessageContentItem, _index: number) => {
+  const renderItem = (item: MessageContentItem) => {
     switch (item.type) {
       case 'text':
         if (typeof item.content === 'string') {
@@ -165,7 +165,7 @@ export function MessageContent({ message, isStreaming = false, enableMarkdown = 
 
   return (
     <div className="space-y-2">
-      {message.contentItems.map((item, index) => renderItem(item, index))}
+      {message.contentItems.map((item) => renderItem(item))}
 
       {/* 渲染 reasoning_content（如果存在） */}
       {message.reasoning_content && (
@@ -234,7 +234,12 @@ export function LegacyMessageContent({
       message={{
         id: "legacy",
         role: "assistant",
-        contentItems: [{ id: "legacy-text", type: "text" as const, content, timestamp: Date.now() }],
+        contentItems: [{
+          id: "legacy-text",
+          type: "text" as const,
+          content,
+          timestamp: Date.now(),
+        }],
         timestamp: Date.now(),
       }}
       isStreaming={isStreaming}

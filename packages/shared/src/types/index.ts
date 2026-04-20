@@ -132,7 +132,7 @@ export function toMessage(dm: DisplayMessage): Message {
   return {
     id: dm.id,
     role: dm.role,
-    content: textItems.map(item => item.content as string).join(''),
+    content: textItems.map(item => typeof item.content === 'string' ? item.content : '').join(''),
     tool_calls: toolCallItems.length > 0
       ? toolCallItems.map(item => item.content as ToolCall)
       : undefined,
@@ -364,7 +364,9 @@ export interface LLMResponse {
 export interface ServerStatus {
   isRunning: boolean;
   mode: HostMode;
-  mcpSessions: MCPSession[];
+  /** @deprecated Use mcpSessionCount instead */
+  mcpSessions?: MCPSession[];
+  mcpSessionCount?: number;
   uptime: number;
 }
 

@@ -28,8 +28,8 @@ function buildMockAgent(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CLI", () => {
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: any;
+  let stderrSpy: any;
   let mockAgent: ReturnType<typeof buildMockAgent>;
 
   beforeEach(() => {

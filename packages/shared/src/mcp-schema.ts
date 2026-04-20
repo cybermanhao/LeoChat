@@ -27,9 +27,13 @@ export const MCPServerConfigSchema = z.object({
   tags: z.array(z.string()).optional(),
   registryUrl: z.string().optional(),
   timeout: z.preprocess(
-    (val) => (Number.isNaN(val as number) ? undefined : val),
+    (val) => {
+      if (val === null || val === undefined || val === "" || Number.isNaN(val)) return undefined;
+      const num = Number(val);
+      return Number.isNaN(num) ? undefined : num;
+    },
     z.number().int().positive("超时时间必须是正整数").optional()
-  ),
+  ) as unknown as z.ZodOptional<z.ZodNumber>,
   longRunning: z.boolean().optional(),
   autoConnect: z.boolean().optional(),
 

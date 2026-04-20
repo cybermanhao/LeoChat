@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   MessageSquareText,
   Check,
@@ -93,6 +93,15 @@ export function SystemPromptPanel() {
   // "adding" = 新建表单展开, string = 正在编辑的 custom id
   const [editingId, setEditingId] = useState<"adding" | string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmDeleteTimerRef.current) {
+        clearTimeout(confirmDeleteTimerRef.current);
+      }
+    };
+  }, []);
 
   const {
     customPrompts,
@@ -172,9 +181,16 @@ export function SystemPromptPanel() {
     if (confirmDeleteId === id) {
       deleteCustomPrompt(id);
       setConfirmDeleteId(null);
+      if (confirmDeleteTimerRef.current) {
+        clearTimeout(confirmDeleteTimerRef.current);
+        confirmDeleteTimerRef.current = null;
+      }
     } else {
       setConfirmDeleteId(id);
-      setTimeout(() => setConfirmDeleteId(null), 3000);
+      if (confirmDeleteTimerRef.current) {
+        clearTimeout(confirmDeleteTimerRef.current);
+      }
+      confirmDeleteTimerRef.current = setTimeout(() => setConfirmDeleteId(null), 3000);
     }
   };
 

@@ -177,16 +177,26 @@ export class ToolDispatcher {
   async dispatchMany(
     calls: Array<{ name: string; arguments: Record<string, unknown> }>
   ): Promise<DispatchResult[]> {
-    return Promise.all(
+    const results = await Promise.allSettled(
       calls.map((call) => this.dispatch(call.name, call.arguments))
     );
+    const fulfilled: DispatchResult[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        fulfilled.push(result.value);
+      } else {
+        // Re-throw the first rejection so callers can handle it
+        throw result.reason;
+      }
+    }
+    return fulfilled;
   }
 
   /**
    * Check if a tool is available
    */
   hasTools(toolName: string): boolean {
-    return this.toolServerMap.has(toolName);
+    return !!this.resolveToolName(toolName);
   }
 
   /**
