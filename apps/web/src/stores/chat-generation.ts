@@ -8,7 +8,9 @@ import type {
   ContextMessage,
 } from "@ai-chatbox/shared";
 import { LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP, normalizeLeoCard } from "@ai-chatbox/shared";
-import { processToolResultForUICommands } from "../lib/ui-commands";
+import { processToolResultForUICommands, executeUICommand } from "../lib/ui-commands";
+import type { CommandName } from "../lib/ui-commands";
+import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
 import { sendOSNotification } from "../lib/os-notification";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
@@ -79,9 +81,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       systemPrompt,
       contextLength: contextLength > 0 ? contextLength : undefined,
       modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
-      onToolCall: async (toolName: string, args: Record<string, unknown>) => {
-        console.log("Tool call:", toolName, args);
-        throw new Error(`Tool ${toolName} not implemented`);
+      onToolCall: async (toolName: string, _args: Record<string, unknown>) => {
+        throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
       },
     });
 
@@ -137,8 +138,42 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   },
 
   executeAction: (actionName, attributes) => {
-    console.log("Executing action:", actionName, attributes);
-    // TODO: 实现 action 执行
+    // Strip display-only attribute; remaining keys become the payload
+    const { label: _label, ...payload } = attributes;
+
+    // Coerce string values: "true"/"false" → boolean, numeric strings → number
+    const coercedPayload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v === "true") coercedPayload[k] = true;
+      else if (v === "false") coercedPayload[k] = false;
+      else if (v !== "" && !isNaN(Number(v))) coercedPayload[k] = Number(v);
+      else coercedPayload[k] = v;
+    }
+
+    // Known UI command → delegate to executeUICommand
+    const KNOWN_COMMANDS: ReadonlySet<string> = new Set<CommandName>([
+      "update_theme", "show_notification", "show_confirm",
+      "open_panel", "close_panel", "copy_to_clipboard",
+      "open_url", "scroll_to_message", "set_input", "send_message",
+    ]);
+
+    if (KNOWN_COMMANDS.has(actionName)) {
+      Promise.resolve(
+        executeUICommand({
+          __ui_command__: true,
+          command: actionName as CommandName,
+          payload: coercedPayload as never,
+        })
+      ).catch((e) => console.warn("[executeAction]", e));
+      return;
+    }
+
+    // Unknown command → dispatch custom event for external handlers
+    window.dispatchEvent(
+      new CustomEvent(LEO_ACTION_EVENT, {
+        detail: { name: actionName, attributes: coercedPayload },
+      })
+    );
   },
 
   _handleTaskLoopEvent: (chatId, event) => {
@@ -258,7 +293,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
               },
             }));
           }
-        });
+        }).catch((e) => console.warn("[UICommand]", e));
 
         // 检测结构化卡片 payload 并追加 leo-card 内容项
         attachLeoCardIfPresent(set, chatId, event.toolCallId, event.result);
@@ -364,33 +399,32 @@ function attachLeoCardIfPresent(
 
   const cardItemId = `${toolCallId}-card-${card.id}`;
   set((state) => ({
-    conversations: state.conversations.map((c) =>
-      c.id !== chatId
-        ? c
-        : {
-            ...c,
-            displayMessages: c.displayMessages.map((msg) => {
-              if (msg.role !== "assistant") return msg;
-              const lastAssistantIdx = c.displayMessages
-                .map((m, i) => (m.role === "assistant" ? i : -1))
-                .filter((i) => i >= 0)
-                .pop();
-              if (c.displayMessages.indexOf(msg) !== lastAssistantIdx) return msg;
-              if (msg.contentItems.some((item) => item.id === cardItemId)) return msg;
-              return {
-                ...msg,
-                contentItems: [
-                  ...msg.contentItems,
-                  {
-                    id: cardItemId,
-                    type: "leo-card" as const,
-                    content: card,
-                    timestamp: Date.now(),
-                  },
-                ],
-              };
-            }),
-          }
-    ),
+    conversations: state.conversations.map((c) => {
+      if (c.id !== chatId) return c;
+      const lastAssistantIdx = c.displayMessages.reduce(
+        (acc, m, i) => (m.role === "assistant" ? i : acc),
+        -1
+      );
+      if (lastAssistantIdx === -1) return c;
+      return {
+        ...c,
+        displayMessages: c.displayMessages.map((msg, i) => {
+          if (i !== lastAssistantIdx) return msg;
+          if (msg.contentItems.some((item) => item.id === cardItemId)) return msg;
+          return {
+            ...msg,
+            contentItems: [
+              ...msg.contentItems,
+              {
+                id: cardItemId,
+                type: "leo-card" as const,
+                content: card,
+                timestamp: Date.now(),
+              },
+            ],
+          };
+        }),
+      };
+    }),
   }));
 }

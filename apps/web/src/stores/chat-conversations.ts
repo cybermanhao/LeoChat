@@ -109,17 +109,24 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
       // 增量更新 contentItems
       if (delta.content_delta) {
-        const lastItem = updatedMsg.contentItems[updatedMsg.contentItems.length - 1];
+        const lastIdx = updatedMsg.contentItems.length - 1;
+        const lastItem = updatedMsg.contentItems[lastIdx];
         if (lastItem && lastItem.type === "text" && typeof lastItem.content === "string") {
-          lastItem.content += delta.content_delta;
-          lastItem.timestamp = Date.now();
+          updatedMsg.contentItems = updatedMsg.contentItems.map((item, i) =>
+            i === lastIdx
+              ? { ...item, content: (item.content as string) + delta.content_delta, timestamp: Date.now() }
+              : item
+          );
         } else {
-          updatedMsg.contentItems.push({
-            id: generateId(),
-            type: "text",
-            content: delta.content_delta,
-            timestamp: Date.now(),
-          });
+          updatedMsg.contentItems = [
+            ...updatedMsg.contentItems,
+            {
+              id: generateId(),
+              type: "text",
+              content: delta.content_delta,
+              timestamp: Date.now(),
+            },
+          ];
         }
       }
 

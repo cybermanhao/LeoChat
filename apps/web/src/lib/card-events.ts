@@ -8,6 +8,9 @@
 // 事件名称（稳定契约）
 export const LEO_CARD_ACTION_EVENT = "leochat:card-action";
 
+// action 按钮未知命令的 fallback 事件
+export const LEO_ACTION_EVENT = "leochat:action";
+
 // 事件 detail 形状
 export interface LeoCardActionEventDetail {
   actionId: string;
