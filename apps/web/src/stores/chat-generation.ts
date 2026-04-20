@@ -59,6 +59,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const conv = get().conversations.find((c) => c.id === convId);
     const history = conv?.contextMessages || [];
     const contextSnapshot = [...history];
+    const displaySnapshot = [...(conv?.displayMessages || [])];
     const historyWithoutSystem = history.filter((m) => m.role !== "system");
 
     const providerConfig = LLM_PROVIDERS[currentProvider];
@@ -122,15 +123,13 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     } catch (error) {
       console.error("TaskLoop error:", error);
       // abort/error 时回滚到本次生成前的快照，避免不完整消息污染下次上下文
-      // 同时回滚 displayMessages，保持 UI 与上下文同步
-      const snapshotIds = new Set(contextSnapshot.map((m) => m.id));
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== convId) return c;
           return {
             ...c,
             contextMessages: contextSnapshot,
-            displayMessages: c.displayMessages.filter((m) => snapshotIds.has(m.id)),
+            displayMessages: displaySnapshot,
           };
         }),
         toolCallStates: {},

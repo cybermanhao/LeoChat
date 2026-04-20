@@ -361,10 +361,20 @@ class GeminiAdapter implements ModelAdapterInstance {
     tools: unknown,
     config: LLMConfig
   ): unknown {
+    // Build tool_call_id → function name map from assistant messages
+    const toolIdToName = new Map<string, string>();
+    for (const msg of messages) {
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          toolIdToName.set(tc.id, tc.name);
+        }
+      }
+    }
+
     // Gemini 使用 contents 格式
     const contents = messages
       .filter(m => m.role !== "system")
-      .map(m => this.convertMessage(m));
+      .map(m => this.convertMessage(m, toolIdToName));
 
     const systemInstruction = messages
       .filter(m => m.role === "system")
@@ -390,15 +400,16 @@ class GeminiAdapter implements ModelAdapterInstance {
     return body;
   }
 
-  private convertMessage(msg: ChatMessage): Record<string, unknown> {
+  private convertMessage(msg: ChatMessage, toolIdToName?: Map<string, string>): Record<string, unknown> {
     const role = msg.role === "assistant" ? "model" : "user";
 
     if (msg.role === "tool") {
+      const fnName = (msg.tool_call_id && toolIdToName?.get(msg.tool_call_id)) || msg.tool_call_id || "unknown";
       return {
         role: "function",
         parts: [{
           functionResponse: {
-            name: msg.tool_call_id || "unknown",
+            name: fnName,
             response: { result: msg.content },
           },
         }],
