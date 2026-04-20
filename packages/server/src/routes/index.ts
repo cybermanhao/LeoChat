@@ -99,8 +99,6 @@ export function createRoutes(context: ServerContext) {
       stream.onAbort(() => {
         aborted = true;
         abortController.abort();
-        // Immediately reject any bash approvals that are waiting, so their
-        // Promises don't hang for the full 60s timeout.
         for (const [id, resolve] of context.pendingApprovals) {
           context.pendingApprovals.delete(id);
           resolve(false);
