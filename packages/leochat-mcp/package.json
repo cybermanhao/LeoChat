@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-chatbox/shared": "workspace:*",
+    "@google/genai": "^1.50.1",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {

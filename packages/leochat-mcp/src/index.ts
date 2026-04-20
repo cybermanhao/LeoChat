@@ -7,6 +7,7 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * LeoChat MCP Server
@@ -112,6 +113,14 @@ function getThemeDescriptions(): string {
     .map((t) => `  - ${t.id}: ${t.name}${t.isDark ? " (深色)" : " (浅色)"}`)
     .join("\n");
 }
+
+// ============================================================================
+// Gemini Image Generation
+// ============================================================================
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+const GENERATION_MODEL = 'gemini-3.1-flash-image-preview';
 
 // ============================================================================
 // MCP 服务器配置
@@ -385,6 +394,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "generate_image",
+        description: "使用 Google Gemini 生成图片。支持文生图，以 LeoCard 卡片形式返回生成的图片。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            prompt: {
+              type: "string",
+              description: "图片生成提示词，描述你想要生成的图片内容",
+            },
+            aspectRatio: {
+              type: "string",
+              enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+              description: "图片宽高比，默认 1:1",
+            },
+            imageSize: {
+              type: "string",
+              enum: ["1K", "2K", "4K"],
+              description: "图片分辨率，默认 1K",
+            },
+          },
+          required: ["prompt"],
+        },
+      },
     ],
   };
 });
@@ -602,6 +635,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{ type: "text" as const, text: JSON.stringify(card) }],
       };
+    }
+
+    case "generate_image": {
+      if (!ai) {
+        return makeError("GEMINI_API_KEY 未配置，请在 .env 中设置 GEMINI_API_KEY 后重启服务");
+      }
+
+      const { prompt, aspectRatio = "1:1", imageSize = "1K" } = args as {
+        prompt: string;
+        aspectRatio?: string;
+        imageSize?: string;
+      };
+
+      if (!prompt || !prompt.trim()) {
+        return makeError("请提供图片生成提示词 (prompt)");
+      }
+
+      try {
+        const response = await ai.models.generateContent({
+          model: GENERATION_MODEL,
+          contents: [{ role: "user", parts: [{ text: prompt.trim() }] }],
+          config: {
+            responseModalities: ["TEXT", "IMAGE"],
+            imageConfig: { aspectRatio, imageSize },
+          },
+        });
+
+        const parts = response.candidates?.[0]?.content?.parts ?? [];
+        const img = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+        const desc = parts.find((p: any) => p.text && !p.thought)?.text?.trim();
+
+        if (!img?.inlineData?.data) {
+          return makeError("模型未返回图片，可能是内容安全策略限制或模型暂时不可用，请尝试更换提示词");
+        }
+
+        const mimeType = img.inlineData.mimeType;
+        const dataUrl = `data:${mimeType};base64,${img.inlineData.data}`;
+
+        const card = {
+          id: `img_${Date.now()}`,
+          kind: "media",
+          title: "生成的图片",
+          subtitle: desc || prompt.trim().slice(0, 50),
+          tone: "default",
+          body: [
+            { type: "image", image: { url: dataUrl, alt: prompt.trim() } },
+          ],
+          actions: [
+            {
+              id: "download",
+              label: "下载图片",
+              kind: "primary",
+              action: { type: "link", url: dataUrl },
+            },
+          ],
+        };
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(card) }],
+        };
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        if (msg.includes("429") || msg.includes("rate limit")) {
+          return makeError("请求频率过高，请稍后再试");
+        }
+        if (msg.includes("403") || msg.includes("content policy")) {
+          return makeError("内容安全策略限制，请尝试更换提示词");
+        }
+        return makeError(`图片生成失败: ${msg}`);
+      }
     }
 
     default:
