@@ -1,5 +1,5 @@
 import { Plus, MessageSquare, Trash2 } from "lucide-react";
-import { Button, Separator } from "@ai-chatbox/ui";
+import { Button } from "@ai-chatbox/ui";
 import { useChatStore } from "../stores/chat";
 import { cn } from "@ai-chatbox/ui";
 import { useT } from "../i18n";

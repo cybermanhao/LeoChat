@@ -1,12 +1,15 @@
 import { showToast } from "../stores/toast";
+import { openPanel } from "./ui-commands";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
 
 const PROVIDER_TOP_UP: Record<LLMProvider, { label: string; url: string }> = {
   deepseek:   { label: "去充值", url: "https://platform.deepseek.com/top_up" },
   openai:     { label: "去充值", url: "https://platform.openai.com/account/billing" },
   openrouter: { label: "去充值", url: "https://openrouter.ai/credits" },
   moonshot:   { label: "去充值", url: "https://console.moonshot.cn/billing" },
+  "kimi-code": { label: "去充值", url: "https://platform.kimi.com/billing" },
+  google: { label: "去获取", url: "https://aistudio.google.com/app/apikey" },
 };
 
 /** 判断错误是否属于"余额/配额不足" */
@@ -23,6 +26,7 @@ function isBalanceError(msg: string): boolean {
 
 /**
  * 解析 API 错误字符串，映射为友好的中文提示并触发 toast。
+ * 对"用户可自助修复"的错误（401/key 无效/余额不足），在 toast 中附带 action 按钮。
  * @param message  错误信息原文
  * @param provider 当前使用的 LLM provider（用于显示对应充值链接）
  */
@@ -32,12 +36,18 @@ export function handleApiError(message: string, provider?: LLMProvider): void {
     showToast(
       "API 余额不足，请充值后继续使用。",
       "destructive",
-      topUp ? { label: topUp.label, onClick: () => window.open(topUp.url, "_blank") } : undefined
+      topUp
+        ? { label: topUp.label, onClick: () => window.open(topUp.url, "_blank") }
+        : { label: "去设置", onClick: () => openPanel("settings", "llm") }
     );
     return;
   }
   if (message.includes("401") || /unauthorized|invalid.*key|api.?key/i.test(message)) {
-    showToast("API Key 无效，请在设置中检查后重试。", "destructive");
+    showToast(
+      "API Key 无效，请在设置中检查后重试。",
+      "destructive",
+      { label: "去配置", onClick: () => openPanel("settings", "llm") }
+    );
     return;
   }
   if (message.includes("429") || /rate.?limit|too many request/i.test(message)) {

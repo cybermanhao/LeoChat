@@ -16,6 +16,10 @@ export interface ModelAdapterInstance extends ModelAdapter {}
  * OpenRouter / OpenAI 适配器
  */
 class OpenAIAdapter implements ModelAdapterInstance {
+  getEndpoint(): string {
+    return "/chat/completions";
+  }
+
   getBaseURL(config: LLMConfig): string {
     if (config.provider === "openrouter") {
       return config.baseURL || "https://openrouter.ai/api/v1";
@@ -176,6 +180,10 @@ class OpenAIAdapter implements ModelAdapterInstance {
  * Anthropic Claude 适配器
  */
 class AnthropicAdapter implements ModelAdapterInstance {
+  getEndpoint(): string {
+    return "/messages";
+  }
+
   getBaseURL(config: LLMConfig): string {
     return config.baseURL || "https://api.anthropic.com/v1";
   }
@@ -332,9 +340,22 @@ class AnthropicAdapter implements ModelAdapterInstance {
 }
 
 /**
+ * Kimi Code 适配器（OpenAI 兼容格式）
+ */
+class KimiCodeAdapter extends OpenAIAdapter {
+  getBaseURL(config: LLMConfig): string {
+    return config.baseURL || "https://api.kimi.com/coding";
+  }
+}
+
+/**
  * Google Gemini 适配器
  */
 class GeminiAdapter implements ModelAdapterInstance {
+  getEndpoint(): string {
+    return "/models/gemini-pro:streamGenerateContent";
+  }
+
   getBaseURL(config: LLMConfig): string {
     return config.baseURL || "https://generativelanguage.googleapis.com/v1beta";
   }
@@ -491,6 +512,10 @@ class GeminiAdapter implements ModelAdapterInstance {
  * DeepSeek 适配器（基于 OpenAI 格式）
  */
 class DeepSeekAdapter extends OpenAIAdapter {
+  getEndpoint(): string {
+    return "/chat/completions";
+  }
+
   getBaseURL(config: LLMConfig): string {
     return config.baseURL || "https://api.deepseek.com/v1";
   }
@@ -510,6 +535,8 @@ export function createModelAdapter(provider: LLMProvider): ModelAdapterInstance 
       return new OpenAIAdapter();
     case "anthropic":
       return new AnthropicAdapter();
+    case "kimi-code":
+      return new KimiCodeAdapter();
     case "google":
       return new GeminiAdapter();
     case "deepseek":
@@ -525,5 +552,5 @@ export function createModelAdapter(provider: LLMProvider): ModelAdapterInstance 
  * 获取支持的提供商列表
  */
 export function getSupportedProviders(): LLMProvider[] {
-  return ["openrouter", "openai", "anthropic", "google", "deepseek", "custom"];
+  return ["openrouter", "openai", "anthropic", "google", "deepseek", "moonshot", "kimi-code", "custom"];
 }

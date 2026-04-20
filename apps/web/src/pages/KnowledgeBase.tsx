@@ -1,4 +1,4 @@
-import { Database, Plus, FolderOpen, FileText } from "lucide-react";
+import { Database, Plus } from "lucide-react";
 import { Button } from "@ai-chatbox/ui";
 import { useT } from "../i18n";
 import {

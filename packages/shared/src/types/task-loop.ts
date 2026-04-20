@@ -198,6 +198,7 @@ export type LLMProvider =
   | "google"
   | "deepseek"
   | "moonshot"
+  | "kimi-code"
   | "custom";
 
 /**
@@ -208,6 +209,11 @@ export interface ModelAdapter {
    * 获取 API 基础 URL
    */
   getBaseURL(config: LLMConfig): string;
+
+  /**
+   * 获取 API 端点路径
+   */
+  getEndpoint(): string;
 
   /**
    * 转换工具格式

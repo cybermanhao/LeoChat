@@ -4,7 +4,6 @@ import {
   Server,
   Loader2,
   Trash2,
-  Pencil,
   Plug,
   Unplug,
   Terminal,

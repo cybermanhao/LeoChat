@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { cn, Button } from "@ai-chatbox/ui";
-import { FileText, Server, Download, Image as ImageIcon } from "lucide-react";
+import { cn } from "@ai-chatbox/ui";
+import { FileText, Server, Image as ImageIcon } from "lucide-react";
 import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { mcpApi } from "../../lib/api";
@@ -54,7 +54,7 @@ export function MCPResourcesTab() {
         const response = await mcpApi.readResource(
           selectedResource.serverId,
           selectedResource.resource.uri
-        );
+        ) as { contents?: Array<{ text?: string; blob?: string }> };
         // 假设 API 返回 { contents: [{ text: string }] }
         if (response.contents && response.contents[0]) {
           setResourceContent(response.contents[0].text || response.contents[0].blob);

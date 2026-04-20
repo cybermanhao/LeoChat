@@ -563,7 +563,7 @@ export class TaskLoop {
     );
 
     // 发起流式请求
-    const response = await fetch(`${baseURL}/chat/completions`, {
+    const response = await fetch(`${baseURL}${this.adapter.getEndpoint()}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

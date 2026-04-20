@@ -5,7 +5,7 @@
   "type": "module",
   "description": "AI-Driven Multi-Modal Chatbox with MCP (Model Context Protocol)",
   "scripts": {
-    "dev": "pnpm run build:packages && pnpm -r --parallel run dev",
+    "dev": "pnpm run build:packages && pnpm --filter @ai-chatbox/web --filter @ai-chatbox/server --parallel run dev",
     "build:packages": "pnpm --filter @ai-chatbox/shared --filter @ai-chatbox/ui --filter @ai-chatbox/mcp-core run build",
     "dev:web": "pnpm --filter @ai-chatbox/web dev",
     "dev:electron": "pnpm --filter @ai-chatbox/electron dev",

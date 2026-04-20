@@ -11,6 +11,7 @@ import { LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP, normalizeLeoCar
 import { processToolResultForUICommands } from "../lib/ui-commands";
 import { handleApiError } from "../lib/api-error";
 import { sendOSNotification } from "../lib/os-notification";
+import { mcpApi } from "../lib/api";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
 // TaskLoop 懒加载，避免构建顺序问题
@@ -74,14 +75,15 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       mcpTools,
       maxEpochs,
       parallelToolCalls: true,
-      useBackendProxy: true,
+      useBackendProxy: currentProvider !== "kimi-code" && currentProvider !== "google",
       backendURL: BACKEND_URL,
       systemPrompt,
       contextLength: contextLength > 0 ? contextLength : undefined,
       modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
       onToolCall: async (toolName: string, args: Record<string, unknown>) => {
         console.log("Tool call:", toolName, args);
-        throw new Error(`Tool ${toolName} not implemented`);
+        const result = await mcpApi.callTool(toolName, args);
+        return result.result;
       },
     });
 

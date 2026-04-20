@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   MCPServerConfig,
-  MCPSession,
   MCPSource,
   MCPServerState,
   MCPResource,

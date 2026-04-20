@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
+import { useSearchParams } from "react-router-dom";
 import {
   ThreeColumnLayout,
   LeftDrawer,
@@ -61,7 +62,26 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
 
 export function SettingsPage() {
   const { t } = useT();
-  const [currentCategory, setCurrentCategory] = useState("appearance");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [currentCategory, setCurrentCategory] = useState(() => {
+    const tab = searchParams.get("tab");
+    const validTabs = ["appearance", "llm", "notifications", "privacy", "advanced"];
+    return tab && validTabs.includes(tab) ? tab : "appearance";
+  });
+
+  // 当 URL tab 参数变化时同步更新当前分类
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const validTabs = ["appearance", "llm", "notifications", "privacy", "advanced"];
+    if (tab && validTabs.includes(tab) && tab !== currentCategory) {
+      setCurrentCategory(tab);
+    }
+  }, [searchParams, currentCategory]);
+
+  const handleSelectCategory = (id: string) => {
+    setCurrentCategory(id);
+    setSearchParams({ tab: id });
+  };
   const settingCategories = useMemo<SettingCategory[]>(() => [
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
@@ -91,7 +111,7 @@ export function SettingsPage() {
       leftDrawer={
         <SettingsSidebar
           currentCategory={currentCategory}
-          onSelectCategory={setCurrentCategory}
+          onSelectCategory={handleSelectCategory}
         />
       }
       leftDrawerWidth={200}

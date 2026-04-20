@@ -152,7 +152,7 @@ export function createRoutes(context: ServerContext) {
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}-${toolRound}`,
             role: "assistant",
-            content: completedMessage?.content || "",
+            content: (completedMessage as ChatMessage | null)?.content || "",
             tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
               id,
               name,

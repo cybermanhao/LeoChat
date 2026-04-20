@@ -115,7 +115,7 @@ export function MCPToolsTab({ filterServerId }: MCPToolsTabProps = {}) {
                   <span className="text-xs font-medium truncate flex-1">{item.tool.name}</span>
                   <Switch
                     checked={enabled}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={(_checked) => {
                       toggleTool(item.serverId, item.tool.name);
                     }}
                     onClick={(e) => e.stopPropagation()}

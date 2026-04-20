@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatMessage, ToolCall } from "@ai-chatbox/shared";
 import { generateId, API_ENDPOINTS, DEFAULT_MODELS } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
 
 export interface ChatRequest {
   messages: ChatMessage[];
@@ -86,6 +86,12 @@ export class LLMService {
       console.log("[LLM] Moonshot client initialized");
     }
 
+    // Google Gemini (frontend direct mode, no OpenAI client needed)
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+      console.log("[LLM] Gemini API key found (frontend direct mode)");
+    }
+
     // 确定默认提供商
     if (this.clients.has("deepseek")) {
       this.defaultProvider = "deepseek";
@@ -106,11 +112,19 @@ export class LLMService {
   setApiKey(provider: LLMProvider, apiKey: string): void {
     if (!apiKey) return;
 
+    // Frontend direct mode providers (kimi-code, google) use their own adapters
+    if (provider === "kimi-code" || provider === "google") {
+      console.log(`[LLM] ${provider} uses frontend direct mode, skipping backend client setup`);
+      return;
+    }
+
     const baseURLs: Record<LLMProvider, string> = {
       deepseek: API_ENDPOINTS.DEEPSEEK,
       openrouter: API_ENDPOINTS.OPENROUTER,
       openai: API_ENDPOINTS.OPENAI,
       moonshot: API_ENDPOINTS.MOONSHOT,
+      "kimi-code": "",
+      google: "",
     };
 
     const options: ConstructorParameters<typeof OpenAI>[0] = {
@@ -164,6 +178,9 @@ export class LLMService {
     }
     if (model.startsWith("moonshot-")) {
       return "moonshot";
+    }
+    if (model.startsWith("gemini-")) {
+      return "google";
     }
     return this.defaultProvider;
   }

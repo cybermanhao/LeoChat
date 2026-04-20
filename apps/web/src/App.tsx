@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { ChatLayout } from "./components/ChatLayout";
 import { useThemeStore } from "./stores/theme";
 import { useChatStore } from "./stores/chat";
@@ -8,6 +8,31 @@ import { TooltipProvider } from "@ai-chatbox/ui";
 import { chatApi } from "./lib/api";
 import { initializeI18n } from "./i18n";
 import { migrateFromLocalStorage, getChatStorageAdapter } from "./lib/chat-persistence";
+
+/**
+ * 监听 ui-command:open-panel 事件，将面板打开请求转换为路由导航。
+ */
+function NavigationHandler() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ panel: string; tab?: string }>).detail;
+      if (detail.panel === "settings") {
+        const tab = detail.tab || "appearance";
+        navigate(`/settings?tab=${tab}`);
+      } else if (detail.panel === "mcp") {
+        navigate("/mcp/servers");
+      } else if (detail.panel === "history") {
+        navigate("/");
+      }
+    };
+    window.addEventListener("ui-command:open-panel", handler);
+    return () => window.removeEventListener("ui-command:open-panel", handler);
+  }, [navigate]);
+
+  return null;
+}
 
 // Electron production uses file:// protocol, which requires HashRouter
 const isFileProtocol = window.location.protocol === "file:";
@@ -95,6 +120,7 @@ export function App() {
   return (
     <TooltipProvider>
       <Router>
+        <NavigationHandler />
         <AppInit>
           <Routes>
             {/* Main Layout with Activity Bar */}

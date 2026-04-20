@@ -11,7 +11,7 @@ import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
 
 interface ProviderConfig {
   name: string;
@@ -57,6 +57,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       link: "https://platform.moonshot.cn/console/api-keys",
       linkText: t("settings.api.linkTextMoonshot"),
     },
+    "kimi-code": {
+      name: "Kimi Code",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionKimiCode"),
+      link: "https://platform.moonshot.cn/console/api-keys",
+      linkText: t("settings.api.linkTextKimiCode"),
+    },
+    google: {
+      name: "Google Gemini",
+      placeholder: t("settings.api.keyPlaceholder"),
+      description: t("settings.api.descriptionGoogle"),
+      link: "https://aistudio.google.com/app/apikey",
+      linkText: t("settings.api.linkTextGoogle"),
+    },
   }), [t]);
   const { providerKeys, setProviderKey, currentProvider, setCurrentProvider } = useChatStore();
 
@@ -65,12 +79,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     openrouter: "",
     openai: "",
     moonshot: "",
+    "kimi-code": "",
+    google: "",
   });
   const [showKeys, setShowKeys] = useState<Record<LLMProvider, boolean>>({
     deepseek: false,
     openrouter: false,
     openai: false,
     moonshot: false,
+    "kimi-code": false,
+    google: false,
   });
   const [saved, setSaved] = useState(false);
 
@@ -81,6 +99,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         openrouter: providerKeys.openrouter || "",
         openai: providerKeys.openai || "",
         moonshot: providerKeys.moonshot || "",
+        "kimi-code": providerKeys["kimi-code"] || "",
+        google: providerKeys.google || "",
       });
       setSaved(false);
     }

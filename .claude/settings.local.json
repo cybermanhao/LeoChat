@@ -90,7 +90,9 @@
       "Bash(npx tsup:*)",
       "WebFetch(domain:openai.github.io)",
       "WebFetch(domain:mastra.ai)",
-      "WebFetch(domain:ai-sdk.dev)"
+      "WebFetch(domain:ai-sdk.dev)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

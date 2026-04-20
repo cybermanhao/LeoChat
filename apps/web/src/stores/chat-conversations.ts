@@ -2,22 +2,10 @@ import type { ToolCall } from "@ai-chatbox/shared";
 import { generateId } from "@ai-chatbox/shared";
 import type { Conversation, ConversationsSlice, SliceCreator } from "./chat-types";
 
-export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => ({
+export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, _get) => ({
   conversations: [],
   currentConversationId: null,
   input: "",
-
-  get displayMessages() {
-    const { conversations, currentConversationId } = get();
-    const current = conversations.find((c) => c.id === currentConversationId);
-    return current?.displayMessages || [];
-  },
-
-  get contextMessages() {
-    const { conversations, currentConversationId } = get();
-    const current = conversations.find((c) => c.id === currentConversationId);
-    return current?.contextMessages || [];
-  },
 
   setInput: (input) => set({ input }),
 

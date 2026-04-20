@@ -19,6 +19,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
+import type { DisplayMessage, ToolCall } from "@ai-chatbox/shared";
 import { Sparkles, Trash2, RefreshCw, Thermometer, Layers } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
@@ -85,7 +86,7 @@ export function ChatArea() {
     if (isGenerating && lastMessage?.role === "assistant") {
       scrollToBottom();
     }
-  }, [isGenerating, lastMessage?.content, lastMessage?.followup_content, scrollToBottom]);
+  }, [isGenerating, lastMessage?.contentItems, scrollToBottom]);
 
   // 将 toolCallStates 转换为 UI 组件需要的格式
   const getToolCallStatesForMessage = useCallback(
