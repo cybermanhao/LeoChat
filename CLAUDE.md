@@ -394,3 +394,103 @@ LeoChat/
 ---
 
 遵循以上指南，确保所有新组件都能完美融入 LeoChat 的设计系统！
+
+## 后端开发规范 (Backend Guidelines)
+
+### 错误响应安全原则
+
+**绝不向客户端暴露内部错误细节：**
+
+```ts
+// ✅ 正确：泛化错误，内部记录完整信息
+} catch (error) {
+  console.error("[LLM Error]", error);
+  return c.json({ error: "LLM request failed" }, 502);
+}
+
+// ❌ 错误：泄露内部错误信息（可能包含内部 URL、模型名、速率限制细节）
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return c.json({ error: "LLM request failed", detail: message }, 502);
+}
+```
+
+同理，工具调用错误只返回 `"Tool execution failed"` 给客户端，完整错误 `console.error` 在服务端。
+
+### 所有端点必须处理 JSON 解析错误
+
+Hono 的 `c.req.json()` 在 body 非法时会抛出，必须用 try-catch 包裹：
+
+```ts
+// ✅ 正确
+let body: { provider: string; apiKey: string };
+try {
+  body = await c.req.json<typeof body>();
+} catch {
+  return c.json({ error: "Invalid JSON body" }, 400);
+}
+
+// ❌ 错误：未处理解析异常，会导致 500
+const { provider, apiKey } = await c.req.json<...>();
+```
+
+### 代理端点必须做 SSRF 防护
+
+任何接受外部 URL 的端点都必须调用 `isValidProxyUrl()` 验证，拦截：
+- 非 http/https 协议
+- localhost / 127.0.0.1 / ::1
+- RFC 1918 私有 IPv4 段（10.x, 172.16-31.x, 192.168.x, 169.254.x）
+- IPv6 loopback 和 link-local
+
+```ts
+if (!isValidProxyUrl(url)) {
+  return c.json({ error: "Invalid or blocked URL" }, 400);
+}
+```
+
+### 用户输入验证
+
+- **枚举字段**：建立白名单显式校验（如 `provider`）
+- **字符串长度**：对 API Key 等用户提供的字符串设上限（如 2048）
+- **数组大小**：对 messages 数组设上限（如 500 条）防止滥用
+
+### AbortSignal 传播
+
+当客户端断开时，应取消正在进行的 LLM 请求，避免资源浪费：
+
+```ts
+const abortController = new AbortController();
+stream.onAbort(() => {
+  aborted = true;
+  abortController.abort();
+});
+
+// 传入 signal
+await llmService.streamChat(request, callbacks, { signal: abortController.signal });
+```
+
+## MCP Core 开发规范
+
+### dispatchMany 行为
+
+`ToolDispatcher.dispatchMany()` 使用 `Promise.all`，任一工具调用失败即抛出。调用方需在 try-catch 中处理，并通过 `onError` 回调通知前端。
+
+### 模型适配器（Gemini）
+
+`GeminiAdapter` 的 `functionResponse` 需要函数**名称**而非 tool_call_id。`buildRequestBody` 会预先构建 `toolIdToName` 映射表，添加新适配器时注意同样处理：
+
+```ts
+// buildRequestBody 中
+const toolIdToName = new Map<string, string>();
+for (const msg of messages) {
+  if (msg.tool_calls) {
+    for (const tc of msg.tool_calls) {
+      toolIdToName.set(tc.id, tc.name);
+    }
+  }
+}
+```
+
+### SSE Transport
+
+`createSSETransportAsync` 只创建 transport 对象，**不建立实际 TCP 连接**。真正的连接发生在 `MCPClient` 调用 `client.connect(transport)` 时。不要在这里做连接超时检测。

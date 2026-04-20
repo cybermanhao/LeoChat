@@ -102,8 +102,7 @@ export function createRoutes(context: ServerContext) {
         return c.json(response);
       } catch (error) {
         console.error("[LLM Error]", error);
-        const message = error instanceof Error ? error.message : String(error);
-        return c.json({ error: "LLM request failed", detail: message }, 502);
+        return c.json({ error: "LLM request failed" }, 502);
       }
     }
 
