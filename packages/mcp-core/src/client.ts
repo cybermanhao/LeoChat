@@ -327,16 +327,21 @@ export class MCPClient {
 
   async callTool(
     name: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<unknown> {
     if (!this.client || this.status !== "connected") {
       throw new Error("Client not connected");
     }
 
-    const result = await this.client.callTool({
-      name,
-      arguments: args,
-    });
+    const result = await this.client.callTool(
+      {
+        name,
+        arguments: args,
+      },
+      undefined,
+      { signal }
+    );
 
     return result;
   }

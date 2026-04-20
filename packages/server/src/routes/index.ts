@@ -65,7 +65,11 @@ export function createRoutes(context: ServerContext) {
     return streamSSE(c, async (stream) => {
       // Abort detection: when the client disconnects, stop writing
       let aborted = false;
-      stream.onAbort(() => { aborted = true; });
+      const toolAbortController = new AbortController();
+      stream.onAbort(() => {
+        aborted = true;
+        toolAbortController.abort();
+      });
 
       // Safe write helper: swallows errors after abort so we don't double-throw
       async function safeWrite(event: string, data: string): Promise<void> {
@@ -109,7 +113,8 @@ export function createRoutes(context: ServerContext) {
                 try {
                   const rawResult = await context.sessionManager.callTool(
                     toolCall.name,
-                    toolCall.arguments as Record<string, unknown>
+                    toolCall.arguments as Record<string, unknown>,
+                    toolAbortController.signal
                   );
                   // Truncate at source — prevents large SSE payloads and oversized final event
                   const rawStr = typeof rawResult === "string"
@@ -345,7 +350,7 @@ export function createRoutes(context: ServerContext) {
     const toolName = c.req.param("name");
     const args = await c.req.json<Record<string, unknown>>();
 
-    const result = await context.sessionManager.callTool(toolName, args);
+    const result = await context.sessionManager.callTool(toolName, args, c.req.raw.signal);
     return c.json({ result });
   });
 

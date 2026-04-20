@@ -8,6 +8,24 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
 import { GoogleGenAI } from "@google/genai";
+import type { GenerateContentConfig, Part } from "@google/genai";
+import {
+  createTask,
+  completeTask,
+  failTask,
+  interruptTask,
+  recoverInterruptedTasks,
+} from "./task-store.js";
+
+export {
+  createTask,
+  completeTask,
+  failTask,
+  interruptTask,
+  recoverInterruptedTasks,
+  updateTask,
+  deleteTask,
+} from "./task-store.js";
 
 /**
  * LeoChat MCP Server
@@ -120,7 +138,177 @@ function getThemeDescriptions(): string {
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-const GENERATION_MODEL = 'gemini-3.1-flash-image-preview';
+const GENERATION_MODEL = "gemini-3.1-flash-image-preview";
+const GENERATION_TIMEOUT_MS = 120_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+
+// ============================================================================
+// 错误分类与重试辅助函数
+// ============================================================================
+
+export function isAbortError(err: unknown): boolean {
+  const e = err as any;
+  return (
+    e?.name === "AbortError" ||
+    e?.code === "ABORT_ERR" ||
+    String(e?.message ?? "").toLowerCase().includes("aborted") ||
+    String(e?.message ?? "").toLowerCase().includes("user requested abort")
+  );
+}
+
+export function extractGeminiErrorCode(err: unknown): number | string | null {
+  const e = err as Record<string, any>;
+  return e?.error?.code ?? e?.status ?? e?.code ?? null;
+}
+
+export function isRetryable(err: unknown): boolean {
+  const code = extractGeminiErrorCode(err);
+  if (code === 429 || code === "RESOURCE_EXHAUSTED") return true;
+  if (code === 503 || code === "UNAVAILABLE") return true;
+  const msg = String((err as any)?.message ?? "").toLowerCase();
+  return (
+    msg.includes("fetch failed") ||
+    msg.includes("etimedout") ||
+    msg.includes("econnreset") ||
+    msg.includes("socket hang up") ||
+    msg.includes("timeout")
+  );
+}
+
+export function classifyError(err: unknown): { retryable: boolean; userMessage: string } {
+  if (isAbortError(err)) {
+    return { retryable: false, userMessage: "生成已取消" };
+  }
+  const code = extractGeminiErrorCode(err);
+  const msg = String((err as any)?.message ?? "").toLowerCase();
+
+  if (code === 429 || code === "RESOURCE_EXHAUSTED" || msg.includes("429") || msg.includes("rate limit")) {
+    return { retryable: true, userMessage: "请求频率过高，正在自动重试..." };
+  }
+  if (code === 503 || code === "UNAVAILABLE" || msg.includes("503")) {
+    return { retryable: true, userMessage: "服务暂时不可用，正在自动重试..." };
+  }
+  if (code === 403 || code === "PERMISSION_DENIED" || msg.includes("403")) {
+    if (msg.includes("content policy") || msg.includes("safety") || msg.includes("blocked")) {
+      return { retryable: false, userMessage: "内容安全策略限制，请尝试更换提示词" };
+    }
+    return { retryable: false, userMessage: "API 权限不足，请检查 GEMINI_API_KEY" };
+  }
+  if (code === 400 || code === "INVALID_ARGUMENT" || msg.includes("400")) {
+    return { retryable: false, userMessage: `请求参数错误，请检查提示词和配置` };
+  }
+  if (isRetryable(err)) {
+    return { retryable: true, userMessage: "网络异常，正在自动重试..." };
+  }
+  return { retryable: false, userMessage: `图片生成失败: ${(err as any)?.message || String(err)}` };
+}
+
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(id);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true }
+    );
+  });
+}
+
+export async function withGeminiCall<T>(
+  factory: (signal: AbortSignal) => Promise<T>,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
+): Promise<T> {
+  const { signal: externalSignal, timeoutMs = GENERATION_TIMEOUT_MS } = options;
+  const timeoutCtrl = new AbortController();
+
+  const timer = setTimeout(() => {
+    timeoutCtrl.abort(
+      Object.assign(new Error(`Gemini call timed out after ${timeoutMs / 1000}s`), {
+        code: "ETIMEDOUT",
+      })
+    );
+  }, timeoutMs);
+
+  externalSignal?.addEventListener("abort", () => timeoutCtrl.abort(externalSignal.reason), { once: true });
+
+  return factory(timeoutCtrl.signal).finally(() => clearTimeout(timer));
+}
+
+export async function doGenerateImage(
+  prompt: string,
+  aspectRatio: string,
+  imageSize: string,
+  signal?: AbortSignal
+): Promise<{ mimeType: string; data: string; description?: string }> {
+  const config: GenerateContentConfig = {
+    responseModalities: ["TEXT", "IMAGE"],
+    imageConfig: { aspectRatio, imageSize },
+    abortSignal: signal,
+  };
+
+  const response = await ai!.models.generateContent({
+    model: GENERATION_MODEL,
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config,
+  });
+
+  const parts: Part[] = response.candidates?.[0]?.content?.parts ?? [];
+  const img = parts.find((p: Part) => p.inlineData?.mimeType?.startsWith("image/"));
+  const desc = parts.find((p: Part) => p.text && !p.thought)?.text?.trim();
+
+  if (!img?.inlineData?.data) {
+    throw new Error("No image returned");
+  }
+
+  return {
+    mimeType: img.inlineData.mimeType || "image/png",
+    data: img.inlineData.data,
+    description: desc,
+  };
+}
+
+export async function generateImageWithRetry(
+  prompt: string,
+  aspectRatio: string,
+  imageSize: string,
+  externalSignal?: AbortSignal
+): Promise<{ mimeType: string; data: string; description?: string }> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await withGeminiCall(
+        (attemptSignal) => doGenerateImage(prompt, aspectRatio, imageSize, attemptSignal),
+        { signal: externalSignal, timeoutMs: GENERATION_TIMEOUT_MS }
+      );
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      if (isAbortError(lastError)) {
+        throw lastError;
+      }
+
+      const classified = classifyError(lastError);
+      if (!classified.retryable || attempt >= MAX_RETRIES) {
+        throw lastError;
+      }
+
+      // Exponential backoff with jitter
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1) * (0.8 + Math.random() * 0.4);
+      await sleep(Math.min(delay, 30000), externalSignal);
+    }
+  }
+
+  throw lastError ?? new Error("All retry attempts failed");
+}
 
 // ============================================================================
 // MCP 服务器配置
@@ -426,7 +614,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // 工具处理
 // ============================================================================
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params;
 
   const makeResponse = (command: UICommand) => ({
@@ -652,32 +840,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return makeError("请提供图片生成提示词 (prompt)");
       }
 
+      const taskId = `img_${Date.now()}`;
+      createTask(taskId, "generate_image", { prompt, aspectRatio, imageSize });
+
       try {
-        const response = await ai.models.generateContent({
-          model: GENERATION_MODEL,
-          contents: [{ role: "user", parts: [{ text: prompt.trim() }] }],
-          config: {
-            responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: { aspectRatio, imageSize },
-          },
-        });
+        const { mimeType, data, description } = await generateImageWithRetry(
+          prompt.trim(),
+          aspectRatio,
+          imageSize,
+          extra.signal
+        );
 
-        const parts = response.candidates?.[0]?.content?.parts ?? [];
-        const img = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-        const desc = parts.find((p: any) => p.text && !p.thought)?.text?.trim();
-
-        if (!img?.inlineData?.data) {
-          return makeError("模型未返回图片，可能是内容安全策略限制或模型暂时不可用，请尝试更换提示词");
-        }
-
-        const mimeType = img.inlineData.mimeType;
-        const dataUrl = `data:${mimeType};base64,${img.inlineData.data}`;
+        const dataUrl = `data:${mimeType};base64,${data}`;
 
         const card = {
-          id: `img_${Date.now()}`,
+          id: taskId,
           kind: "media",
           title: "生成的图片",
-          subtitle: desc || prompt.trim().slice(0, 50),
+          subtitle: description || prompt.trim().slice(0, 50),
           tone: "default",
           body: [
             { type: "image", image: { url: dataUrl, alt: prompt.trim() } },
@@ -692,18 +872,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
 
+        completeTask(taskId, card);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(card) }],
         };
       } catch (err: any) {
-        const msg = err?.message || String(err);
-        if (msg.includes("429") || msg.includes("rate limit")) {
-          return makeError("请求频率过高，请稍后再试");
+        const classified = classifyError(err);
+
+        if (isAbortError(err)) {
+          interruptTask(taskId);
+          return makeError("图片生成已取消");
         }
-        if (msg.includes("403") || msg.includes("content policy")) {
-          return makeError("内容安全策略限制，请尝试更换提示词");
-        }
-        return makeError(`图片生成失败: ${msg}`);
+
+        failTask(taskId, classified.userMessage);
+
+        return makeError(classified.userMessage);
       }
     }
 
@@ -717,6 +900,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ============================================================================
 
 async function main() {
+  const startupTime = Date.now();
+  const recovered = recoverInterruptedTasks(startupTime);
+  if (recovered.length > 0) {
+    console.error(
+      `[leochat-mcp] Recovered ${recovered.length} interrupted task(s) from previous session`
+    );
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("LeoChat MCP Server running on stdio");

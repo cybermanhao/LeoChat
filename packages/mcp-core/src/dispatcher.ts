@@ -120,7 +120,8 @@ export class ToolDispatcher {
    */
   async dispatch(
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<DispatchResult> {
     const resolved = this.resolveToolName(toolName);
 
@@ -154,7 +155,7 @@ export class ToolDispatcher {
       toolCall.status = "running";
       this.options.onToolStart?.(toolCall);
 
-      const result = await client.callTool(actualToolName, args);
+      const result = await client.callTool(actualToolName, args, signal);
 
       toolCall.status = "completed";
       toolCall.result = result;

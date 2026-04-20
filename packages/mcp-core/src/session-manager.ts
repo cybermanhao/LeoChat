@@ -209,9 +209,10 @@ export class SessionManager {
    */
   async callTool(
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<unknown> {
-    const result = await this.dispatcher.dispatch(toolName, args);
+    const result = await this.dispatcher.dispatch(toolName, args, signal);
     return result.result;
   }
 

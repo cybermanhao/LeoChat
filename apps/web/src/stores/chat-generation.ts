@@ -80,9 +80,9 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       systemPrompt,
       contextLength: contextLength > 0 ? contextLength : undefined,
       modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
-      onToolCall: async (toolName: string, args: Record<string, unknown>) => {
+      onToolCall: async (toolName: string, args: Record<string, unknown>, signal?: AbortSignal) => {
         console.log("Tool call:", toolName, args);
-        const result = await mcpApi.callTool(toolName, args);
+        const result = await mcpApi.callTool(toolName, args, signal);
         return result.result;
       },
     });

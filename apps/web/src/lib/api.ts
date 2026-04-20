@@ -234,11 +234,12 @@ export const mcpApi = {
     return response.json();
   },
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown }> {
+  async callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: unknown }> {
     const response = await fetch(`${API_BASE}/mcp/tools/${name}/call`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(args),
+      signal,
     });
     return response.json();
   },

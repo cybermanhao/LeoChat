@@ -84,7 +84,7 @@ export class TaskLoop {
   // 配置
   private llmConfig: LLMConfig;
   private mcpTools: MCPTool[];
-  private onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
+  private onToolCall?: (toolName: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>;
   private maxEpochs: number;
   private parallelToolCalls: boolean;
 
@@ -1042,7 +1042,7 @@ export class TaskLoop {
 
       try {
         const startTime = Date.now();
-        let result = await this.onToolCall!(modifiedToolCall.name, modifiedToolCall.arguments);
+        let result = await this.onToolCall!(modifiedToolCall.name, modifiedToolCall.arguments, this.abortController?.signal);
         const duration = Date.now() - startTime;
 
         // 应用 post-call 钩子（可修改结果）
