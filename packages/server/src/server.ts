@@ -43,12 +43,19 @@ export function createServer(externalSessionManager?: ReturnType<typeof createSe
     })
   );
 
+  // Global error handler to prevent stack trace leakage
+  app.onError((err, c) => {
+    console.error("[Server Error]", err);
+    return c.json({ error: "Internal Server Error" }, 500);
+  });
+
   // Health check
   app.get("/health", (c) => {
+    const sessions = sessionManager.getSessions();
     const status: ServerStatus = {
       isRunning: true,
       mode: "web",
-      mcpSessions: sessionManager.getSessions(),
+      mcpSessionCount: sessions.length,
       uptime: Date.now() - context.startTime,
     };
     return c.json(status);

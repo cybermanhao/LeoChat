@@ -87,7 +87,10 @@ export class SessionManager {
         this.notifySessionChange();
       },
       onToolsUpdate: () => {
-        this.dispatcher.registerClient(this.clients.get(serverId)!);
+        const client = this.clients.get(serverId);
+        if (client) {
+          this.dispatcher.registerClient(client);
+        }
       },
       onError: (error) => {
         this.options.onError?.(serverId, error);

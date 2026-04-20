@@ -10,6 +10,35 @@ import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared"
 const execAsync = promisify(exec);
 
 const MAX_TOOL_RESULT = 3000;
+
+/**
+ * Validate image proxy URL to prevent SSRF attacks.
+ * Only allows http/https protocols and blocks private/reserved IP ranges.
+ */
+function isValidProxyUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return false;
+    }
+    const hostname = url.hostname;
+    // Block localhost and loopback
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return false;
+    }
+    // Block private IPv4 ranges
+    if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|127\.)/.test(hostname)) {
+      return false;
+    }
+    // Block IPv6 loopback and link-local
+    if (/^\[?(::1|fe80:)/i.test(hostname)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 function truncateResult(s: string): string {
   if (s.length <= MAX_TOOL_RESULT) return s;
   return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
@@ -35,37 +64,59 @@ export function createRoutes(context: ServerContext) {
 
   // Chat endpoint with streaming - supports full tool loop
   app.post("/chat", async (c) => {
-    const body = await c.req.json<{
+    let body: {
       messages: ChatMessage[];
       model?: string;
       provider?: LLMProvider;
       stream?: boolean;
       maxToolRounds?: number;
-    }>();
+    };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
 
     const { messages: inputMessages, model, provider, stream = true, maxToolRounds } = body;
+
+    // Validate messages array
+    if (!Array.isArray(inputMessages) || inputMessages.length === 0) {
+      return c.json({ error: "messages must be a non-empty array" }, 400);
+    }
+    if (inputMessages.length > 500) {
+      return c.json({ error: "messages array too large (max 500)" }, 400);
+    }
 
     // Get available tools from MCP
     const tools = context.sessionManager.getToolsForLLM();
 
     if (!stream) {
       // Non-streaming response
-      const response = await llmService.chat({
-        messages: inputMessages,
-        model,
-        provider,
-        tools: tools.length > 0 ? tools : undefined,
-      });
-      return c.json(response);
+      try {
+        const response = await llmService.chat({
+          messages: inputMessages,
+          model,
+          provider,
+          tools: tools.length > 0 ? tools : undefined,
+        });
+        return c.json(response);
+      } catch (error) {
+        console.error("[LLM Error]", error);
+        return c.json({ error: "LLM request failed" }, 502);
+      }
     }
 
     // Streaming response with full tool loop
     const MAX_TOOL_ROUNDS = Math.min(Math.max(maxToolRounds ?? 10, 1), 50);
 
     return streamSSE(c, async (stream) => {
-      // Abort detection: when the client disconnects, stop writing
+      // Abort detection: when the client disconnects, stop writing and cancel LLM stream
+      const abortController = new AbortController();
       let aborted = false;
-      stream.onAbort(() => { aborted = true; });
+      stream.onAbort(() => {
+        aborted = true;
+        abortController.abort();
+      });
 
       // Safe write helper: swallows errors after abort so we don't double-throw
       async function safeWrite(event: string, data: string): Promise<void> {
@@ -122,10 +173,10 @@ export function createRoutes(context: ServerContext) {
                   toolCall.status = "completed";
                   toolCall.result = truncated;
                 } catch (error) {
-                  const errorMsg = error instanceof Error ? error.message : String(error);
-                  await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: errorMsg }));
+                  console.error("[Tool Error]", error);
+                  await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: "Tool execution failed" }));
                   toolCall.status = "error";
-                  toolCall.result = { error: errorMsg };
+                  toolCall.result = { error: "Tool execution failed" };
                 }
               },
               onComplete: async (message) => {
@@ -137,7 +188,8 @@ export function createRoutes(context: ServerContext) {
               onError: async (error) => {
                 await safeWrite("error", JSON.stringify({ error: error.message }));
               },
-            }
+            },
+            { signal: abortController.signal }
           );
 
           // If no tool calls, we're done
@@ -152,7 +204,7 @@ export function createRoutes(context: ServerContext) {
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}-${toolRound}`,
             role: "assistant",
-            content: completedMessage?.content || "",
+            content: (completedMessage as ChatMessage | null)?.content || "",
             tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
               id,
               name,
@@ -214,9 +266,22 @@ export function createRoutes(context: ServerContext) {
 
   // Set LLM API key from frontend UI
   app.post("/llm/config", async (c) => {
-    const { provider, apiKey } = await c.req.json<{ provider: LLMProvider; apiKey: string }>();
-    if (!provider || !apiKey) {
-      return c.json({ error: "provider and apiKey are required" }, 400);
+    let body: { provider: LLMProvider; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const { provider, apiKey } = body;
+    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot"];
+    if (!provider || !validProviders.includes(provider)) {
+      return c.json({ error: "provider must be one of: " + validProviders.join(", ") }, 400);
+    }
+    if (!apiKey || typeof apiKey !== "string") {
+      return c.json({ error: "apiKey is required" }, 400);
+    }
+    if (apiKey.length > 2048) {
+      return c.json({ error: "apiKey too long (max 2048 chars)" }, 400);
     }
     llmService.setApiKey(provider, apiKey);
     return c.json({
@@ -228,7 +293,12 @@ export function createRoutes(context: ServerContext) {
 
   // MCP server management
   app.post("/mcp/servers", async (c) => {
-    const config = await c.req.json<MCPServerConfig>();
+    let config: MCPServerConfig;
+    try {
+      config = await c.req.json<MCPServerConfig>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
     context.sessionManager.addServer(config);
     return c.json({ success: true, serverId: config.id });
   });
@@ -300,7 +370,13 @@ export function createRoutes(context: ServerContext) {
   // Read a resource
   app.post("/mcp/servers/:id/resources/read", async (c) => {
     const serverId = c.req.param("id");
-    const { uri } = await c.req.json<{ uri: string }>();
+    let body: { uri: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const { uri } = body;
     const client = context.sessionManager.getClient(serverId);
 
     if (!client) {
@@ -320,10 +396,13 @@ export function createRoutes(context: ServerContext) {
   // Get a prompt
   app.post("/mcp/servers/:id/prompts/get", async (c) => {
     const serverId = c.req.param("id");
-    const { name, args } = await c.req.json<{
-      name: string;
-      args?: Record<string, string>;
-    }>();
+    let body: { name: string; args?: Record<string, string> };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const { name, args } = body;
     const client = context.sessionManager.getClient(serverId);
 
     if (!client) {
@@ -342,15 +421,31 @@ export function createRoutes(context: ServerContext) {
 
   // Tool execution
   app.post("/mcp/tools/:name/call", async (c) => {
-    const toolName = c.req.param("name");
-    const args = await c.req.json<Record<string, unknown>>();
+    try {
+      const toolName = c.req.param("name");
+      let args: Record<string, unknown>;
+      try {
+        args = await c.req.json<typeof args>();
+      } catch {
+        return c.json({ error: "Invalid JSON body" }, 400);
+      }
 
-    const result = await context.sessionManager.callTool(toolName, args);
-    return c.json({ result });
+      const result = await context.sessionManager.callTool(toolName, args);
+      return c.json({ result });
+    } catch (error) {
+      console.error("[Tool Error]", error);
+      return c.json({ error: "Tool execution failed" }, 500);
+    }
   });
 
-  // Environment check
+  // Environment check (internal diagnostics only)
   app.get("/env/check", async (c) => {
+    // Restrict to localhost to prevent information leakage
+    const remoteAddr = c.req.header("x-forwarded-for") || "127.0.0.1";
+    if (remoteAddr !== "127.0.0.1" && !remoteAddr.startsWith("::ffff:127.0.0.1")) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
     const tools = [
       { id: "npx",    name: "npx",      commands: ["npx --version"] },
       { id: "node",   name: "Node.js",  commands: ["node --version"] },
@@ -376,9 +471,18 @@ export function createRoutes(context: ServerContext) {
     if (!url) {
       return c.json({ error: "URL is required" }, 400);
     }
+    if (!isValidProxyUrl(url)) {
+      return c.json({ error: "Invalid or forbidden URL" }, 400);
+    }
 
-    const metadata = await imageProxy.getMetadata(url);
-    return c.json(metadata);
+    try {
+      const metadata = await imageProxy.getMetadata(url);
+      return c.json(metadata);
+    } catch (error) {
+      return c.json({
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
   });
 
   app.get("/proxy/image/fetch", async (c) => {
@@ -386,15 +490,24 @@ export function createRoutes(context: ServerContext) {
     if (!url) {
       return c.json({ error: "URL is required" }, 400);
     }
+    if (!isValidProxyUrl(url)) {
+      return c.json({ error: "Invalid or forbidden URL" }, 400);
+    }
 
-    const imageData = await imageProxy.fetchImage(url);
-    return new Response(new Uint8Array(imageData.data), {
-      headers: {
-        "Content-Type": imageData.contentType,
-        "Content-Length": String(imageData.size),
-        "Cache-Control": "public, max-age=86400",
-      },
-    });
+    try {
+      const imageData = await imageProxy.fetchImage(url);
+      return new Response(new Uint8Array(imageData.data), {
+        headers: {
+          "Content-Type": imageData.contentType,
+          "Content-Length": String(imageData.size),
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    } catch (error) {
+      return c.json({
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
   });
 
   return app;

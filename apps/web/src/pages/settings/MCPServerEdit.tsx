@@ -27,8 +27,8 @@ function needsRestart(
   newData: MCPServerConfigValidated
 ): boolean {
   for (const field of TRANSPORT_CRITICAL_FIELDS) {
-    const oldVal = (oldConfig as any)[field];
-    const newVal = (newData as any)[field];
+    const oldVal = oldConfig[field as keyof MCPServerConfig];
+    const newVal = newData[field as keyof MCPServerConfigValidated];
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
       return true;
     }
@@ -223,7 +223,7 @@ export function MCPServerEditPage() {
           <div className="bg-card rounded-lg border p-6 overflow-y-auto">
             <ServerForm
               defaultValues={{
-                ...(server as any),
+                ...server,
                 autoConnect: serverId ? autoConnectServerIds.includes(serverId) : false,
               }}
               onSubmit={handleSave}

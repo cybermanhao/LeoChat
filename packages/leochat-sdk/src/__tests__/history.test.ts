@@ -35,7 +35,7 @@ describe("filterHistory", () => {
         role: "assistant",
         content: "",
         timestamp: 1000,
-        tool_calls: [{ id: "tc1", name: "search", arguments: { q: "test" } }],
+        tool_calls: [{ id: "tc1", name: "search", arguments: { q: "test" }, status: "completed" as const }],
       },
     ];
     const result = filterHistory(messages);

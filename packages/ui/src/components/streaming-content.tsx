@@ -266,6 +266,10 @@ const StreamingContent = React.forwardRef<HTMLDivElement, StreamingContentProps>
                 <div
                   key={key}
                   className="overflow-x-auto"
+                  // SECURITY: AI-generated HTML is rendered directly.
+                  // This is intentional for rich table rendering, but assumes
+                  // the LLM output is trusted in this context. If rendering
+                  // untrusted AI responses, sanitize with DOMPurify first.
                   dangerouslySetInnerHTML={{ __html: block.content }}
                 />
               );

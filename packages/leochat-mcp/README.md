@@ -410,7 +410,7 @@ closePanel("all");
 2. **参数验证**：TypeScript 类型检查 + 运行时验证
 3. **无敏感操作**：UI 命令仅用于界面展示，不涉及数据修改或敏感网络请求
 4. **沙箱环境**：命令在浏览器 JavaScript 环境中执行，受安全策略限制
-5. **URL 验证**：`open_url` 命令应验证 URL 协议（建议只允许 http/https）
+5. **URL 验证**：`open_url` 命令只允许 http/https 协议；后端图片代理端点（`/proxy/image`）已实现 SSRF 防护，拦截私有 IP 段和非 http/https 协议
 
 ---
 

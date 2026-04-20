@@ -186,7 +186,7 @@ export class ToolDispatcher {
    * Check if a tool is available
    */
   hasTools(toolName: string): boolean {
-    return this.toolServerMap.has(toolName);
+    return !!this.resolveToolName(toolName);
   }
 
   /**

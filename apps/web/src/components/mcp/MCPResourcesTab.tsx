@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { cn, Button } from "@ai-chatbox/ui";
-import { FileText, Server, Download, Image as ImageIcon } from "lucide-react";
+import { cn } from "@ai-chatbox/ui";
+import { FileText, Server, Image as ImageIcon } from "lucide-react";
 import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { mcpApi } from "../../lib/api";
@@ -47,6 +47,9 @@ export function MCPResourcesTab() {
       return;
     }
 
+    const abortController = new AbortController();
+    let isMounted = true;
+
     const fetchContent = async () => {
       setIsLoadingContent(true);
       setContentError(null);
@@ -54,23 +57,31 @@ export function MCPResourcesTab() {
         const response = await mcpApi.readResource(
           selectedResource.serverId,
           selectedResource.resource.uri
-        );
+        ) as { contents?: Array<{ text?: string; blob?: string }> };
+        if (!isMounted || abortController.signal.aborted) return;
         // 假设 API 返回 { contents: [{ text: string }] }
         if (response.contents && response.contents[0]) {
-          setResourceContent(response.contents[0].text || response.contents[0].blob);
+          setResourceContent(response.contents[0].text || response.contents[0].blob || null);
         } else {
           setResourceContent(null);
         }
       } catch (error) {
+        if (!isMounted || abortController.signal.aborted) return;
         console.error("Failed to fetch resource:", error);
         setContentError(t("mcp.resourcesDetail.loadError"));
         setResourceContent(null);
       } finally {
-        setIsLoadingContent(false);
+        if (isMounted && !abortController.signal.aborted) {
+          setIsLoadingContent(false);
+        }
       }
     };
 
     fetchContent();
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [selectedResource]);
 
   if (resourcesWithServer.length === 0) {

@@ -89,7 +89,10 @@ export class OpenRouterService {
       stream: false,
     });
 
-    const choice = response.choices[0];
+    const choice = response.choices?.[0];
+    if (!choice) {
+      throw new Error("LLM returned empty choices");
+    }
     return {
       id: generateId(),
       role: "assistant",

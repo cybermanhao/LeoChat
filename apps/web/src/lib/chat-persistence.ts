@@ -5,8 +5,13 @@ const IDB_NAME = "leochat-storage";
 const IDB_STORE = "keyval";
 const IDB_VERSION = 1;
 
+let idbPromise: Promise<IDBDatabase> | null = null;
+
 function openIDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (idbPromise) {
+    return idbPromise;
+  }
+  idbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
@@ -14,9 +19,24 @@ function openIDB(): Promise<IDBDatabase> {
         db.createObjectStore(IDB_STORE);
       }
     };
-    req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = (e) => {
+      const db = (e.target as IDBOpenDBRequest).result;
+      // Handle unexpected close (e.g., user clears browser data)
+      db.onclose = () => {
+        idbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      idbPromise = null;
+      reject(req.error);
+    };
+    req.onblocked = () => {
+      idbPromise = null;
+      reject(new Error("IndexedDB is blocked by another tab"));
+    };
   });
+  return idbPromise;
 }
 
 function createIndexedDBStorage() {
@@ -52,24 +72,23 @@ function createIndexedDBStorage() {
 }
 
 function createElectronStorage() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const api = (window as any).electronAPI;
+  const api = window.electronAPI;
+  if (!api) throw new Error("electronAPI not available");
   return {
     async getItem(key: string): Promise<string | null> {
-      return api.invoke("storage:getItem", key);
+      return api.invoke("storage:getItem", key) as Promise<string | null>;
     },
     async setItem(key: string, value: string): Promise<void> {
-      return api.invoke("storage:setItem", key, value);
+      await api.invoke("storage:setItem", key, value);
     },
     async removeItem(key: string): Promise<void> {
-      return api.invoke("storage:removeItem", key);
+      await api.invoke("storage:removeItem", key);
     },
   };
 }
 
 export function getChatStorageAdapter() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isElectron = typeof window !== "undefined" && !!(window as any).electronAPI;
+  const isElectron = typeof window !== "undefined" && !!window.electronAPI;
   return isElectron ? createElectronStorage() : createIndexedDBStorage();
 }
 

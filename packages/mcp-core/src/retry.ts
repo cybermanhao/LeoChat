@@ -143,6 +143,7 @@ export class CircuitBreaker {
   private failureCount = 0;
   private successCount = 0;
   private lastFailureTime = 0;
+  private halfOpenPending = false;
   private config: CircuitBreakerConfig;
   private onStateChange?: (event: CircuitStateChangeCallback) => void;
 
@@ -166,12 +167,17 @@ export class CircuitBreaker {
       const elapsed = Date.now() - this.lastFailureTime;
       if (elapsed >= this.config.resetTimeoutMs) {
         this.transitionTo("half-open");
+        this.halfOpenPending = true;
         return true;
       }
       return false;
     }
 
-    // half-open: allow one attempt to test recovery
+    // half-open: allow only one attempt to test recovery
+    if (this.halfOpenPending) {
+      return false;
+    }
+    this.halfOpenPending = true;
     return true;
   }
 
@@ -180,6 +186,7 @@ export class CircuitBreaker {
    */
   recordSuccess(): void {
     if (this.state === "half-open") {
+      this.halfOpenPending = false;
       this.successCount++;
       if (this.successCount >= this.config.successThreshold) {
         this.transitionTo("closed");
@@ -201,6 +208,7 @@ export class CircuitBreaker {
 
     if (this.state === "half-open") {
       // Any failure in half-open immediately opens the circuit
+      this.halfOpenPending = false;
       this.transitionTo("open");
       this.successCount = 0;
     } else if (
@@ -234,6 +242,7 @@ export class CircuitBreaker {
     this.failureCount = 0;
     this.successCount = 0;
     this.lastFailureTime = 0;
+    this.halfOpenPending = false;
 
     if (previousState !== "closed") {
       this.onStateChange?.({
@@ -321,12 +330,15 @@ export async function withRetry<T>(
         throw lastError;
       }
 
-      // Record failure in circuit breaker
-      circuitBreaker?.recordFailure();
-
       // Check if we should retry
       const isLastAttempt = attempt >= fullConfig.maxAttempts;
       const shouldRetry = !isLastAttempt && isRetryableError(error, fullConfig);
+
+      // Only record failure in circuit breaker if we will actually retry
+      // or if it's the last attempt. Non-retryable errors should not trigger circuit breaker.
+      if (shouldRetry || isLastAttempt) {
+        circuitBreaker?.recordFailure();
+      }
 
       if (shouldRetry) {
         const delayMs = calculateDelay(attempt, fullConfig);

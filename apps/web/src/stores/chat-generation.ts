@@ -7,6 +7,7 @@ import type {
   DisplayMessage,
   ContextMessage,
 } from "@ai-chatbox/shared";
+import type { TaskLoop } from "@ai-chatbox/mcp-core";
 import { LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP, normalizeLeoCard } from "@ai-chatbox/shared";
 import { processToolResultForUICommands, executeUICommand } from "../lib/ui-commands";
 import type { CommandName } from "../lib/ui-commands";
@@ -16,8 +17,7 @@ import { sendOSNotification } from "../lib/os-notification";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
 // TaskLoop 懒加载，避免构建顺序问题
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let TaskLoopConstructor: any = null;
+let TaskLoopConstructor: typeof TaskLoop | null = null;
 async function getTaskLoop() {
   if (!TaskLoopConstructor) {
     // @ts-ignore - mcp-core 在运行时可用
@@ -28,7 +28,7 @@ async function getTaskLoop() {
 }
 
 const BACKEND_URL =
-  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_BACKEND_URL) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
   "http://localhost:3001";
 
 export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => ({
@@ -38,6 +38,11 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   activeTaskLoop: null,
 
   sendMessage: async (content, systemPrompt) => {
+    if (get().isGenerating) {
+      console.warn("[chat-generation] Already generating, ignoring sendMessage");
+      return;
+    }
+
     const {
       currentConversationId,
       currentProvider,
@@ -54,6 +59,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const conv = get().conversations.find((c) => c.id === convId);
     const history = conv?.contextMessages || [];
     const contextSnapshot = [...history];
+    const displaySnapshot = [...(conv?.displayMessages || [])];
     const historyWithoutSystem = history.filter((m) => m.role !== "system");
 
     const providerConfig = LLM_PROVIDERS[currentProvider];
@@ -87,6 +93,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     });
 
     const unsubscribe = taskLoop.subscribe((event: TaskLoopEvent) => {
+      if (get().activeTaskLoop !== taskLoop) return;
       get()._handleTaskLoopEvent(convId, event);
     });
 
@@ -117,16 +124,24 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       console.error("TaskLoop error:", error);
       // abort/error 时回滚到本次生成前的快照，避免不完整消息污染下次上下文
       set((state) => ({
-        conversations: state.conversations.map((c) =>
-          c.id === convId ? { ...c, contextMessages: contextSnapshot } : c
-        ),
+        conversations: state.conversations.map((c) => {
+          if (c.id !== convId) return c;
+          return {
+            ...c,
+            contextMessages: contextSnapshot,
+            displayMessages: displaySnapshot,
+          };
+        }),
+        toolCallStates: {},
       }));
     } finally {
       unsubscribe();
-      set({
-        isGenerating: false,
-        activeTaskLoop: null,
-      });
+      if (get().activeTaskLoop === taskLoop) {
+        set({
+          isGenerating: false,
+          activeTaskLoop: null,
+        });
+      }
     }
   },
 
@@ -314,7 +329,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
               c.id === chatId
                 ? {
                     ...c,
-                    contextMessages: event.internalMessages.map((msg: ChatMessage) => ({
+                    contextMessages: (event.internalMessages || []).map((msg: ChatMessage) => ({
                       id: msg.id,
                       role: msg.role,
                       content: msg.content || "",
