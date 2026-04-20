@@ -398,7 +398,7 @@ class GeminiAdapter implements ModelAdapterInstance {
         role: "function",
         parts: [{
           functionResponse: {
-            name: msg.tool_call_id, // Gemini 使用函数名
+            name: msg.tool_call_id || "unknown",
             response: { result: msg.content },
           },
         }],
@@ -460,7 +460,7 @@ class GeminiAdapter implements ModelAdapterInstance {
           if (part.functionCall) {
             result.tool_calls = [{
               index: 0,
-              id: `fc_${Date.now()}`,
+              id: `fc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
               name: part.functionCall.name,
               arguments_delta: JSON.stringify(part.functionCall.args),
             }];

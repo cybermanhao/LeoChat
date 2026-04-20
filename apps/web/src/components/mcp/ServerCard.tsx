@@ -4,18 +4,17 @@ import {
   Server,
   Loader2,
   Trash2,
-  Pencil,
   Plug,
   Unplug,
   Terminal,
   Globe,
   Zap,
 } from "lucide-react";
-import type { MCPServerConfig } from "@ai-chatbox/shared";
+import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
 import { useT } from "../../i18n";
 
 interface ServerCardProps {
-  server: MCPServerConfig;
+  server: MCPServerConfigValidated;
   version?: string | null;
   isLoading?: boolean;
   isConnected?: boolean;
@@ -96,7 +95,7 @@ export function ServerCard({
   const TransportIcon = server.transport === "stdio" ? Terminal : Globe;
 
   // 从服务器配置中提取描述（需要扩展 MCPServerConfig 类型）
-  const description = (server as any).description || "";
+  const description = server.description || "";
 
   // 截断描述到 3 行
   const truncatedDescription = useMemo(() => {
@@ -108,7 +107,7 @@ export function ServerCard({
     return description;
   }, [description]);
 
-  const displayTags = (server as any).tags || [];
+  const displayTags = server.tags || [];
 
   return (
     <div
@@ -201,9 +200,9 @@ export function ServerCard({
           <TransportIcon className="h-3 w-3" />
           {server.transport === "stdio" ? "STDIO" : "HTTP"}
         </span>
-        {(server as any).provider && (
+        {server.provider && (
           <span className="px-1.5 py-0.5 rounded bg-muted truncate max-w-[100px]">
-            {(server as any).provider}
+            {server.provider}
           </span>
         )}
         {displayTags.slice(0, 2).map((tag: string) => (

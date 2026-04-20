@@ -23,6 +23,9 @@
 import { useThemeStore } from "../stores/theme";
 import { sendOSNotification } from "./os-notification";
 
+// Global notification timers for cleanup
+const notificationTimers: Array<{ timer: ReturnType<typeof setTimeout>; element: HTMLElement }> = [];
+
 // ============================================================================
 // 类型定义
 // ============================================================================
@@ -206,10 +209,15 @@ registerCommandHandler("show_notification", (payload) => {
   notification.textContent = message;
   document.body.appendChild(notification);
 
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     notification.classList.add("animate-out", "slide-out-to-right-full");
-    setTimeout(() => notification.remove(), 300);
+    setTimeout(() => {
+      notification.remove();
+      const idx = notificationTimers.findIndex((n) => n.timer === timer);
+      if (idx >= 0) notificationTimers.splice(idx, 1);
+    }, 300);
   }, duration);
+  notificationTimers.push({ timer, element: notification });
 
   sendOSNotification("LeoChat", message);
 

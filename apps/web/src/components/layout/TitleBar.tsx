@@ -9,7 +9,7 @@ interface TitleBarProps {
 }
 
 export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
-  const electronAPI = typeof window !== "undefined" && (window as any).electronAPI;
+  const electronAPI = typeof window !== "undefined" ? window.electronAPI : undefined;
   const isElectron = !!electronAPI;
   const { t } = useT();
   const uiMode = useChatStore((s) => s.uiMode);
@@ -30,10 +30,10 @@ export function TitleBar({ title = "LeoChat" }: TitleBarProps) {
       </div>
 
       {/* 中间：拖拽区域 */}
-      <div className="flex-1 h-full" style={{ WebkitAppRegion: "drag" } as any} />
+      <div className="flex-1 h-full" style={{ WebkitAppRegion: "drag" }} />
 
       {/* 右侧：快捷访问 + 窗口控制 */}
-      <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
+      <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" }}>
         {/* 简洁/专业模式切换 */}
         <div className="flex items-center h-5 rounded-md border border-border overflow-hidden mr-2">
           <button

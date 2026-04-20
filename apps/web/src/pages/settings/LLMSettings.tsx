@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Check, Eye, EyeOff, ExternalLink, Sparkles } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import { useChatStore, type LLMProvider } from "../../stores/chat";
@@ -100,6 +100,15 @@ export function LLMSettings() {
   const [localKey, setLocalKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
+    };
+  }, []);
 
   // 切换 provider 时同步 key 到本地输入框
   useEffect(() => {
@@ -113,7 +122,10 @@ export function LLMSettings() {
     if (localKey.trim()) {
       setProviderKey(currentProvider, localKey.trim());
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
     }
   };
 

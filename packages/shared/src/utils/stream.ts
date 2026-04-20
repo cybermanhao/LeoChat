@@ -11,7 +11,7 @@ export function parseStreamChunk(
   let state = currentState;
 
   // Check for code block markers
-  const codeBlockStart = /```(\w+)?/g;
+  const codeBlockStart = /```(\w+)?/;
   const codeBlockEnd = /```\s*$/;
 
   if (state) {
@@ -39,6 +39,36 @@ export function parseStreamChunk(
     // Check if starting a new code block
     const match = codeBlockStart.exec(text);
     if (match) {
+      // Handle multiple code blocks in one chunk by recursively parsing remaining content
+      const afterCode = text.slice(match.index + match[0].length);
+      const endMatch = codeBlockEnd.exec(afterCode);
+      if (endMatch) {
+        // Complete code block within this chunk
+        const beforeCode = text.slice(0, match.index);
+        if (beforeCode.trim()) {
+          chunks.push({
+            type: "text",
+            content: beforeCode,
+            isComplete: true,
+          });
+        }
+        const codeContent = afterCode.slice(0, endMatch.index);
+        chunks.push({
+          type: "code",
+          content: codeContent,
+          metadata: { language: match[1] || "plaintext" },
+          isComplete: true,
+        });
+        const remaining = afterCode.slice(endMatch.index + endMatch[0].length);
+        if (remaining) {
+          const rest = parseStreamChunk(remaining, null);
+          chunks.push(...rest.chunks);
+        }
+        state = null;
+        return { chunks, state };
+      }
+      // Incomplete code block - fall through to original logic
+
       const beforeCode = text.slice(0, match.index);
       if (beforeCode.trim()) {
         chunks.push({
@@ -142,12 +172,14 @@ export function parseCardTags(
  */
 function parseCardAttributes(attrsStr: string): CardData {
   const card: CardData = {};
-  const attrRegex = /(\w+)="([^"]*)"/g;
+  // Support double quotes, single quotes, and unquoted values
+  const attrRegex = /(\w+)=(?:"([^"]*)"|'([^']*)'|([^\s>]*))/g;
   let attrMatch;
   while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
     const key = attrMatch[1] as keyof CardData;
+    const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
     if (["title", "description", "image", "link", "linkText"].includes(key)) {
-      card[key] = attrMatch[2];
+      card[key] = value;
     }
   }
   return card;

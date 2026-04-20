@@ -27,6 +27,10 @@ export interface StreamCallbacks {
   onError: (error: Error) => Promise<void>;
 }
 
+export interface StreamChatOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * 通用 LLM 服务，支持多个提供商
  */
@@ -238,7 +242,10 @@ export class LLMService {
       stream: false,
     });
 
-    const choice = response.choices[0];
+    const choice = response.choices?.[0];
+    if (!choice) {
+      throw new Error("LLM returned empty choices");
+    }
     return {
       id: generateId(),
       role: "assistant",
@@ -259,19 +266,28 @@ export class LLMService {
    */
   async streamChat(
     request: ChatRequest,
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
+    options?: StreamChatOptions
   ): Promise<void> {
     const client = this.getClient(request.provider, request.model);
     const model = request.model || DEFAULT_MODELS.CHAT;
 
-    const stream = await client.chat.completions.create({
-      model,
-      messages: this.toOpenAIMessages(request.messages),
-      temperature: request.temperature ?? 0.7,
-      max_tokens: request.maxTokens,
-      tools: request.tools,
-      stream: true,
-    });
+    let stream: Awaited<ReturnType<typeof client.chat.completions.create>>;
+    try {
+      stream = await client.chat.completions.create({
+        model,
+        messages: this.toOpenAIMessages(request.messages),
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.maxTokens,
+        tools: request.tools,
+        stream: true,
+      }, { signal: options?.signal });
+    } catch (error) {
+      await callbacks.onError(
+        error instanceof Error ? error : new Error(String(error))
+      );
+      return;
+    }
 
     let content = "";
     let reasoning = "";
@@ -280,6 +296,7 @@ export class LLMService {
 
     try {
       for await (const chunk of stream) {
+        if (options?.signal?.aborted) break;
         const delta = chunk.choices[0]?.delta;
 
         if (!delta) continue;

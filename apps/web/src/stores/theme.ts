@@ -12,6 +12,8 @@ interface ThemeState {
   clearThemeChangedFlag: () => void;
 }
 
+let themeChangeTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
@@ -19,12 +21,17 @@ export const useThemeStore = create<ThemeState>()(
       themeJustChanged: false,
 
       setTheme: (themeId) => {
+        if (themeChangeTimer) {
+          clearTimeout(themeChangeTimer);
+          themeChangeTimer = null;
+        }
         set({ currentTheme: themeId, themeJustChanged: true });
         get().applyTheme(themeId);
 
         // 自动清除标记
-        setTimeout(() => {
+        themeChangeTimer = setTimeout(() => {
           set({ themeJustChanged: false });
+          themeChangeTimer = null;
         }, 1000);
       },
 

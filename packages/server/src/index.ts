@@ -20,7 +20,12 @@ const isMain = process.argv[1]?.endsWith("index.ts") ||
                process.argv[1]?.endsWith("index.js");
 
 if (isMain) {
-  const port = parseInt(process.env.PORT || "3001", 10);
+  const rawPort = process.env.PORT || "3001";
+  let port = parseInt(rawPort, 10);
+  if (Number.isNaN(port) || port < 1 || port > 65535) {
+    console.warn(`[Server] Invalid PORT "${rawPort}", falling back to 3001`);
+    port = 3001;
+  }
   const server = createServer();
   startServer(server, port);
 }

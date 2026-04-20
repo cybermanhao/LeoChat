@@ -42,8 +42,9 @@ function AppInit({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     migrateFromLocalStorage("ai-chatbox-chat", getChatStorageAdapter());
+    // @ts-ignore - Vite env types
     if (import.meta.env.DEV) {
-      (window as any).__devClearHistory = () => {
+      window.__devClearHistory = () => {
         useChatStore.getState().clearAllConversations();
         console.log("[Dev] All chat history cleared");
       };
@@ -69,23 +70,28 @@ function AppInit({ children }: { children: React.ReactNode }) {
   }, [autoConnectAll]);
 
   // 启动时从后端获取 LLM 配置，并同步本地保存的 API keys 到后端
-  const providerKeys = useChatStore((s) => s.providerKeys);
   useEffect(() => {
+    let cancelled = false;
     chatApi.getLLMConfig().then((config) => {
+      if (cancelled) return;
       if (config.backendConfigured) {
         initFromBackendConfig(config);
         console.log("[App] Backend LLM config loaded:", config);
       }
       // 同步本地保存的 API keys 到后端（用户之前在 UI 设置的）
-      Object.entries(providerKeys).forEach(([provider, key]) => {
+      // 使用 getState() 读取最新值，避免依赖引用变化导致重复同步
+      const keys = useChatStore.getState().providerKeys;
+      Object.entries(keys).forEach(([provider, key]) => {
         if (key && key !== "backend") {
           chatApi.setLLMConfig(provider, key).catch(() => {});
         }
       });
     }).catch((err) => {
-      console.warn("[App] Failed to load backend LLM config:", err);
+      if (!cancelled) {
+        console.warn("[App] Failed to load backend LLM config:", err);
+      }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
   }, [initFromBackendConfig]);
 
   return <>{children}</>;

@@ -40,14 +40,21 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
   },
 
   setCurrentConversation: (id) => {
+    get().cancelGeneration?.();
     set({
       currentConversationId: id,
       cardStatus: "stable",
       toolCallStates: {},
+      isGenerating: false,
+      activeTaskLoop: null,
     });
   },
 
   deleteConversation: (id) => {
+    const wasCurrent = get().currentConversationId === id;
+    if (wasCurrent && get().isGenerating) {
+      get().cancelGeneration?.();
+    }
     set((state) => {
       const filtered = state.conversations.filter((c) => c.id !== id);
       let newCurrentId = state.currentConversationId;
@@ -57,6 +64,9 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
       return {
         conversations: filtered,
         currentConversationId: newCurrentId,
+        ...(wasCurrent && state.isGenerating
+          ? { isGenerating: false, activeTaskLoop: null, cardStatus: "stable", toolCallStates: {} }
+          : {}),
       };
     });
   },
@@ -114,7 +124,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         if (lastItem && lastItem.type === "text" && typeof lastItem.content === "string") {
           updatedMsg.contentItems = updatedMsg.contentItems.map((item, i) =>
             i === lastIdx
-              ? { ...item, content: (item.content as string) + delta.content_delta, timestamp: Date.now() }
+              ? { ...item, content: item.content + (delta.content_delta || ""), timestamp: Date.now() }
               : item
           );
         } else {
@@ -144,13 +154,16 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
         for (const toolCall of delta.tool_calls) {
           if (!existingToolCallIds.has(toolCall.id)) {
-            updatedMsg.contentItems.push({
-              id: generateId(),
-              type: "tool-call",
-              content: toolCall,
-              timestamp: Date.now(),
-              status: "pending",
-            });
+            updatedMsg.contentItems = [
+              ...updatedMsg.contentItems,
+              {
+                id: generateId(),
+                type: "tool-call",
+                content: toolCall,
+                timestamp: Date.now(),
+                status: "pending",
+              },
+            ];
           }
         }
       }

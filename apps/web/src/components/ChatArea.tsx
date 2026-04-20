@@ -19,6 +19,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
+import type { DisplayMessage, ToolCall } from "@ai-chatbox/shared";
 import { Sparkles, Trash2, RefreshCw, Thermometer, Layers } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
@@ -85,7 +86,7 @@ export function ChatArea() {
     if (isGenerating && lastMessage?.role === "assistant") {
       scrollToBottom();
     }
-  }, [isGenerating, lastMessage?.content, lastMessage?.followup_content, scrollToBottom]);
+  }, [isGenerating, lastMessage?.contentItems, scrollToBottom]);
 
   // 将 toolCallStates 转换为 UI 组件需要的格式
   const getToolCallStatesForMessage = useCallback(
@@ -123,7 +124,6 @@ export function ChatArea() {
   const mcpConnectingServerIds = useMCPStore((s) => s.connectingServerIds);
   const mcpEnabledServerIds = useMCPStore((s) => s.enabledServerIds);
   const toggleMCPServer = useMCPStore((s) => s.toggleServer);
-  const getEnabledTools = useMCPStore((s) => s.getEnabledTools);
   const disabledToolIds = useMCPStore((s) => s.disabledToolIds);
 
   // Chat Store - MCP Tools
@@ -139,10 +139,11 @@ export function ChatArea() {
   }, [mcpConnectingServerIds]);
 
   // 同步 MCP 工具到 Chat Store（过滤禁用的工具）
+  // 使用 getState() 避免订阅方法导致的 stale closure
   useEffect(() => {
-    const enabledTools = getEnabledTools();
+    const enabledTools = useMCPStore.getState().getEnabledTools();
     setMCPTools(enabledTools);
-  }, [getEnabledTools, disabledToolIds, mcpEnabledServerIds, setMCPTools]);
+  }, [disabledToolIds, mcpEnabledServerIds, setMCPTools]);
 
   // 对话框状态
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -171,6 +172,7 @@ export function ChatArea() {
 
   // 自动拉取已连接 MCP 服务器的提示词（无必填参数的）
   useEffect(() => {
+    const aborted = new Set<string>();
     for (const source of mcpSources) {
       for (const server of source.servers) {
         const state = mcpServerStates[server.id];
@@ -183,6 +185,7 @@ export function ChatArea() {
           mcpApi
             .getPrompt(server.id, p.name)
             .then((raw) => {
+              if (aborted.has(key)) return;
               const result = raw as { messages?: Array<{ content: string | { text: string } }> };
               const parts: string[] = [];
               if (result.messages?.length) {
@@ -195,10 +198,26 @@ export function ChatArea() {
               const content = parts.join("\n");
               if (content) cachePromptContent(server.id, p.name, content);
             })
-            .catch((e) => console.error("Failed to auto-fetch MCP prompt", e));
+            .catch((e) => {
+              if (!aborted.has(key)) {
+                console.error("Failed to auto-fetch MCP prompt", e);
+              }
+            });
         }
       }
     }
+    return () => {
+      for (const source of mcpSources) {
+        for (const server of source.servers) {
+          const state = mcpServerStates[server.id];
+          if (!state?.prompts?.length) continue;
+          for (const p of state.prompts) {
+            if (p.arguments?.some((a) => a.required)) continue;
+            aborted.add(`${server.id}:${p.name}`);
+          }
+        }
+      }
+    };
   }, [mcpSources, mcpServerStates, mcpPromptCache, cachePromptContent]);
 
   // 迁移逻辑：promptVersion === 0 时自动附加所有已缓存的无参 MCP 提示词

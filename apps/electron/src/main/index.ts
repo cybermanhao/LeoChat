@@ -119,22 +119,41 @@ function setupIPC(): void {
   // Storage handlers (replace localStorage with file-based storage)
   const storageDir = join(app.getPath("userData"), "leochat-storage");
 
+  /** Validate storage key to prevent path traversal */
+  function sanitizeStorageKey(key: string): string | null {
+    // Only allow alphanumeric, hyphen, underscore, and dot
+    if (!/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return null;
+    }
+    // Prevent path traversal segments
+    if (key.includes("..") || key.includes("/") || key.includes("\\")) {
+      return null;
+    }
+    return key;
+  }
+
   ipcMain.handle("storage:getItem", async (_, key: string) => {
+    const safeKey = sanitizeStorageKey(key);
+    if (!safeKey) return null;
     try {
-      return await readFile(join(storageDir, `${key}.json`), "utf-8");
+      return await readFile(join(storageDir, `${safeKey}.json`), "utf-8");
     } catch {
       return null;
     }
   });
 
   ipcMain.handle("storage:setItem", async (_, key: string, value: string) => {
+    const safeKey = sanitizeStorageKey(key);
+    if (!safeKey) throw new Error("Invalid storage key");
     await mkdir(storageDir, { recursive: true });
-    await writeFile(join(storageDir, `${key}.json`), value, "utf-8");
+    await writeFile(join(storageDir, `${safeKey}.json`), value, "utf-8");
   });
 
   ipcMain.handle("storage:removeItem", async (_, key: string) => {
+    const safeKey = sanitizeStorageKey(key);
+    if (!safeKey) return;
     try {
-      await unlink(join(storageDir, `${key}.json`));
+      await unlink(join(storageDir, `${safeKey}.json`));
     } catch {}
   });
 
