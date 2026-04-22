@@ -334,9 +334,10 @@ export async function withRetry<T>(
       const isLastAttempt = attempt >= fullConfig.maxAttempts;
       const shouldRetry = !isLastAttempt && isRetryableError(error, fullConfig);
 
-      // Only record failure in circuit breaker if we will actually retry
-      // or if it's the last attempt. Non-retryable errors should not trigger circuit breaker.
-      if (shouldRetry || isLastAttempt) {
+      // Only record failure in circuit breaker for retryable errors.
+      // Non-retryable errors (e.g., HTTP 404) should not trigger the circuit breaker
+      // as they indicate client/business issues, not service unavailability.
+      if (shouldRetry) {
         circuitBreaker?.recordFailure();
       }
 

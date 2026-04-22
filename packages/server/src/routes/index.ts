@@ -1,13 +1,9 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { exec } from "child_process";
-import { promisify } from "util";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
-
-const execAsync = promisify(exec);
 
 const MAX_TOOL_RESULT = 3000;
 
@@ -42,19 +38,6 @@ function isValidProxyUrl(urlStr: string): boolean {
 function truncateResult(s: string): string {
   if (s.length <= MAX_TOOL_RESULT) return s;
   return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
-}
-
-async function getToolVersion(commands: string[]): Promise<string | null> {
-  for (const cmd of commands) {
-    try {
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 5000 });
-      const output = (stdout || stderr).trim();
-      if (output) return output;
-    } catch {
-      // try next command
-    }
-  }
-  return null;
 }
 
 export function createRoutes(context: ServerContext) {
@@ -438,33 +421,6 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
-  // Environment check (internal diagnostics only)
-  app.get("/env/check", async (c) => {
-    // Restrict to localhost to prevent information leakage
-    const remoteAddr = c.req.header("x-forwarded-for") || "127.0.0.1";
-    if (remoteAddr !== "127.0.0.1" && !remoteAddr.startsWith("::ffff:127.0.0.1")) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    const tools = [
-      { id: "npx",    name: "npx",      commands: ["npx --version"] },
-      { id: "node",   name: "Node.js",  commands: ["node --version"] },
-      { id: "uvx",    name: "uvx",      commands: ["uvx --version"] },
-      { id: "uv",     name: "uv",       commands: ["uv --version"] },
-      { id: "python", name: "Python",   commands: ["python --version", "python3 --version"] },
-      { id: "bun",    name: "Bun",      commands: ["bun --version"] },
-      { id: "mcp",    name: "MCP CLI",  commands: ["mcp version"] },
-    ];
-
-    const results = await Promise.all(
-      tools.map(async (tool) => {
-        const version = await getToolVersion(tool.commands);
-        return { id: tool.id, name: tool.name, installed: version !== null, version: version ?? null };
-      })
-    );
-    return c.json(results);
-  });
-
   // Image proxy
   app.get("/proxy/image", async (c) => {
     const url = c.req.query("url");
@@ -479,9 +435,8 @@ export function createRoutes(context: ServerContext) {
       const metadata = await imageProxy.getMetadata(url);
       return c.json(metadata);
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : String(error),
-      }, 500);
+      console.error("[Image Proxy Error]", error);
+      return c.json({ error: "Failed to fetch image metadata" }, 502);
     }
   });
 
@@ -504,9 +459,8 @@ export function createRoutes(context: ServerContext) {
         },
       });
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : String(error),
-      }, 500);
+      console.error("[Image Proxy Error]", error);
+      return c.json({ error: "Failed to fetch image" }, 502);
     }
   });
 
