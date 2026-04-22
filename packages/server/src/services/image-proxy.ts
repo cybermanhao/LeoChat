@@ -30,6 +30,9 @@ export class ImageProxyService {
     // Check cache
     const cached = this.cache.get(url);
     if (cached) {
+      // Update access order for true LRU semantics
+      this.cache.delete(url);
+      this.cache.set(url, cached);
       return cached;
     }
 
