@@ -612,6 +612,7 @@ export function createRoutes(context: ServerContext) {
     return c.json({ success: true });
   });
 
+
   // Image proxy
   app.get("/proxy/image", async (c) => {
     const url = c.req.query("url");
