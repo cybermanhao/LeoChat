@@ -85,6 +85,7 @@ export interface ConversationsSlice {
   setCurrentConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
   clearAllConversations: () => void;
+  clearCurrentConversation: () => void;
 
   _addMessage: (chatId: string, message: DisplayMessage, contextMessage: ContextMessage) => void;
   _updateMessage: (chatId: string, messageId: string, patch: Partial<DisplayMessage>) => void;

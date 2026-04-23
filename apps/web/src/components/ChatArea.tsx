@@ -42,6 +42,7 @@ export function ChatArea() {
   const setInput = useChatStore((s) => s.setInput);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const cancelGeneration = useChatStore((s) => s.cancelGeneration);
+  const clearCurrentConversation = useChatStore((s) => s.clearCurrentConversation);
   const currentProvider = useChatStore((s) => s.currentProvider);
   const currentModel = useChatStore((s) => s.currentModel);
   const setCurrentModel = useChatStore((s) => s.setCurrentModel);
@@ -325,11 +326,10 @@ export function ChatArea() {
   );
 
   const handleClearChat = useCallback(() => {
-    // TODO: 实现清空当前对话
     if (confirm(t("chat.confirmClear"))) {
-      console.log("Clear chat");
+      clearCurrentConversation();
     }
-  }, []);
+  }, [clearCurrentConversation]);
 
   const handleSend = () => {
     if (input.trim() && !isGenerating) {

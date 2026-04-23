@@ -73,6 +73,23 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
   clearAllConversations: () => set({ conversations: [], currentConversationId: null }),
 
+  clearCurrentConversation: () => {
+    const { currentConversationId, isGenerating, cancelGeneration } = get();
+    if (!currentConversationId) return;
+    if (isGenerating) cancelGeneration?.();
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === currentConversationId
+          ? { ...c, displayMessages: [], contextMessages: [], internalMessages: [], updatedAt: Date.now() }
+          : c
+      ),
+      isGenerating: false,
+      activeTaskLoop: null,
+      cardStatus: "stable",
+      toolCallStates: {},
+    }));
+  },
+
   _addMessage: (chatId, displayMessage, contextMessage) => {
     set((state) => ({
       conversations: state.conversations.map((c) =>
