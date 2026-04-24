@@ -96,6 +96,13 @@ export interface CommandPayloadMap {
   send_message: {
     text: string;
   };
+
+  // 调整窗口大小
+  resize_window: {
+    width?: number;
+    height?: number;
+    preset?: "small" | "medium" | "large" | "fullscreen";
+  };
 }
 
 /**
@@ -332,6 +339,53 @@ registerCommandHandler("send_message", (payload) => {
     executed: true,
     message: `Message sent: ${text.substring(0, 50)}`,
   };
+});
+
+const WINDOW_PRESETS: Record<string, { width: number; height: number }> = {
+  small: { width: 800, height: 600 },
+  medium: { width: 1200, height: 800 },
+  large: { width: 1600, height: 1000 },
+};
+
+/**
+ * resize_window - 调整窗口大小
+ */
+registerCommandHandler("resize_window", async (payload) => {
+  const { preset, width, height } = payload;
+
+  let targetWidth: number;
+  let targetHeight: number;
+
+  if (preset === "fullscreen") {
+    // Electron
+    const electronAPI = (window as Window & { electronAPI?: { invoke: (ch: string, ...a: unknown[]) => Promise<unknown> } }).electronAPI;
+    if (electronAPI) {
+      await electronAPI.invoke("window:maximize");
+      return { executed: true, message: "Window maximized" };
+    }
+    return { executed: false, message: "Fullscreen not supported in browser" };
+  }
+
+  if (preset && WINDOW_PRESETS[preset]) {
+    targetWidth = WINDOW_PRESETS[preset].width;
+    targetHeight = WINDOW_PRESETS[preset].height;
+  } else if (width && height) {
+    targetWidth = width;
+    targetHeight = height;
+  } else {
+    return { executed: false, message: "Specify preset or both width and height" };
+  }
+
+  // Electron path
+  const electronAPI = (window as Window & { electronAPI?: { invoke: (ch: string, ...a: unknown[]) => Promise<unknown> } }).electronAPI;
+  if (electronAPI) {
+    await electronAPI.invoke("window:resize", { width: targetWidth, height: targetHeight });
+    return { executed: true, message: `Window resized to ${targetWidth}×${targetHeight}` };
+  }
+
+  // Browser fallback (only works for windows opened via window.open)
+  window.resizeTo(targetWidth, targetHeight);
+  return { executed: true, message: `Window resized to ${targetWidth}×${targetHeight}` };
 });
 
 /**

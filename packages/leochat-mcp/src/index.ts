@@ -29,6 +29,7 @@ type CommandName =
   | "open_url"
   | "scroll_to_message"
   | "set_input"
+  | "resize_window"
   // @deprecated render_cards is deprecated — cards are now structured content,
   // not UI commands. Remove this union member in a future cleanup pass.
   | "render_cards";
@@ -180,6 +181,7 @@ ${getThemeDescriptions()}
 - copy_to_clipboard(text) - 复制到剪贴板
 - open_url(url, newTab) - 打开链接
 - set_input(text, append) - 设置输入框内容
+- resize_window(preset) - 调整窗口大小 (small/medium/large/fullscreen)
 
 重要规则：
 1. 当用户请求 UI 操作时，必须调用对应工具，不要只是口头回复
@@ -334,6 +336,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "resize_window",
+        description: "调整应用窗口大小。支持预设尺寸或自定义宽高（仅 Electron 桌面端有效）",
+        inputSchema: {
+          type: "object",
+          properties: {
+            preset: {
+              type: "string",
+              enum: ["small", "medium", "large", "fullscreen"],
+              description: "预设尺寸: small(800×600), medium(1200×800), large(1600×1000), fullscreen(最大化)",
+            },
+            width: { type: "number", description: "自定义宽度（px），需同时提供 height" },
+            height: { type: "number", description: "自定义高度（px），需同时提供 width" },
+          },
+        },
+      },
       /**
        * @deprecated 此工具已废弃，将在未来版本中移除。
        */
@@ -470,6 +488,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case "scroll_to_message": {
       const { messageId, position } = args as { messageId?: string; position?: "top" | "bottom" };
       return makeResponse(createUICommand("scroll_to_message", { messageId, position }));
+    }
+
+    case "resize_window": {
+      const { width, height, preset } = args as {
+        width?: number;
+        height?: number;
+        preset?: "small" | "medium" | "large" | "fullscreen";
+      };
+      return makeResponse(createUICommand("resize_window", { width, height, preset }));
     }
 
     case "test_tool_call": {

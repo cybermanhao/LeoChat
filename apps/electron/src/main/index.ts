@@ -83,6 +83,13 @@ function setupIPC(): void {
     }
   });
   ipcMain.on("window:close", () => mainWindow?.close());
+  ipcMain.handle("window:resize", (_, { width, height }: { width: number; height: number }) => {
+    if (!mainWindow) return;
+    const w = Math.max(800, Math.round(width));
+    const h = Math.max(600, Math.round(height));
+    mainWindow.setSize(w, h, true);
+    mainWindow.center();
+  });
 
   // Server status
   ipcMain.handle(IPC_CHANNELS.SERVER_STATUS, () => {
