@@ -357,10 +357,9 @@ registerCommandHandler("resize_window", async (payload) => {
   let targetHeight: number;
 
   if (preset === "fullscreen") {
-    // Electron
     const electronAPI = (window as Window & { electronAPI?: { invoke: (ch: string, ...a: unknown[]) => Promise<unknown> } }).electronAPI;
     if (electronAPI) {
-      await electronAPI.invoke("window:maximize");
+      await electronAPI.invoke("window:resize", { maximize: true });
       return { executed: true, message: "Window maximized" };
     }
     return { executed: false, message: "Fullscreen not supported in browser" };
