@@ -83,12 +83,18 @@ function setupIPC(): void {
     }
   });
   ipcMain.on("window:close", () => mainWindow?.close());
-  ipcMain.handle("window:resize", (_, { width, height }: { width: number; height: number }) => {
+  ipcMain.handle("window:resize", (_, { width, height, maximize }: { width?: number; height?: number; maximize?: boolean }) => {
     if (!mainWindow) return;
-    const w = Math.max(800, Math.round(width));
-    const h = Math.max(600, Math.round(height));
-    mainWindow.setSize(w, h, true);
-    mainWindow.center();
+    if (maximize) {
+      mainWindow.maximize();
+      return;
+    }
+    if (width != null && height != null) {
+      const w = Math.max(800, Math.round(width));
+      const h = Math.max(600, Math.round(height));
+      mainWindow.setSize(w, h, true);
+      mainWindow.center();
+    }
   });
 
   // Server status
