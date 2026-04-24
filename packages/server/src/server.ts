@@ -34,7 +34,13 @@ export function createServer(externalSessionManager?: ReturnType<typeof createSe
   app.use(
     "*",
     cors({
-      origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+      // null covers Electron production (file:// renderer)
+      origin: (origin) =>
+        !origin ||
+        origin === "null" ||
+        /^https?:\/\/localhost(:\d+)?$/.test(origin)
+          ? origin || "*"
+          : null,
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type", "Authorization"],
       exposeHeaders: ["Content-Length"],
@@ -68,18 +74,15 @@ export function createServer(externalSessionManager?: ReturnType<typeof createSe
   return app;
 }
 
-export function startServer(app: Hono, port: number = 3001) {
-  console.log(`Starting server on port ${port}...`);
-
-  serve(
-    {
-      fetch: app.fetch,
-      port,
-    },
-    (info) => {
+export function startServer(app: Hono, port: number = 3001): Promise<number> {
+  return new Promise((resolve, reject) => {
+    console.log(`Starting server on port ${port}...`);
+    const httpServer = serve({ fetch: app.fetch, port }, (info) => {
       console.log(`Server running at http://localhost:${info.port}`);
-    }
-  );
+      resolve(info.port);
+    });
+    httpServer.on("error", reject);
+  });
 }
 
 export type AppType = ReturnType<typeof createServer>;

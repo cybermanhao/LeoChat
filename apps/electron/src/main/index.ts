@@ -198,10 +198,33 @@ app.whenReady().then(() => {
   setupIPC();
 
   // Start the embedded server
-  startServer(server, SERVER_PORT);
-
-  // Create window
-  createWindow();
+  startServer(server, SERVER_PORT).then(() => {
+    createWindow();
+  }).catch(async (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      // Check if the existing service on this port is already LeoChat
+      try {
+        const res = await fetch(`http://localhost:${SERVER_PORT}/health`);
+        if (res.ok) {
+          // Another LeoChat instance is already running — just open the window
+          console.warn(`[Server] Port ${SERVER_PORT} already in use by LeoChat, reusing.`);
+          createWindow();
+          return;
+        }
+      } catch {
+        // Non-LeoChat service on port
+      }
+      const { dialog } = await import("electron");
+      await dialog.showErrorBox(
+        "端口被占用",
+        `端口 ${SERVER_PORT} 已被其他程序占用，LeoChat 无法启动内嵌服务器。\n请关闭占用该端口的程序后重试。`
+      );
+      app.quit();
+    } else {
+      console.error("[Server] Failed to start:", err);
+      createWindow(); // still open window, let renderer show error state
+    }
+  });
 
   app.on("activate", function () {
     // On macOS it's common to re-create a window in the app when the
