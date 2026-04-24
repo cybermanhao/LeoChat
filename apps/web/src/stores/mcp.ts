@@ -158,7 +158,11 @@ export const useMCPStore = create<MCPState>()(
       connectingServerIds: new Set<string>(),
       serverVersions: {},
       searchText: "",
-      disabledToolIds: new Set<string>(),
+      disabledToolIds: new Set<string>(
+        !(window as Window & { electronAPI?: unknown }).electronAPI
+          ? ["leochat:resize_window"]
+          : []
+      ),
 
       // 新增方法：连接状态管理
       setConnecting: (serverId, connecting) => {
@@ -609,7 +613,13 @@ export const useMCPStore = create<MCPState>()(
           serverStates: {},
           // 只恢复配置数据
           autoConnectServerIds: persistedData.autoConnectServerIds || [],
-          disabledToolIds: new Set(persistedData.disabledToolIds || []),
+          disabledToolIds: (() => {
+            const set = new Set<string>(persistedData.disabledToolIds || []);
+            if (!(window as Window & { electronAPI?: unknown }).electronAPI) {
+              set.add("leochat:resize_window");
+            }
+            return set;
+          })(),
         };
       },
     }
