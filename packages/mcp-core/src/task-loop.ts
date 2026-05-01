@@ -699,6 +699,14 @@ export class TaskLoop {
                   reasoning_delta: parsed.reasoning,
                 },
               });
+            } else if (parsed.requiresApproval === true && parsed.id) {
+              // tool_approval_required 事件 — 后端正在等待用户授权
+              this.emit({
+                type: "approval_required",
+                id: parsed.id,
+                toolName: parsed.toolName ?? "bash",
+                command: parsed.command ?? "",
+              });
             } else if (parsed.id && parsed.name && parsed.arguments !== undefined && parsed.result === undefined) {
               // tool_call 事件（有 id, name, arguments 但没有 result）
 

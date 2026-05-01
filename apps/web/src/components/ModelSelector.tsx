@@ -9,7 +9,7 @@ import {
 import { Sparkles, Check, ExternalLink } from "lucide-react";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
 
 interface Model {
   id: string;
@@ -25,6 +25,7 @@ const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
   openai: { name: "OpenAI", link: "https://platform.openai.com" },
   openrouter: { name: "OpenRouter", link: "https://openrouter.ai/models" },
   moonshot: { name: "Moonshot (Kimi)", link: "https://platform.moonshot.cn" },
+  kimi: { name: "Kimi (Coding)", link: "https://platform.moonshot.cn/console/api-keys" },
 };
 
 interface ModelSelectorProps {
@@ -70,12 +71,18 @@ export function ModelSelector({
     { id: "moonshot-v1-128k", name: "Moonshot v1 128K", provider: "Moonshot", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60 / 1M tokens" },
   ], [t]);
 
+  const KIMI_MODELS = useMemo<Model[]>(() => [
+    { id: "kimi-code", name: "Kimi k2.6", provider: "Kimi", description: "Kimi coding model — 262K context", contextWindow: 262144 },
+    { id: "kimi-for-coding", name: "Kimi k2.6 (upstream ID)", provider: "Kimi", contextWindow: 262144 },
+  ], []);
+
   const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
     deepseek: DEEPSEEK_MODELS,
     openai: OPENAI_MODELS,
     openrouter: OPENROUTER_MODELS,
     moonshot: MOONSHOT_MODELS,
-  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS]);
+    kimi: KIMI_MODELS,
+  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS, KIMI_MODELS]);
 
   const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const providerInfo = PROVIDER_INFO[currentProvider];

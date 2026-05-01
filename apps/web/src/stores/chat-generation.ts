@@ -13,6 +13,7 @@ import { processToolResultForUICommands, executeUICommand } from "../lib/ui-comm
 import type { CommandName } from "../lib/ui-commands";
 import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
+import { getServerBaseUrl } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
@@ -27,15 +28,16 @@ async function getTaskLoop() {
   return TaskLoopConstructor;
 }
 
-const BACKEND_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
-  "http://localhost:3001";
+const VITE_BACKEND_URL =
+  typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
 
 export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => ({
   isGenerating: false,
   cardStatus: "stable" as CardStatus,
   toolCallStates: {},
   activeTaskLoop: null,
+  pendingApprovals: [],
+  sessionAllowedTools: new Set<string>(),
 
   sendMessage: async (content, systemPrompt) => {
     if (get().isGenerating) {
@@ -83,7 +85,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       maxEpochs,
       parallelToolCalls: true,
       useBackendProxy: true,
-      backendURL: BACKEND_URL,
+      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
       systemPrompt,
       contextLength: contextLength > 0 ? contextLength : undefined,
       modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
@@ -150,6 +152,16 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     if (activeTaskLoop) {
       activeTaskLoop.abort();
     }
+  },
+
+  allowToolForSession: (id, toolName) => {
+    set((state) => ({
+      sessionAllowedTools: new Set([...state.sessionAllowedTools, toolName]),
+      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== id),
+    }));
+    import("../lib/api").then(({ chatApi }) => {
+      chatApi.approveToolCall(id, true).catch((e) => console.warn("[allowForSession]", e));
+    });
   },
 
   executeAction: (actionName, attributes) => {
@@ -257,6 +269,10 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       }
 
       case "toolresult": {
+        // Remove this tool's approval from the queue once result arrives
+        set((state) => ({
+          pendingApprovals: state.pendingApprovals.filter((a) => a.id !== event.toolCallId),
+        }));
         const rawResult =
           typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2);
         const endTime = Date.now();
@@ -315,8 +331,24 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
       }
 
+      case "approval_required":
+        if (get().sessionAllowedTools.has(event.toolName)) {
+          // Auto-approve — user already said "allow for session" for this tool
+          import("../lib/api").then(({ chatApi }) => {
+            chatApi.approveToolCall(event.id, true).catch((e) => console.warn("[sessionAllow]", e));
+          });
+        } else {
+          set((state) => ({
+            pendingApprovals: [
+              ...state.pendingApprovals,
+              { id: event.id, toolName: event.toolName, command: event.command },
+            ],
+          }));
+        }
+        break;
+
       case "error":
-        set({ cardStatus: "stable", isGenerating: false });
+        set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
         handleApiError(event.error.message, get().currentProvider);
         break;
 
@@ -325,6 +357,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
           set((state) => ({
             cardStatus: "stable",
             isGenerating: false,
+            pendingApprovals: [],
             conversations: state.conversations.map((c) =>
               c.id === chatId
                 ? {
@@ -343,7 +376,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             ),
           }));
         } else {
-          set({ cardStatus: "stable", isGenerating: false });
+          set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
         }
         sendOSNotification("LeoChat", "AI 回复完成");
         break;

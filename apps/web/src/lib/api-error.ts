@@ -1,12 +1,13 @@
 import { showToast } from "../stores/toast";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
 
-const PROVIDER_TOP_UP: Record<LLMProvider, { label: string; url: string }> = {
+const PROVIDER_TOP_UP: Partial<Record<LLMProvider, { label: string; url: string }>> = {
   deepseek:   { label: "去充值", url: "https://platform.deepseek.com/top_up" },
   openai:     { label: "去充值", url: "https://platform.openai.com/account/billing" },
   openrouter: { label: "去充值", url: "https://openrouter.ai/credits" },
   moonshot:   { label: "去充值", url: "https://console.moonshot.cn/billing" },
+  kimi:       { label: "去充值", url: "https://platform.moonshot.cn/console/billing" },
 };
 
 /** 判断错误是否属于"余额/配额不足" */

@@ -46,6 +46,7 @@ export type TaskLoopEvent =
   | TaskLoopUpdateEvent
   | TaskLoopToolCallEvent
   | TaskLoopToolResultEvent
+  | TaskLoopApprovalRequiredEvent
   | TaskLoopStatusEvent
   | TaskLoopErrorEvent
   | TaskLoopDoneEvent
@@ -71,6 +72,13 @@ export interface TaskLoopToolCallEvent {
   messageId: string;
   /** 工具调用前的累积内容（用于日志） */
   contentBeforeToolCall?: string;
+}
+
+export interface TaskLoopApprovalRequiredEvent {
+  type: "approval_required";
+  id: string;
+  toolName: string;
+  command: string;
 }
 
 export interface TaskLoopToolResultEvent {
@@ -198,6 +206,7 @@ export type LLMProvider =
   | "google"
   | "deepseek"
   | "moonshot"
+  | "kimi"
   | "custom";
 
 /**

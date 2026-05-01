@@ -9,7 +9,7 @@ import type {
   ContextMessage,
 } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
 
 export interface Conversation {
   id: string;
@@ -95,6 +95,12 @@ export interface ConversationsSlice {
   ) => void;
 }
 
+export interface PendingApproval {
+  id: string;
+  toolName: string;
+  command: string;
+}
+
 // ─── Generation slice ────────────────────────────────────────────
 
 export interface GenerationSlice {
@@ -102,10 +108,15 @@ export interface GenerationSlice {
   cardStatus: CardStatus;
   toolCallStates: Record<string, ToolCallState>;
   activeTaskLoop: TaskLoopInstance | null;
+  pendingApprovals: PendingApproval[];
+  /** Tools allowed for the entire session — not persisted, resets on page reload */
+  sessionAllowedTools: Set<string>;
 
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
+  /** Approve this call AND mark toolName as auto-approved for the rest of the session */
+  allowToolForSession: (id: string, toolName: string) => void;
   _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
 }
 
