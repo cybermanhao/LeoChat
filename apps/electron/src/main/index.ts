@@ -196,7 +196,6 @@ function setupIPC(): void {
     } catch {}
   });
 
-  // Native folder picker for onboarding work directory selection
   ipcMain.handle("dialog:openDirectory", async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ["openDirectory"],
@@ -216,8 +215,6 @@ function setupIPC(): void {
     return join(process.resourcesPath, "leochat-mcp.js");
   });
 
-  // Unified resource path map for all built-in MCP servers.
-  // In dev: absolute paths into the monorepo; in prod: paths into resourcesPath.
   ipcMain.handle("builtin:server-resources", () => {
     if (is.dev) {
       const root = join(__dirname, "../../../..");
@@ -227,7 +224,6 @@ function setupIPC(): void {
         everything: join(root, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
         memory:     join(root, "node_modules/@modelcontextprotocol/server-memory/dist/index.js"),
         fetch:      join(root, "node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"),
-        // Excel: use pre-compiled exe; fall back to uvx on non-Windows
         excel: process.platform === "win32"
           ? join(root, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe")
           : null,

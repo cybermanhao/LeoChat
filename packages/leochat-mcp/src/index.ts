@@ -580,7 +580,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-
     case "test_tool_call": {
       const { duration = 3, shouldFail = false, message } = args as {
         duration?: number;

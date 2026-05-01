@@ -512,7 +512,6 @@ export const useMCPStore = create<MCPState>()(
                 case "fetch":
                   return res.fetch ? { ...s, args: [res.fetch] } : s;
                 case "excel":
-                  // Use native exe directly on Windows; fall back to uvx elsewhere
                   return res.excel
                     ? { ...s, command: res.excel, args: ["stdio"] }
                     : s;
@@ -543,7 +542,6 @@ export const useMCPStore = create<MCPState>()(
               return currentBuiltinMap.get(s.id) || s;
             }
             if (s.id === "filesystem") {
-              // Preserve user-configured allowed directories (args[1+]) from persisted config
               const persisted = currentBuiltinMap.get(s.id);
               const allowedDirs = persisted?.args?.slice(1) ?? [];
               return allowedDirs.length > 0
