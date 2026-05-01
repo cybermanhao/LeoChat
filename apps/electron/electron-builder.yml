@@ -6,6 +6,9 @@ directories:
 files:
   - out/**/*
   - package.json
+extraResources:
+  - from: "../../packages/leochat-mcp/dist/index.js"
+    to: "leochat-mcp.js"
 extraMetadata:
   main: out/main/index.js
 win:

@@ -35,6 +35,16 @@ const api = {
     };
   },
 
+  // Builtin resource paths
+  getLeochatMcpPath: () => ipcRenderer.invoke("builtin:leochat-mcp-path"),
+
+  // Server lifecycle
+  onServerReady: (callback: (port: number) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, port: number) => callback(port);
+    ipcRenderer.on("server:ready", listener);
+    return () => ipcRenderer.removeListener("server:ready", listener);
+  },
+
   // Generic invoke/on for flexibility
   invoke: (channel: string, ...args: unknown[]) =>
     ipcRenderer.invoke(channel, ...args),

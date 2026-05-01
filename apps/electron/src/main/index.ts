@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { readFile, writeFile, unlink, mkdir } from "fs/promises";
+import { createServer as createNetServer } from "net";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { createServer, startServer } from "@ai-chatbox/server";
 import { createSessionManager } from "@ai-chatbox/mcp-core";
@@ -9,6 +10,14 @@ import { IPC_CHANNELS } from "@ai-chatbox/shared";
 
 // Keep a global reference of the window object
 let mainWindow: BrowserWindow | null = null;
+
+// Actual port assigned after server starts. The promise lets IPC handlers wait
+// for the server to be ready before returning the port to the renderer.
+let serverPort = 3001;
+let _serverPortResolve: ((port: number) => void) | null = null;
+const serverPortPromise = new Promise<number>((resolve) => {
+  _serverPortResolve = resolve;
+});
 
 // Create session manager for MCP connections
 const sessionManager = createSessionManager({
@@ -22,10 +31,26 @@ const sessionManager = createSessionManager({
 
 // Create and start the server (share sessionManager with HTTP routes)
 const server = createServer(sessionManager);
-const SERVER_PORT = 3001;
+
+/** Returns `preferred` if free, otherwise lets the OS pick a random free port. */
+function findFreePort(preferred: number): Promise<number> {
+  return new Promise((resolve) => {
+    const s = createNetServer();
+    s.listen(preferred, () => {
+      const port = (s.address() as { port: number }).port;
+      s.close(() => resolve(port));
+    });
+    s.on("error", () => {
+      const fallback = createNetServer();
+      fallback.listen(0, () => {
+        const port = (fallback.address() as { port: number }).port;
+        fallback.close(() => resolve(port));
+      });
+    });
+  });
+}
 
 function createWindow(): void {
-  // Create the browser window
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -34,6 +59,9 @@ function createWindow(): void {
     show: false,
     frame: false,
     autoHideMenuBar: true,
+    // Prevents white flash before the renderer paints its first frame.
+    // Matches the CSS --background variable of the default light theme.
+    backgroundColor: "#ffffff",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -42,14 +70,19 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.on("ready-to-show", () => {
+  // Show as soon as Chromium has painted at least one frame so there's
+  // no blank-window gap, but we don't wait for the full JS bundle to run.
+  mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
     if (is.dev) {
       mainWindow?.webContents.openDevTools();
     }
   });
 
-  // Log renderer errors
+  // Hard fallback: show after 1 s even if ready-to-show never fires.
+  const showFallback = setTimeout(() => mainWindow?.show(), 1000);
+  mainWindow.once("show", () => clearTimeout(showFallback));
+
   mainWindow.webContents.on("console-message", (_e, level, message, line, sourceId) => {
     if (level >= 2) console.error(`[Renderer] ${message} (${sourceId}:${line})`);
   });
@@ -63,7 +96,6 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  // Load the remote URL for development or the local html file for production
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
@@ -134,14 +166,8 @@ function setupIPC(): void {
 
   /** Validate storage key to prevent path traversal */
   function sanitizeStorageKey(key: string): string | null {
-    // Only allow alphanumeric, hyphen, underscore, and dot
-    if (!/^[a-zA-Z0-9_.-]+$/.test(key)) {
-      return null;
-    }
-    // Prevent path traversal segments
-    if (key.includes("..") || key.includes("/") || key.includes("\\")) {
-      return null;
-    }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(key)) return null;
+    if (key.includes("..") || key.includes("/") || key.includes("\\")) return null;
     return key;
   }
 
@@ -170,10 +196,22 @@ function setupIPC(): void {
     } catch {}
   });
 
+  // Blocks until the server is ready, then returns the actual port.
+  // This lets the renderer's _apiBasePromise naturally wait for server startup.
+  ipcMain.handle("server:port", () => serverPortPromise);
+
+  // Expose correct leochat-mcp path (dev: repo path, prod: extraResource)
+  ipcMain.handle("builtin:leochat-mcp-path", () => {
+    if (is.dev) {
+      return join(__dirname, "../../../../packages/leochat-mcp/dist/index.js");
+    }
+    return join(process.resourcesPath, "leochat-mcp.js");
+  });
+
   // LLM chat (proxy to server)
   ipcMain.handle(IPC_CHANNELS.LLM_CHAT, async (_, messages, options) => {
-    // For non-streaming, make a direct call to server
-    const response = await fetch(`http://localhost:${SERVER_PORT}/api/chat`, {
+    const port = await serverPortPromise;
+    const response = await fetch(`http://localhost:${port}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages, stream: false, ...options }),
@@ -182,65 +220,59 @@ function setupIPC(): void {
   });
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
+// Enforce single instance — second launch focuses the existing window instead
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId("com.ai-chatbox.mcp");
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  // Setup IPC handlers
   setupIPC();
 
-  // Start the embedded server
-  startServer(server, SERVER_PORT).then(() => {
-    createWindow();
-  }).catch(async (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      // Check if the existing service on this port is already LeoChat
-      try {
-        const res = await fetch(`http://localhost:${SERVER_PORT}/health`);
-        if (res.ok) {
-          // Another LeoChat instance is already running — just open the window
-          console.warn(`[Server] Port ${SERVER_PORT} already in use by LeoChat, reusing.`);
-          createWindow();
-          return;
-        }
-      } catch {
-        // Non-LeoChat service on port
-      }
-      const { dialog } = await import("electron");
-      await dialog.showErrorBox(
-        "端口被占用",
-        `端口 ${SERVER_PORT} 已被其他程序占用，LeoChat 无法启动内嵌服务器。\n请关闭占用该端口的程序后重试。`
-      );
-      app.quit();
-    } else {
-      console.error("[Server] Failed to start:", err);
-      createWindow(); // still open window, let renderer show error state
-    }
-  });
+  // Open window immediately — renderer shows loading screen while server starts.
+  createWindow();
 
-  app.on("activate", function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
+  // Start server in the background. Once ready, resolve the port promise so
+  // all waiting IPC callers (api.ts _apiBasePromise, LLM_CHAT, etc.) unblock,
+  // and notify the renderer to dismiss the loading screen.
+  findFreePort(3001)
+    .then((port) => startServer(server, port))
+    .then((actualPort) => {
+      serverPort = actualPort;
+      _serverPortResolve!(actualPort);
+      mainWindow?.webContents.send("server:ready", actualPort);
+      console.log(`[Server] Ready on port ${actualPort}`);
+    })
+    .catch((err: NodeJS.ErrnoException) => {
+      console.error("[Server] Failed to start:", err);
+      // Resolve anyway so the renderer doesn't hang on the loading screen.
+      _serverPortResolve!(serverPort);
+      mainWindow?.webContents.send("server:ready", serverPort);
+    });
+
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-// Quit when all windows are closed, except on macOS.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (process.platform !== "darwin") app.quit();
 });
 
-// Clean up on quit
 app.on("before-quit", async () => {
   await sessionManager.disconnectAll();
 });

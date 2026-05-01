@@ -25,7 +25,7 @@ import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { usePromptStore } from "../stores/prompt";
-import { mcpApi } from "../lib/api";
+import { mcpApi, chatApi } from "../lib/api";
 import { assembleSystemPrompt } from "../lib/prompt-assembly";
 import { executeLeoCardAction } from "../lib/card-actions";
 import { ModelSelector } from "./ModelSelector";
@@ -51,6 +51,7 @@ export function ChatArea() {
   const maxEpochs = useChatStore((s) => s.maxEpochs);
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const toolCallStates = useChatStore((s) => s.toolCallStates);
+  const pendingApprovals = useChatStore((s) => s.pendingApprovals);
   const executeAction = useChatStore((s) => s.executeAction);
   const uiMode = useChatStore((s) => s.uiMode);
   const temperature = useChatStore((s) => s.temperature);
@@ -679,6 +680,11 @@ export function ChatArea() {
         </div>
       </div>
 
+      {/* Bash Approval Queue — one banner per pending command */}
+      {pendingApprovals.map((approval) => (
+        <BashApprovalBanner key={approval.id} approval={approval} />
+      ))}
+
       {/* Input Area - 固定在底部 */}
       <div className="flex-shrink-0 border-t p-4">
         <div className="mx-auto max-w-3xl">{inputElement}</div>
@@ -692,6 +698,83 @@ export function ChatArea() {
         currentProvider={currentProvider}
         onSelect={handleModelSelect}
       />
+    </div>
+  );
+}
+
+// ── Bash Approval Banner ──────────────────────────────────────────────────────
+
+import type { PendingApproval } from "../stores/chat-types";
+
+function BashApprovalBanner({ approval }: { approval: PendingApproval }) {
+  const [loading, setLoading] = useState<"allow" | "allow-session" | "deny" | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+  const allowToolForSession = useChatStore((s) => s.allowToolForSession);
+
+  // Countdown timer
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const id = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [secondsLeft]);
+
+  const respond = async (approved: boolean) => {
+    if (loading) return;
+    setLoading(approved ? "allow" : "deny");
+    try {
+      await chatApi.approveToolCall(approval.id, approved);
+    } catch (e) {
+      console.error("[BashApproval]", e);
+      setLoading(null);
+    }
+  };
+
+  const respondForSession = () => {
+    if (loading) return;
+    setLoading("allow-session");
+    allowToolForSession(approval.id, approval.toolName);
+  };
+
+  return (
+    <div className="flex-shrink-0 border-t border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              AI 请求执行 Bash 命令
+            </p>
+            <pre className="mt-1.5 max-h-32 overflow-y-auto rounded bg-muted px-3 py-2 text-xs font-mono text-foreground whitespace-pre-wrap break-all">
+              {approval.command}
+            </pre>
+            <p className="mt-1 text-xs text-muted-foreground">
+              超时自动拒绝（剩余 {secondsLeft}s）
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0 mt-0.5">
+            <button
+              disabled={loading !== null}
+              onClick={() => respond(false)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === "deny" ? "..." : "拒绝"}
+            </button>
+            <button
+              disabled={loading !== null}
+              onClick={respondForSession}
+              className="rounded-md border border-primary/50 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === "allow-session" ? "..." : "本次会话允许"}
+            </button>
+            <button
+              disabled={loading !== null}
+              onClick={() => respond(true)}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === "allow" ? "..." : "允许"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

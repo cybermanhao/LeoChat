@@ -122,7 +122,7 @@ interface MCPState {
   autoConnectAll: () => Promise<void>;
 
   // 初始化
-  initBuiltinServers: () => void;
+  initBuiltinServers: () => Promise<void>;
   syncWithBackend: () => Promise<void>;
 }
 
@@ -491,18 +491,34 @@ export const useMCPStore = create<MCPState>()(
       },
 
       // 初始化
-      initBuiltinServers: () => {
+      initBuiltinServers: async () => {
+        // In Electron, resolve the leochat-mcp path dynamically so it works in
+        // both dev (repo path) and packaged app (extraResource path).
+        let builtinServers = BUILTIN_SERVERS;
+        const electronAPI = (window as unknown as { electronAPI?: { getLeochatMcpPath?: () => Promise<string> } }).electronAPI;
+        if (electronAPI?.getLeochatMcpPath) {
+          try {
+            const mcpPath = await electronAPI.getLeochatMcpPath();
+            builtinServers = BUILTIN_SERVERS.map((s) =>
+              s.id === "leochat" ? { ...s, args: [mcpPath] } : s
+            );
+          } catch {
+            // fall through with default paths
+          }
+        }
+
         // 同步内置服务列表：新增/删除跟随 BUILTIN_SERVERS，保留用户对已有服务器的修改
         set((state) => {
-          const validServerIds = new Set(BUILTIN_SERVERS.map((s) => s.id));
+          const validServerIds = new Set(builtinServers.map((s) => s.id));
 
           // 保留用户对 builtin 服务器的修改（如 env、args、timeout 等）
           const currentBuiltinSource = state.sources.find((s) => s.id === "builtin");
           const currentBuiltinMap = new Map(
             (currentBuiltinSource?.servers || []).map((s) => [s.id, s])
           );
-          const mergedBuiltin = BUILTIN_SERVERS.map((s) =>
-            currentBuiltinMap.get(s.id) || s
+          // leochat 路径由 Electron 提供，不保留持久化的旧路径
+          const mergedBuiltin = builtinServers.map((s) =>
+            s.id === "leochat" ? s : (currentBuiltinMap.get(s.id) || s)
           );
 
           // 获取自定义服务
