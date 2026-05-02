@@ -18,6 +18,10 @@ export interface TaskRecord {
   status: TaskStatus;
   result?: unknown;
   error?: string;
+  imageBase64?: string;
+  mimeType?: string;
+  thoughtSignature?: string;
+  originalPrompt?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -35,7 +39,7 @@ function taskPath(id: string): string {
   return join(STORE_DIR, `${id}.json`);
 }
 
-function readTask(id: string): TaskRecord | null {
+export function readTask(id: string): TaskRecord | null {
   try {
     const data = readFileSync(taskPath(id), "utf-8");
     return JSON.parse(data) as TaskRecord;

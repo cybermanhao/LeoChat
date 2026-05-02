@@ -15,6 +15,8 @@ import {
   failTask,
   interruptTask,
   recoverInterruptedTasks,
+  readTask,
+  updateTask,
 } from "./task-store.js";
 
 export {
@@ -23,6 +25,7 @@ export {
   failTask,
   interruptTask,
   recoverInterruptedTasks,
+  readTask,
   updateTask,
   deleteTask,
 } from "./task-store.js";
@@ -247,7 +250,7 @@ export async function doGenerateImage(
   aspectRatio: string,
   imageSize: string,
   signal?: AbortSignal
-): Promise<{ mimeType: string; data: string; description?: string }> {
+): Promise<{ mimeType: string; data: string; description?: string; thoughtSignature?: string }> {
   const config: GenerateContentConfig = {
     responseModalities: ["TEXT", "IMAGE"],
     imageConfig: { aspectRatio, imageSize },
@@ -268,10 +271,16 @@ export async function doGenerateImage(
     throw new Error("No image returned");
   }
 
+  // Extract thoughtSignature from the image part or the first non-thought text part
+  const thoughtSignature = img.thoughtSignature ?? desc
+    ? parts.find((p: Part) => p.text && !p.thought)?.thoughtSignature
+    : undefined;
+
   return {
     mimeType: img.inlineData.mimeType || "image/png",
     data: img.inlineData.data,
     description: desc,
+    thoughtSignature,
   };
 }
 
@@ -280,7 +289,7 @@ export async function generateImageWithRetry(
   aspectRatio: string,
   imageSize: string,
   externalSignal?: AbortSignal
-): Promise<{ mimeType: string; data: string; description?: string }> {
+): Promise<{ mimeType: string; data: string; description?: string; thoughtSignature?: string }> {
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -308,6 +317,134 @@ export async function generateImageWithRetry(
   }
 
   throw lastError ?? new Error("All retry attempts failed");
+}
+
+// ============================================================================
+// Refine Image — Multi-turn with thoughtSignature
+// ============================================================================
+
+interface RefineParams {
+  originalPrompt: string;
+  previousBase64: string;
+  previousMimeType: string;
+  thoughtSignature?: string;
+  instruction: string;
+  aspectRatio: string;
+  imageSize: string;
+  signal?: AbortSignal;
+}
+
+export async function doRefineImage(params: RefineParams): Promise<{
+  mimeType: string;
+  data: string;
+  description?: string;
+  thoughtSignature?: string;
+}> {
+  const {
+    originalPrompt,
+    previousBase64,
+    previousMimeType,
+    thoughtSignature,
+    instruction,
+    aspectRatio,
+    imageSize,
+    signal,
+  } = params;
+
+  const config: GenerateContentConfig = {
+    responseModalities: ["TEXT", "IMAGE"],
+    imageConfig: { aspectRatio, imageSize },
+    abortSignal: signal,
+  };
+
+  let contents: Array<{ role: "user" | "model"; parts: Part[] }>;
+
+  if (thoughtSignature) {
+    // True multi-turn refine (3-turn structure)
+    const turn0Parts: Part[] = [{ text: originalPrompt }];
+
+    const turn1Parts: Part[] = [
+      {
+        inlineData: { data: previousBase64, mimeType: previousMimeType },
+        thoughtSignature,
+      } as Part,
+    ];
+
+    const turn2Parts: Part[] = [{ text: instruction }];
+
+    contents = [
+      { role: "user", parts: turn0Parts },
+      { role: "model", parts: turn1Parts },
+      { role: "user", parts: turn2Parts },
+    ];
+  } else {
+    // Single-turn fallback: previous render as reference image
+    contents = [
+      {
+        role: "user",
+        parts: [
+          { text: `Original context: ${originalPrompt}\n\nRefinement: ${instruction}` },
+          { inlineData: { data: previousBase64, mimeType: previousMimeType } } as Part,
+        ],
+      },
+    ];
+  }
+
+  const response = await ai!.models.generateContent({
+    model: GENERATION_MODEL,
+    contents,
+    config,
+  });
+
+  const parts: Part[] = response.candidates?.[0]?.content?.parts ?? [];
+  const img = parts.find((p: Part) => p.inlineData?.mimeType?.startsWith("image/"));
+  const desc = parts.find((p: Part) => p.text && !p.thought)?.text?.trim();
+
+  if (!img?.inlineData?.data) {
+    throw new Error("No image returned from refine");
+  }
+
+  const newSignature = img.thoughtSignature ?? desc
+    ? parts.find((p: Part) => p.text && !p.thought)?.thoughtSignature
+    : undefined;
+
+  return {
+    mimeType: img.inlineData.mimeType || "image/png",
+    data: img.inlineData.data,
+    description: desc,
+    thoughtSignature: newSignature,
+  };
+}
+
+async function refineImageWithRetry(
+  params: RefineParams
+): Promise<{ mimeType: string; data: string; description?: string; thoughtSignature?: string }> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await withGeminiCall(
+        (attemptSignal) => doRefineImage({ ...params, signal: attemptSignal }),
+        { signal: params.signal, timeoutMs: GENERATION_TIMEOUT_MS }
+      );
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      if (isAbortError(lastError)) {
+        throw lastError;
+      }
+
+      const classified = classifyError(lastError);
+      if (!classified.retryable || attempt >= MAX_RETRIES) {
+        throw lastError;
+      }
+
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1) * (0.8 + Math.random() * 0.4);
+      await sleep(Math.min(delay, 30000), params.signal);
+    }
+  }
+
+  throw lastError ?? new Error("All refine attempts failed");
 }
 
 // ============================================================================
@@ -606,6 +743,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["prompt"],
         },
       },
+      {
+        name: "refine_image",
+        description: `基于已生成的图片进行多轮优化（Refine）。需要提供 imageId 或 imageBase64 + thoughtSignature。优化指令支持自然语言描述，如"让背景更暗一些"、"增加一些细节"等。`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            imageId: {
+              type: "string",
+              description: "之前 generate_image 返回的 imageId（优先使用）",
+            },
+            imageBase64: {
+              type: "string",
+              description: "图片的 base64 数据（如果没有 imageId 则必须提供）",
+            },
+            thoughtSignature: {
+              type: "string",
+              description: "之前生成时返回的 thoughtSignature（用于多轮上下文保持，如果没有 imageId 则必须提供）",
+            },
+            instruction: {
+              type: "string",
+              description: "优化指令，例如：让背景更暗、增加细节、改变风格等",
+            },
+            aspectRatio: {
+              type: "string",
+              enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+              description: "图片宽高比，默认与原始图片相同",
+            },
+            imageSize: {
+              type: "string",
+              enum: ["1K", "2K", "4K"],
+              description: "图片分辨率，默认与原始图片相同",
+            },
+          },
+          required: ["instruction"],
+        },
+      },
     ],
   };
 });
@@ -844,7 +1017,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       createTask(taskId, "generate_image", { prompt, aspectRatio, imageSize });
 
       try {
-        const { mimeType, data, description } = await generateImageWithRetry(
+        const { mimeType, data, description, thoughtSignature } = await generateImageWithRetry(
           prompt.trim(),
           aspectRatio,
           imageSize,
@@ -852,6 +1025,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
         );
 
         const dataUrl = `data:${mimeType};base64,${data}`;
+
+        // Store signature and image for potential refine
+        updateTask(taskId, {
+          imageBase64: data,
+          mimeType,
+          thoughtSignature,
+          originalPrompt: prompt.trim(),
+        });
 
         const card = {
           id: taskId,
@@ -870,6 +1051,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
               action: { type: "link", url: dataUrl },
             },
           ],
+          metadata: {
+            imageId: taskId,
+            thoughtSignature,
+            originalPrompt: prompt.trim(),
+            canRefine: true,
+          },
         };
 
         completeTask(taskId, card);
@@ -886,6 +1073,122 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
 
         failTask(taskId, classified.userMessage);
 
+        return makeError(classified.userMessage);
+      }
+    }
+
+    case "refine_image": {
+      if (!ai) {
+        return makeError("GEMINI_API_KEY 未配置，请在 .env 中设置 GEMINI_API_KEY 后重启服务");
+      }
+
+      const {
+        imageId,
+        imageBase64: inputBase64,
+        thoughtSignature: inputSig,
+        instruction,
+        aspectRatio = "1:1",
+        imageSize = "1K",
+      } = args as {
+        imageId?: string;
+        imageBase64?: string;
+        thoughtSignature?: string;
+        instruction: string;
+        aspectRatio?: string;
+        imageSize?: string;
+      };
+
+      if (!instruction || !instruction.trim()) {
+        return makeError("请提供优化指令 (instruction)");
+      }
+
+      // Resolve previous render data
+      let previousBase64: string | undefined = inputBase64;
+      let thoughtSignature: string | undefined = inputSig;
+      let originalPrompt: string | undefined;
+      let previousMimeType = "image/png";
+
+      if (imageId) {
+        const task = readTask(imageId);
+        if (task?.imageBase64) {
+          previousBase64 = task.imageBase64;
+          thoughtSignature = task.thoughtSignature;
+          originalPrompt = task.originalPrompt;
+          if (task.mimeType) {
+            previousMimeType = task.mimeType;
+          }
+        }
+      }
+
+      if (!previousBase64) {
+        return makeError("未找到图片数据，请提供 imageId 或 imageBase64");
+      }
+
+      // Fallback: if no stored prompt, use a generic placeholder
+      originalPrompt = originalPrompt || "Generated image";
+
+      const taskId = `img_${Date.now()}`;
+      createTask(taskId, "refine_image", { imageId, instruction, aspectRatio, imageSize });
+
+      try {
+        const { mimeType, data, description, thoughtSignature: newSig } = await refineImageWithRetry({
+          originalPrompt,
+          previousBase64,
+          previousMimeType,
+          thoughtSignature: thoughtSignature || undefined,
+          instruction: instruction.trim(),
+          aspectRatio,
+          imageSize,
+          signal: extra.signal,
+        });
+
+        const dataUrl = `data:${mimeType};base64,${data}`;
+
+        updateTask(taskId, {
+          imageBase64: data,
+          mimeType,
+          thoughtSignature: newSig,
+          originalPrompt: instruction.trim(),
+        });
+
+        const card = {
+          id: taskId,
+          kind: "media",
+          title: "优化后的图片",
+          subtitle: description || instruction.trim().slice(0, 50),
+          tone: "default",
+          body: [
+            { type: "image", image: { url: dataUrl, alt: instruction.trim() } },
+          ],
+          actions: [
+            {
+              id: "download",
+              label: "下载图片",
+              kind: "primary",
+              action: { type: "link", url: dataUrl },
+            },
+          ],
+          metadata: {
+            imageId: taskId,
+            thoughtSignature: newSig,
+            originalPrompt: instruction.trim(),
+            canRefine: true,
+          },
+        };
+
+        completeTask(taskId, card);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(card) }],
+        };
+      } catch (err: any) {
+        const classified = classifyError(err);
+
+        if (isAbortError(err)) {
+          interruptTask(taskId);
+          return makeError("图片优化已取消");
+        }
+
+        failTask(taskId, classified.userMessage);
         return makeError(classified.userMessage);
       }
     }
