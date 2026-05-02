@@ -343,6 +343,16 @@ export class MCPClient {
       { signal }
     );
 
+    // Treat MCP isError results as exceptions so the error path is taken
+    // consistently through dispatcher → session-manager → server → task-loop
+    if (result && typeof result === "object" && (result as { isError?: boolean }).isError) {
+      const content = (result as { content?: Array<{ type: string; text?: string }> }).content;
+      const errorText = Array.isArray(content)
+        ? content.map((c) => (c.type === "text" ? c.text : "")).filter(Boolean).join("\n")
+        : "";
+      throw new Error(errorText || `Tool ${name} returned an error`);
+    }
+
     return result;
   }
 
