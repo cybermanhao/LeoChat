@@ -344,7 +344,14 @@ class AnthropicAdapter implements ModelAdapterInstance {
  */
 class KimiCodeAdapter extends OpenAIAdapter {
   getBaseURL(config: LLMConfig): string {
-    return config.baseURL || "https://api.kimi.com/coding";
+    return config.baseURL || "https://api.kimi.com/coding/v1";
+  }
+
+  buildHeaders(config: LLMConfig): Record<string, string> {
+    return {
+      ...super.buildHeaders(config),
+      "User-Agent": "claude-code/0.1.0",
+    };
   }
 }
 

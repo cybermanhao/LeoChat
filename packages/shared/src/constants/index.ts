@@ -5,7 +5,7 @@ export const API_ENDPOINTS = {
   OPENAI: "https://api.openai.com/v1",
   ANTHROPIC: "https://api.anthropic.com/v1",
   MOONSHOT: "https://api.moonshot.cn/v1",
-  KIMI_CODE: "https://api.kimi.com/coding",
+  KIMI_CODE: "https://api.kimi.com/coding/v1",
   GOOGLE: "https://generativelanguage.googleapis.com/v1beta",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
@@ -48,7 +48,7 @@ export const LLM_PROVIDERS = {
   },
   "kimi-code": {
     name: "Kimi Code",
-    baseURL: "https://api.kimi.com/coding",
+    baseURL: "https://api.kimi.com/coding/v1",
     models: ["kimi-for-coding"],
     envKey: "KIMI_CODE_API_KEY",
   },
