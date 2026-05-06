@@ -332,6 +332,22 @@ class AnthropicAdapter implements ModelAdapterInstance {
 }
 
 /**
+ * Kimi Code 适配器（OpenAI 兼容格式）
+ */
+class KimiCodeAdapter extends OpenAIAdapter {
+  getBaseURL(config: LLMConfig): string {
+    return config.baseURL || "https://api.kimi.com/coding/v1";
+  }
+
+  buildHeaders(config: LLMConfig): Record<string, string> {
+    return {
+      ...super.buildHeaders(config),
+      "User-Agent": "claude-code/0.1.0",
+    };
+  }
+}
+
+/**
  * Google Gemini 适配器
  */
 class GeminiAdapter implements ModelAdapterInstance {
@@ -523,6 +539,8 @@ export function createModelAdapter(provider: LLMProvider): ModelAdapterInstance 
       return new AnthropicAdapter();
     case "google":
       return new GeminiAdapter();
+    case "kimi":
+      return new KimiCodeAdapter();
     case "deepseek":
       return new DeepSeekAdapter();
     case "custom":
