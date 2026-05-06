@@ -2,7 +2,7 @@ import type { ToolCall } from "@ai-chatbox/shared";
 import { generateId } from "@ai-chatbox/shared";
 import type { Conversation, ConversationsSlice, SliceCreator } from "./chat-types";
 
-export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, _get) => ({
+export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => ({
   conversations: [],
   currentConversationId: null,
   input: "",
