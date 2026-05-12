@@ -50,3 +50,4 @@ yarn.lock
 
 # MCP servers - built binaries
 mcp-servers/excel-mcp-server/dist/
+.weixin-sync-buf.json
