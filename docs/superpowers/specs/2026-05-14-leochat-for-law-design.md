@@ -1,6 +1,6 @@
 # leochat-for-law 设计文档
 
-> 版本：v1  
+> 版本：v2  
 > 日期：2026-05-14  
 > 状态：已批准
 
@@ -271,7 +271,83 @@ master (LeoChat 主干)
 
 ---
 
-## 9. 范围外（Out of Scope）
+## 9. 运行时打包策略
+
+面向非开发者用户，所有运行时均内置，不依赖系统环境变量或 PATH。
+
+### 打包方式（按语言）
+
+| 运行时 | 打包策略 | 体积 |
+|--------|---------|------|
+| Node.js MCP servers | Node SEA（Single Executable App，Node 20+ 官方特性）编译为独立 `.exe` | ~10MB/server |
+| Go MCP servers | 静态编译为 `.exe`，无需运行时 | ~10MB/server |
+| Python MCP servers | 内置 `uv` 二进制（~10MB），首次运行时 `uv` 自动创建隔离 venv | venv ~50MB |
+
+### resources/ 目录结构
+
+```
+resources/
+├── runtime/
+│   └── uv.exe              ← 仅 Python 系 MCP 需要
+├── mcp-servers/
+│   ├── law-kb-mcp.exe      ← Node SEA 编译
+│   ├── docx-mcp.exe        ← Node SEA 编译
+│   └── law-crawler/        ← Python，uv 管理
+│       ├── main.py
+│       └── pyproject.toml
+└── models/                 ← 空占位，BGE-m3 首次运行时下载
+```
+
+### 路径解析
+
+所有子进程启动均使用 `process.resourcesPath` 解析绝对路径，不读取系统环境变量：
+
+```js
+const uvPath = path.join(process.resourcesPath, 'runtime', 'uv.exe')
+const serverExe = path.join(process.resourcesPath, 'mcp-servers', 'law-kb-mcp.exe')
+```
+
+---
+
+## 10. 知识库管理 UI
+
+原 MCP「运行环境」tab 在 leochat-for-law 中改造为「知识库」tab，成为知识库管理的核心入口。
+
+### 布局
+
+```
+┌─────────────────────────────────────┐
+│  知识库状态              [刷新]      │
+├─────────────────────────────────────┤
+│  📚 法律法规    12,847 条  [同步]    │
+│  ⚖️  裁判文书    3,201 条  [更新]    │
+│  📄 我的文档       23 条  [管理]    │
+├─────────────────────────────────────┤
+│  🤖 BGE-m3 模型   ✅ 已就绪          │
+│  🔍 向量索引      ✅ 同步            │
+├─────────────────────────────────────┤
+│  ┌─────────────────────────────┐    │
+│  │  拖拽文件到此处添加          │    │
+│  │  PDF / Word / TXT           │    │
+│  │  或 [点击选择文件]           │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
+```
+
+### 核心交互
+
+1. **拖拽 / 选择文件** → 调用 `law-kb-mcp` 的 `index_document` 工具，自动建索引，进度实时显示
+2. **「同步」按钮** → 触发 `flk.npc.gov.cn` 采集脚本，流式显示抓取进度和入库条数
+3. **「更新」按钮** → 增量抓取裁判文书（需用户已配置账号）
+4. **BGE-m3 状态行** → 模型未下载时显示下载按钮 + 进度条；下载完成后显示「✅ 已就绪」
+
+### 与原 MCPEnvTab 的关系
+
+原 `MCPEnvTab` 组件在 leochat-for-law 分支中替换为 `LawKnowledgeTab`，原组件保留在主干不动。
+
+---
+
+## 11. 范围外（Out of Scope）
 
 - 多用户/团队共享知识库（当前为单机本地）
 - 法律 AI 生成内容的合规性免责机制（UI 层需加免责声明，不在此设计范围）
