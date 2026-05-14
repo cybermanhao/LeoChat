@@ -105,7 +105,8 @@
       "Bash(del /f .weixin-sync-buf.json)",
       "PowerShell(Remove-Item *)",
       "Bash(git checkout *)",
-      "Bash(git rm *‘)"
+      "Bash(git rm *‘)",
+      "Skill(superpowers:brainstorming)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",
