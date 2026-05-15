@@ -106,7 +106,15 @@
       "PowerShell(Remove-Item *)",
       "Bash(git checkout *)",
       "Bash(git rm *‘)",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(Get-ChildItem *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-ChildItem -Recurse -Path \"C:\\\\code\\\\LeoChat\\\\packages\\\\law-kb-mcp\" -Exclude \"node_modules\" | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\code\\\\LeoChat\\\\packages\\\\law-kb-mcp\\\\\", \"\"\\) })",
+      "Bash(git -C C:\\\\code\\\\LeoChat log --oneline)",
+      "Bash(dir C:codeLeoChatpackageslaw-kb-mcp *)",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",
