@@ -3,12 +3,28 @@
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./db": "./dist/db.js",
-    "./search": "./dist/search.js",
-    "./indexer": "./dist/indexer.js",
-    "./crawler/flk": "./dist/crawler/flk.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./db": {
+      "types": "./dist/db.d.ts",
+      "default": "./dist/db.js"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "default": "./dist/search.js"
+    },
+    "./indexer": {
+      "types": "./dist/indexer.d.ts",
+      "default": "./dist/indexer.js"
+    },
+    "./crawler/flk": {
+      "types": "./dist/crawler/flk.d.ts",
+      "default": "./dist/crawler/flk.js"
+    }
   },
   "scripts": {
     "build": "tsc",

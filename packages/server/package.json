@@ -23,6 +23,7 @@
   "dependencies": {
     "@ai-chatbox/mcp-core": "workspace:*",
     "@ai-chatbox/shared": "workspace:*",
+    "@leochat/law-kb-mcp": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@modelcontextprotocol/server-everything": "latest",
     "@modelcontextprotocol/server-filesystem": "latest",

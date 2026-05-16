@@ -255,6 +255,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.9(hono@4.11.4)
+      '@leochat/law-kb-mcp':
+        specifier: workspace:*
+        version: link:../law-kb-mcp
       '@modelcontextprotocol/server-everything':
         specifier: latest
         version: 2026.1.26(hono@4.11.4)

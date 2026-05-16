@@ -538,5 +538,53 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
+  // --- Knowledge base management (leochat-for-law) ---
+
+  app.get('/kb/status', async (c) => {
+    try {
+      const { listKnowledgeBases } = await import('@leochat/law-kb-mcp/indexer');
+      return c.json(listKnowledgeBases());
+    } catch (error) {
+      console.error('[KB status]', error);
+      return c.json({ error: 'Failed to get KB status' }, 500);
+    }
+  });
+
+  app.post('/kb/sync-flk', async (c) => {
+    try {
+      const { syncAllLaws } = await import('@leochat/law-kb-mcp/crawler/flk');
+      syncAllLaws((fetched, total) => {
+        console.log(`[FLK sync] ${fetched}/${total}`);
+      }).then((count) => {
+        console.log(`[FLK sync] done: ${count} laws`);
+      }).catch((err) => {
+        console.error('[FLK sync error]', err);
+      });
+      return c.json({ message: '同步已开始，请稍后刷新查看数量', status: 'syncing' });
+    } catch (error) {
+      console.error('[KB sync]', error);
+      return c.json({ error: 'Failed to start sync' }, 500);
+    }
+  });
+
+  app.post('/kb/index-file', async (c) => {
+    let body: { file_path: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (!body.file_path || typeof body.file_path !== 'string') {
+      return c.json({ error: 'file_path required' }, 400);
+    }
+    try {
+      const { indexDocument } = await import('@leochat/law-kb-mcp/indexer');
+      return c.json(indexDocument(body.file_path));
+    } catch (error) {
+      console.error('[KB index]', error);
+      return c.json({ error: 'Index failed' }, 500);
+    }
+  });
+
   return app;
 }
