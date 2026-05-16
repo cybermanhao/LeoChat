@@ -10,7 +10,7 @@ import {
   FileText,
   MessageSquare,
   BarChart3,
-  Cpu,
+  Database,
 } from "lucide-react";
 import { useT } from "../i18n";
 import { useMCPStore } from "../stores/mcp";
@@ -19,14 +19,14 @@ import { MCPToolsTab } from "./mcp/MCPToolsTab";
 import { MCPResourcesTab } from "./mcp/MCPResourcesTab";
 import { MCPPromptsTab } from "./mcp/MCPPromptsTab";
 import { MCPStatsTab } from "./mcp/MCPStatsTab";
-import { MCPEnvTab } from "./mcp/MCPEnvTab";
+import { LawKnowledgeTab } from "./mcp/LawKnowledgeTab";
 
 interface MCPDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type TabId = "servers" | "tools" | "resources" | "prompts" | "stats" | "env";
+type TabId = "servers" | "tools" | "resources" | "prompts" | "stats" | "knowledge";
 
 export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
   const { t } = useT();
@@ -36,7 +36,7 @@ export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
     { id: "resources", label: t("mcp.tabs.resources"), icon: FileText },
     { id: "prompts", label: t("mcp.tabs.prompts"), icon: MessageSquare },
     { id: "stats", label: t("mcp.tabs.stats"), icon: BarChart3 },
-    { id: "env", label: t("mcp.tabs.env"), icon: Cpu },
+    { id: "knowledge", label: "知识库", icon: Database },
   ], [t]);
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
@@ -109,7 +109,7 @@ export function MCPDialog({ open, onOpenChange }: MCPDialogProps) {
           {activeTab === "resources" && <MCPResourcesTab />}
           {activeTab === "prompts" && <MCPPromptsTab />}
           {activeTab === "stats" && <MCPStatsTab />}
-          {activeTab === "env" && <MCPEnvTab />}
+          {activeTab === "knowledge" && <LawKnowledgeTab />}
         </div>
       </DialogContent>
     </Dialog>
