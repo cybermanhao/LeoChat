@@ -158,6 +158,28 @@ Append to the `db.exec(...)` call inside `initSchema` (after the existing `user_
       created_at      TEXT DEFAULT (datetime('now')),
       UNIQUE(doc_id, chunk_index)
     );
+
+    -- FTS5 virtual table for law chunk full-text search
+    CREATE VIRTUAL TABLE IF NOT EXISTS law_chunks_fts USING fts5(
+      content,
+      content='law_chunks',
+      content_rowid='id',
+      tokenize='unicode61'
+    );
+
+    -- Triggers to keep FTS index in sync with law_chunks
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_insert AFTER INSERT ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_delete AFTER DELETE ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_update AFTER UPDATE ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+    END;
 ```
 
 Also enable foreign keys in `getDb()` (already set via `PRAGMA foreign_keys = ON` — verify it's there, add if missing).
@@ -504,9 +526,8 @@ describe('queueEmbedding', () => {
     };
     queueEmbedding(task(1));
     queueEmbedding(task(2));
-    queueEmbedding(task(3));
-    // Wait for queue to drain
-    await new Promise(r => setTimeout(r, 100));
+    // await the last enqueued promise — all prior tasks must finish first
+    await queueEmbedding(task(3));
     expect(order).toEqual([1, 2, 3]);
   });
 });
@@ -537,6 +558,12 @@ function getModelDir(): string {
 
 let extractor: ((text: string, opts: object) => Promise<{ data: Float32Array }>) | null = null;
 let embeddingQueue: Promise<void> = Promise.resolve();
+let isDownloading = false;
+let downloadProgress = 0;
+
+export function getDownloadStatus(): { downloading: boolean; progress: number } {
+  return { downloading: isDownloading, progress: downloadProgress };
+}
 
 async function getExtractor() {
   if (extractor) return extractor;
@@ -568,25 +595,34 @@ export async function isModelReady(): Promise<boolean> {
 }
 
 export async function downloadModel(onProgress: (pct: number) => void): Promise<void> {
-  const { pipeline, env } = await import('@xenova/transformers');
-  const modelDir = getModelDir();
-  (env as any).remoteURL = 'https://hf-mirror.com/';
-  (env as any).allowLocalModels = false;
-  extractor = null; // reset after download
-  await (pipeline as any)('feature-extraction', MODEL_ID, {
-    quantized: true,
-    cache_dir: modelDir,
-    progress_callback: (p: { progress?: number }) => {
-      if (p.progress != null) onProgress(Math.round(p.progress));
-    },
-  });
-  extractor = null; // force reload from local on next getEmbedding call
+  isDownloading = true;
+  downloadProgress = 0;
+  try {
+    const { pipeline, env } = await import('@xenova/transformers');
+    const modelDir = getModelDir();
+    (env as any).remoteURL = 'https://hf-mirror.com/';
+    (env as any).allowLocalModels = false;
+    extractor = null; // reset so next getEmbedding reloads from local
+    await (pipeline as any)('feature-extraction', MODEL_ID, {
+      quantized: true,
+      cache_dir: modelDir,
+      progress_callback: (p: { progress?: number }) => {
+        if (p.progress != null) {
+          downloadProgress = Math.round(p.progress);
+          onProgress(downloadProgress);
+        }
+      },
+    });
+    extractor = null;
+  } finally {
+    isDownloading = false;
+  }
 }
 
-export function queueEmbedding(fn: () => Promise<void>): void {
-  embeddingQueue = embeddingQueue
-    .then(fn)
-    .catch(err => console.error('[embedder queue]', err));
+export function queueEmbedding(fn: () => Promise<void>): Promise<void> {
+  const next = embeddingQueue.then(fn).catch(err => console.error('[embedder queue]', err));
+  embeddingQueue = next;
+  return next;
 }
 ```
 
@@ -792,38 +828,49 @@ export function storeChunks(
   chunks: ChunkInput[],
   embeddings: Float32Array[]
 ): void {
+  if (table === 'law') {
+    storeLawChunks(parentId, chunks, embeddings);
+  } else {
+    storeUserDocChunks(parentId, chunks, embeddings);
+  }
+  caches[table] = null; // invalidate; reload lazily on next search
+}
+
+function storeLawChunks(lawId: number, chunks: ChunkInput[], embeddings: Float32Array[]): void {
   const db = getDb();
-  const tbl = table === 'law' ? 'law_chunks' : 'user_doc_chunks';
-  const parentCol = table === 'law' ? 'law_id' : 'doc_id';
-
   const insert = db.prepare(
-    `INSERT OR REPLACE INTO ${tbl} (${parentCol}, chunk_index, content, ${
-      table === 'law' ? 'article_number, ' : ''
-    }hierarchy_path, embedding)
-     VALUES (?, ?, ?, ${table === 'law' ? '?, ' : ''}?, ?)`
+    `INSERT OR REPLACE INTO law_chunks
+       (law_id, chunk_index, content, article_number, hierarchy_path, embedding)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
-
   db.transaction(() => {
     chunks.forEach((chunk, i) => {
-      const embBlob = embeddings[i] ? float32ToBuffer(embeddings[i]) : null;
-      if (table === 'law') {
-        insert.run(parentId, i, chunk.content, chunk.article_number ?? null, chunk.hierarchy_path ?? null, embBlob);
-      } else {
-        insert.run(parentId, i, chunk.content, chunk.hierarchy_path ?? null, embBlob);
-      }
+      insert.run(
+        lawId, i, chunk.content,
+        chunk.article_number ?? null,
+        chunk.hierarchy_path ?? null,
+        embeddings[i] ? float32ToBuffer(embeddings[i]) : null
+      );
     });
   })();
+}
 
-  // Append to cache if already loaded (avoid full reload)
-  if (caches[table]) {
-    chunks.forEach((_, i) => {
-      if (embeddings[i]) {
-        // Approximate: get the last inserted id range
-        // Cache will be refreshed on next cold start or explicit invalidate
-      }
+function storeUserDocChunks(docId: number, chunks: ChunkInput[], embeddings: Float32Array[]): void {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT OR REPLACE INTO user_doc_chunks
+       (doc_id, chunk_index, content, hierarchy_path, embedding)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  db.transaction(() => {
+    chunks.forEach((chunk, i) => {
+      insert.run(
+        docId, i, chunk.content,
+        chunk.hierarchy_path ?? null,
+        embeddings[i] ? float32ToBuffer(embeddings[i]) : null
+      );
     });
-    caches[table] = null; // Simpler: invalidate and reload lazily
-  }
+  })();
 }
 
 /** RRF fusion: merges two ranked lists, returns top-k by fused score */
@@ -895,15 +942,17 @@ function sanitize(query: string): string {
   return query.replace(/["'*]/g, ' ').trim();
 }
 
-/** FTS5 search on law_chunks — returns top-K chunk ids and their parent law ids */
-function ftsChunsLaw(safe: string, limit: number): Array<{ chunk_id: number; law_id: number }> {
+/** FTS5 search on law_chunks_fts — returns top-K chunk ids and their parent law ids */
+function ftsChunksLaw(safe: string, limit: number): Array<{ chunk_id: number; law_id: number }> {
   const db = getDb();
   try {
     const ftsQuery = safe.split(/\s+/).map(t => `"${t}"`).join(' OR ');
+    // Join through the FTS5 virtual table (law_chunks_fts rowid = law_chunks.id)
     const rows = db.prepare(`
       SELECT lc.id as chunk_id, lc.law_id
-      FROM law_chunks lc
-      WHERE lc.content MATCH ?
+      FROM law_chunks_fts fts
+      JOIN law_chunks lc ON lc.id = fts.rowid
+      WHERE law_chunks_fts MATCH ?
       ORDER BY rank
       LIMIT ?
     `).all(ftsQuery, limit) as Array<{ chunk_id: number; law_id: number }>;
@@ -948,7 +997,7 @@ export async function searchLaw(query: string, limit: number): Promise<SearchRes
   const safe = sanitize(query);
   if (!safe) return [];
 
-  const ftsChunks = ftsChunsLaw(safe, 10);
+  const ftsChunks = ftsChunksLaw(safe, 10);
   const modelReady = await isModelReady();
 
   if (!modelReady) {
@@ -1165,7 +1214,7 @@ async function embedChunks(
   }
 }
 
-export function listKnowledgeBases(): KnowledgeBaseStatus {
+export async function listKnowledgeBases(): Promise<KnowledgeBaseStatus> {
   const db = getDb();
   const { law_count } = db.prepare('SELECT COUNT(*) as law_count FROM laws').get() as { law_count: number };
   const { user_doc_count } = db.prepare('SELECT COUNT(*) as user_doc_count FROM user_docs').get() as { user_doc_count: number };
@@ -1176,13 +1225,14 @@ export function listKnowledgeBases(): KnowledgeBaseStatus {
   ).get() as { embedded_count: number };
   const totalChunks = law_chunks_count + user_doc_chunks_count;
   const migration_progress = totalChunks === 0 ? 1.0 : embedded_count / totalChunks;
+  const model_ready = await isModelReady();
 
   return {
     law_count,
     user_doc_count,
     law_chunks_count,
     user_doc_chunks_count,
-    model_ready: false, // filled in by caller if needed (isModelReady is async)
+    model_ready,
     migration_progress,
   };
 }
@@ -1259,7 +1309,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { searchLaw, getLawArticle, searchUserDoc } from './search.js';
 import { indexDocument, listKnowledgeBases, migrateIfNeeded } from './indexer.js';
-import { isModelReady } from './embedder.js';
 
 const server = new McpServer({ name: 'law-kb-mcp', version: '2.0.0' });
 
@@ -1342,10 +1391,9 @@ server.tool(
   '查看知识库状态：法律法规、用户文档条数、向量化进度、模型就绪状态',
   {},
   async () => {
-    const status = listKnowledgeBases();
-    const modelReady = await isModelReady();
+    const status = await listKnowledgeBases();
     return {
-      content: [{ type: 'text', text: JSON.stringify({ ...status, model_ready: modelReady }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
     };
   }
 );
@@ -1393,9 +1441,10 @@ git commit -m "feat(law-kb-mcp): add search_user_doc tool; update list_knowledge
 ```typescript
   app.get('/kb/model-status', async (c) => {
     try {
-      const { isModelReady } = await import('@leochat/law-kb-mcp/embedder');
+      const { isModelReady, getDownloadStatus } = await import('@leochat/law-kb-mcp/embedder');
       const ready = await isModelReady();
-      return c.json({ ready, downloading: false, progress: ready ? 100 : 0 });
+      const { downloading, progress } = getDownloadStatus();
+      return c.json({ ready, downloading, progress: ready ? 100 : progress });
     } catch (error) {
       console.error('[KB model-status]', error);
       return c.json({ error: 'Failed to get model status' }, 500);
