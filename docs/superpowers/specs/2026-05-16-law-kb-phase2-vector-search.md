@@ -256,7 +256,19 @@ packages/law-kb-mcp/src/
 
 ---
 
-## 10. 范围外（本 Phase）
+## 10. 模型分发策略（Phase 5 执行）
+
+**选定方案：运行时下载（轻量安装包）**
+
+- 安装包不内置模型，保持安装包体积在 ~100MB 级别
+- 首次进入知识库页面时检测模型是否存在，缺失则提示下载
+- 下载源：`hf-mirror.com`（中国大陆直连），int8 量化版约 150MB
+- 下载期间知识库功能降级为纯 FTS5，下载完成后自动启用向量检索
+- Phase 5 在 `electron-builder.yml` 的 `extraResources` 中**不**包含模型文件
+
+---
+
+## 11. 范围外（本 Phase）
 
 - PDF / Word 解析（仍只支持 .txt / .md）
 - `search_case` 工具（判例向量库，Phase 3+）
