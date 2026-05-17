@@ -1,6 +1,7 @@
 # leochat-for-law Phase 2：向量检索设计
 
 > 日期：2026-05-16  
+> 版本：v2（审阅后修订）  
 > 状态：已批准  
 > 前置：Phase 1（FTS5 法规检索 + 知识库管理 UI）已完成
 
@@ -29,6 +30,8 @@
 | `embedding` | BLOB | BGE-m3 float32 向量，1024 维，约 4KB/条 |
 | `created_at` | TEXT | |
 
+约束：`UNIQUE(law_id, chunk_index)` — 防止重试时产生重复 embedding。
+
 ### `user_doc_chunks`
 
 | 字段 | 类型 | 说明 |
@@ -41,7 +44,16 @@
 | `embedding` | BLOB | BGE-m3 float32 向量 |
 | `created_at` | TEXT | |
 
-**不使用 LanceDB**：向量直接存 SQLite BLOB，余弦相似度在 JS 层计算。10 万 chunk ≈ 400MB，单机完全可接受，减少一个外部依赖。
+约束：`UNIQUE(doc_id, chunk_index)`
+
+**不使用 LanceDB**：向量直接存 SQLite BLOB，余弦相似度在 JS 层计算。10 万 chunk ≈ 400MB，在缓存策略下单机可接受（见第 4 节性能预算）。
+
+### 级联删除
+
+`db.ts` 需补充：
+- `deleteLaw(id)` → 先 `DELETE FROM law_chunks WHERE law_id = ?`
+- `deleteUserDoc(id)` → 先 `DELETE FROM user_doc_chunks WHERE doc_id = ?`
+- 或在 schema 中加 `ON DELETE CASCADE`（推荐，自动处理）
 
 ---
 
@@ -49,10 +61,10 @@
 
 ### 2.1 法规文本切片器（`chunkLaw`）
 
-输入：`laws` 表中已有的一条记录（`title` + `content`）
+输入：`laws` 表中一条记录（`title` + `content`）
 
 ```
-1. 按 /第[零一二三四五六七八九十百]+条/ 正则切分
+1. 按 /第[零一二两三四五六七八九十百千]+条/ 切分
    → 每个"第X条"及其正文 = 一个 chunk
 2. 单条超 300 字 → 按款项标记再切：
    /[（(][一二三四五六七八九十]+[）)]/ 或 /[一二三四五六七八九十]+、/
@@ -61,7 +73,7 @@
 4. 无法识别结构时：200 字固定窗口，hierarchy_path = "{law_title} > chunk_{N}"
 ```
 
-**触发时机**：`insertLaw()` 调用后自动异步生成（或首次向量检索时懒加载）
+正则说明：`两` 字已纳入字符集，覆盖"第两百条"等写法。
 
 ### 2.2 用户文档切片器（`chunkUserDoc`）
 
@@ -83,7 +95,7 @@
 
 ## 3. Embedding 方案
 
-**模型**：BAAI/bge-m3（1024 维，中文法律文本效果优秀）  
+**模型**：BAAI/bge-m3 **int8 量化版**（约 150MB，原始版 570MB，中文法律文本精度损失可忽略）  
 **运行位置**：Hono 后端进程（Node.js），通过 `@xenova/transformers` 加载 ONNX  
 **模型存储**：`process.env.LAW_KB_DIR ?? ~/.leochat-for-law/models/bge-m3/`  
 **下载源**：`hf-mirror.com`（中国大陆可直达）  
@@ -92,42 +104,67 @@
 新增模块：`packages/law-kb-mcp/src/embedder.ts`
 
 ```typescript
-export async function getEmbedding(text: string): Promise<Float32Array>
+// BGE-m3 dense retrieval 模式下 query/document 使用相同编码
+// （BGE-m3 设计上已去掉 instruction prefix 要求，与 BGE-v1.5 不同）
+// mode 参数保留作为 API 文档意图和未来扩展用，当前实现不做区分
+export async function getEmbedding(
+  text: string,
+  mode: 'query' | 'document' = 'document'
+): Promise<Float32Array>
+
 export async function isModelReady(): Promise<boolean>
 export async function downloadModel(onProgress: (pct: number) => void): Promise<void>
 ```
+
+**并发控制**：embedding 生成通过内部队列串行执行（每次一个 ONNX 推理任务），防止批量导入时 OOM。队列实现在 `embedder.ts` 内部，调用方无感知。
 
 ---
 
 ## 4. 向量检索与 RRF 融合
 
-### 4.1 余弦相似度检索
+### 4.1 Embedding 内存缓存策略
 
-从 SQLite 读取所有 `embedding` BLOB，在 JS 层计算余弦相似度，取 top-K。
+全量加载的 I/O 成本不可忽视：10 万条 × 4KB = 400MB，SQLite 顺序读预计 3–10 秒。
 
-首次性能预估：10 万条 chunk，JS 层批量计算约 200–500ms，可接受。  
-后续优化（超过 50 万条时）：考虑 sqlite-vss 或分批次检索。
+**缓存策略**：
+- 进程启动后**懒加载**：首次检索时一次性读入所有 embedding 到内存 `Float32Array[]`
+- 之后检索直接读内存，不再访问磁盘
+- 新增 chunk 时追加到内存缓存，不触发全量重读
+- 进程重启时重新加载（后端服务通常长期运行，重启代价可接受）
 
-### 4.2 混合检索 + RRF 融合
+**性能预算**：
+
+| 阶段 | 预计耗时 | 可接受上限 |
+|------|---------|----------|
+| 首次冷启动（读盘 + 缓存） | 3–10 秒 | 15 秒 |
+| 缓存就绪后单次检索（计算） | 50–200ms | 500ms |
+| Embedding 生成（每个 chunk） | 200–500ms | 1 秒 |
+
+超过 50 万条 chunk 时重新评估（考虑 sqlite-vss 或分批次检索）。
+
+### 4.2 FTS5 检索范围变更
+
+**重要行为变更**：现有 `searchLaw` 搜索的是 `laws.content`（整条法规全文），升级后改为搜 `law_chunks.content`（单条条文）。
+
+影响：rank 语义从"文档级相关度"变为"条文级相关度"，结果更精准，但需要在 `search.ts` 中同步更新 FTS5 查询 target。
+
+### 4.3 混合检索 + RRF 融合
 
 ```
 query
-  ├─ FTS5 MATCH → [{id, rank}] × top-10
-  ├─ 向量余弦   → [{id, score}] × top-10
+  ├─ FTS5 MATCH law_chunks → [{chunk_id, rank}] × top-10
+  ├─ 向量余弦（内存缓存）  → [{chunk_id, score}] × top-10
   └─ RRF 融合：score = Σ 1/(60 + rank_i)
-               → 排序取 top-5 返回
+               → 排序取 top-5，join law_chunks + laws 获取完整 metadata
 ```
 
-RRF 常数 k=60（学术默认值，无需调参）。
+RRF 常数 k=60（学术默认值）。
 
-### 4.3 返回结构扩展
-
-`SearchResult` 新增字段：
+### 4.4 返回结构扩展
 
 ```typescript
 interface SearchResult {
-  // 现有字段
-  id: number;
+  id: number;           // law.id 或 user_doc.id
   title: string;
   article_number: string | null;
   snippet: string;
@@ -136,57 +173,93 @@ interface SearchResult {
   // 新增
   hierarchy_path: string | null;
   chunk_id: number;
-  similarity: number;       // 0–1，向量相似度
+  similarity: number;   // 0–1，向量余弦相似度
 }
 ```
 
 ---
 
-## 5. 新增 / 升级的 MCP 工具
+## 5. 存量数据迁移
 
-| 工具 | 变化 | 说明 |
-|------|------|------|
-| `search_law` | 升级 | FTS5 → 混合检索；返回加 `hierarchy_path` |
-| `search_user_doc` | 新增 | 在 `user_doc_chunks` 上做混合检索 |
-| `list_knowledge_bases` | 扩展 | 返回加 `law_chunks_count`、`user_doc_chunks_count`、`model_ready` |
-| `index_document` | 扩展 | 导入后自动触发切片 + embedding |
+Phase 2 上线时，`laws` 和 `user_docs` 表中已有数据，但 `*_chunks` 表为空。
+
+**策略：懒加载迁移**
+- 首次调用 `searchLaw` 或 `searchUserDoc` 时检测 `law_chunks` 是否为空
+- 为空则触发后台批量切片 + embedding（串行队列，不阻塞检索响应）
+- 检索在迁移完成前降级为纯 FTS5，迁移完成后自动切换混合检索
+- `list_knowledge_bases` 返回 `{ chunks_indexed: N, chunks_total: M, migration_progress: 0.0–1.0 }`
+
+UI 在迁移期间显示「向量索引构建中 X%，当前使用关键词检索」。
 
 ---
 
-## 6. 新增文件
+## 6. `index_document` 工具的同步/异步语义
+
+**选择：立即返回 + 后台 embedding**
+
+工具调用流程：
+```
+1. 写入 user_docs 表（同步，快）→ 立即返回 { success: true, doc_id: N }
+2. 切片写入 user_doc_chunks（同步，快）→ embedding = NULL
+3. 后台队列生成 embedding（异步，慢）→ 逐条更新 embedding 字段
+```
+
+前端 `LawKnowledgeTab` 在导入后显示「已切片 N 段，向量化中…」，轮询 `/kb/status` 的 `chunks_indexed` 字段确认完成。
+
+在 embedding 完成前，该文档可通过 FTS5 检索到（降级），embedding 就绪后自动参与向量检索。
+
+---
+
+## 7. 新增 / 升级的 MCP 工具
+
+| 工具 | 变化 | 说明 |
+|------|------|------|
+| `search_law` | 升级 | 搜索目标改为 `law_chunks`；FTS5 → 混合检索；返回加 `hierarchy_path` |
+| `search_user_doc` | 新增 | 在 `user_doc_chunks` 上做混合检索 |
+| `list_knowledge_bases` | 扩展 | 返回加 `law_chunks_count`、`user_doc_chunks_count`、`model_ready`、`migration_progress` |
+| `index_document` | 扩展 | 导入后立即切片，后台异步 embedding |
+
+---
+
+## 8. 新增文件
 
 ```
 packages/law-kb-mcp/src/
-├── embedder.ts               ← BGE-m3 加载、下载、推理
+├── embedder.ts               ← BGE-m3 加载、下载、推理、内部队列
 ├── chunker.ts                ← chunkLaw + chunkUserDoc
-├── vector-search.ts          ← 余弦检索 + RRF 融合
+├── vector-search.ts          ← 内存缓存、余弦检索、RRF 融合
 └── __tests__/
     ├── chunker.test.ts
     └── vector-search.test.ts
 ```
 
 修改：
-- `src/db.ts` — 加 `law_chunks` / `user_doc_chunks` 表 schema
-- `src/search.ts` — `searchLaw` 升级为混合检索
-- `src/indexer.ts` — `indexDocument` 导入后触发切片
-- `src/index.ts` — 注册 `search_user_doc` 工具，更新 `list_knowledge_bases`
+- `src/db.ts` — 加 `law_chunks` / `user_doc_chunks` 表 schema（含 UNIQUE 约束、ON DELETE CASCADE）
+- `src/search.ts` — `searchLaw` 升级为混合检索，FTS5 target 改为 `law_chunks`
+- `src/indexer.ts` — `indexDocument` 导入后立即切片，触发异步 embedding 队列
+- `src/index.ts` — 注册 `search_user_doc`，更新 `list_knowledge_bases`
 
-后端：
-- `packages/server/src/routes/index.ts` — 新增 `/kb/model-status`、`/kb/download-model` 端点
-
----
-
-## 7. UI 扩展（KnowledgeBase 页面）
-
-- `LawKnowledgeTab` 加一行：`🤖 BGE-m3 模型 [未下载 / 下载中 X% / ✅ 已就绪]`
-- 模型未就绪时，向量检索降级为纯 FTS5（graceful degradation）
-- 文档导入后显示「已切片 N 段，向量化中…」进度
+后端（`packages/server/src/routes/index.ts`）：
+- 新增 `GET /kb/model-status` — 返回模型是否就绪、下载进度
+- 新增 `POST /kb/download-model` — 触发模型下载
 
 ---
 
-## 8. 范围外（本 Phase）
+## 9. UI 扩展（KnowledgeBase 页面）
+
+`LawKnowledgeTab` 新增状态行：
+- `🤖 BGE-m3 模型` — 未下载（含下载按钮）/ 下载中 X% / ✅ 已就绪
+- 迁移期间：「向量索引构建中 X%，当前使用关键词检索」
+- 文档导入后：「已切片 N 段，向量化中…」
+
+模型未就绪时，`search_law` / `search_user_doc` 降级为纯 FTS5（graceful degradation）。
+
+---
+
+## 10. 范围外（本 Phase）
 
 - PDF / Word 解析（仍只支持 .txt / .md）
 - `search_case` 工具（判例向量库，Phase 3+）
 - sqlite-vss 加速（50 万+ chunk 时再评估）
 - 多语言文档（英文合同等）
+- BGE-m3 稀疏检索 / ColBERT 多向量模式（dense 已足够）
