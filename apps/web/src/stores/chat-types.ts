@@ -92,6 +92,14 @@ export interface ConversationsSlice {
   ) => void;
 }
 
+// ─── Bash approval (tool-call permission gate) ───────────────────
+
+export interface PendingApproval {
+  id: string;
+  toolName: string;
+  command: string;
+}
+
 // ─── Generation slice ────────────────────────────────────────────
 
 export interface GenerationSlice {
@@ -99,11 +107,13 @@ export interface GenerationSlice {
   cardStatus: CardStatus;
   toolCallStates: Record<string, ToolCallState>;
   activeTaskLoop: TaskLoopInstance | null;
+  pendingApprovals: PendingApproval[];
 
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
   _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
+  allowToolForSession: (approvalId: string, toolName: string) => void;
 }
 
 // ─── Combined store ──────────────────────────────────────────────

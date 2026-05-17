@@ -37,6 +37,10 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   cardStatus: "stable" as CardStatus,
   toolCallStates: {},
   activeTaskLoop: null,
+  pendingApprovals: [],
+  allowToolForSession: (_approvalId, _toolName) => {
+    // stub: full implementation requires backend approval protocol
+  },
 
   sendMessage: async (content, systemPrompt) => {
     if (get().isGenerating) {
