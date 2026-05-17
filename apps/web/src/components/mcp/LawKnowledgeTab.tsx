@@ -51,9 +51,16 @@ export function LawKnowledgeTab() {
     setMessage(null);
     let ok = 0;
     for (const file of Array.from(files)) {
-      const filePath = (file as File & { path?: string }).path ?? file.name;
       try {
-        const result = await kbApi.indexFile(filePath);
+        // Electron exposes full OS path; browser only has filename
+        const electronPath = (file as File & { path?: string }).path;
+        let result;
+        if (electronPath) {
+          result = await kbApi.indexFile(electronPath);
+        } else {
+          const content = await file.text();
+          result = await kbApi.uploadContent(file.name, content);
+        }
         if (result.success) ok++;
       } catch { /* continue */ }
     }

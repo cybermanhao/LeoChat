@@ -28,4 +28,14 @@ export const kbApi = {
     if (!res.ok) throw new Error('Failed to index file');
     return res.json();
   },
+
+  async uploadContent(filename: string, content: string): Promise<{ success: boolean; doc_id?: number; error?: string }> {
+    const res = await fetch(`${BASE}/upload-content`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, content }),
+    });
+    if (!res.ok) throw new Error('Failed to upload content');
+    return res.json();
+  },
 };

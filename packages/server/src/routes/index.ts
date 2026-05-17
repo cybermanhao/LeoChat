@@ -586,5 +586,36 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
+  // Upload file content directly from browser (no server-side path needed)
+  app.post('/kb/upload-content', async (c) => {
+    let body: { filename: string; content: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (!body.filename || typeof body.filename !== 'string') {
+      return c.json({ error: 'filename required' }, 400);
+    }
+    if (typeof body.content !== 'string') {
+      return c.json({ error: 'content required' }, 400);
+    }
+    const ext = body.filename.slice(body.filename.lastIndexOf('.')).toLowerCase();
+    if (ext !== '.txt' && ext !== '.md') {
+      return c.json({ success: false, error: `不支持的文件类型 ${ext}，当前支持 .txt .md` });
+    }
+    try {
+      const { getDb } = await import('@leochat/law-kb-mcp/db');
+      const db = getDb();
+      const { lastInsertRowid } = db.prepare(
+        'INSERT INTO user_docs (filename, content, file_path) VALUES (?, ?, ?)'
+      ).run(body.filename, body.content, null);
+      return c.json({ success: true, doc_id: Number(lastInsertRowid) });
+    } catch (error) {
+      console.error('[KB upload]', error);
+      return c.json({ error: 'Upload failed' }, 500);
+    }
+  });
+
   return app;
 }
