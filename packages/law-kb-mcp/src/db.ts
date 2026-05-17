@@ -81,5 +81,50 @@ function initSchema(db: Database.Database): void {
       INSERT INTO user_docs_fts(user_docs_fts, rowid, filename, content)
       VALUES ('delete', old.id, old.filename, old.content);
     END;
+
+    CREATE TABLE IF NOT EXISTS law_chunks (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      law_id          INTEGER NOT NULL REFERENCES laws(id) ON DELETE CASCADE,
+      chunk_index     INTEGER NOT NULL,
+      content         TEXT NOT NULL,
+      article_number  TEXT,
+      hierarchy_path  TEXT,
+      embedding       BLOB,
+      created_at      TEXT DEFAULT (datetime('now')),
+      UNIQUE(law_id, chunk_index)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_doc_chunks (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_id          INTEGER NOT NULL REFERENCES user_docs(id) ON DELETE CASCADE,
+      chunk_index     INTEGER NOT NULL,
+      content         TEXT NOT NULL,
+      hierarchy_path  TEXT,
+      embedding       BLOB,
+      created_at      TEXT DEFAULT (datetime('now')),
+      UNIQUE(doc_id, chunk_index)
+    );
+
+    -- FTS5 virtual table for law chunk full-text search
+    CREATE VIRTUAL TABLE IF NOT EXISTS law_chunks_fts USING fts5(
+      content,
+      content='law_chunks',
+      content_rowid='id',
+      tokenize='unicode61'
+    );
+
+    -- Triggers to keep FTS index in sync with law_chunks
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_insert AFTER INSERT ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_delete AFTER DELETE ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_update AFTER UPDATE ON law_chunks BEGIN
+      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+    END;
   `);
 }
