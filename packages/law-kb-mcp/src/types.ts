@@ -54,18 +54,18 @@ export interface SearchResult {
   snippet: string;
   rank: number;
   source: 'law' | 'user_doc';
-  hierarchy_path: string | null;
-  chunk_id: number;
-  similarity: number;
+  hierarchy_path?: string | null;
+  chunk_id?: number;
+  similarity?: number;
 }
 
 export interface KnowledgeBaseStatus {
   law_count: number;
   user_doc_count: number;
-  law_chunks_count: number;
-  user_doc_chunks_count: number;
-  model_ready: boolean;
-  migration_progress: number;
+  law_chunks_count?: number;
+  user_doc_chunks_count?: number;
+  model_ready?: boolean;
+  migration_progress?: number;
 }
 
 export interface IndexResult {

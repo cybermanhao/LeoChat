@@ -88,4 +88,53 @@ describe('getDb', () => {
     ).all('"劳动合同应当书面订立"');
     expect(rows.length).toBeGreaterThan(0);
   });
+
+  it('cascades delete from user_docs to user_doc_chunks', () => {
+    const db = getDb();
+    const { lastInsertRowid: docId } = db.prepare(
+      'INSERT INTO user_docs (filename, content) VALUES (?, ?)'
+    ).run('test.txt', '内容');
+    db.prepare(
+      'INSERT INTO user_doc_chunks (doc_id, chunk_index, content) VALUES (?, ?, ?)'
+    ).run(docId, 0, '内容');
+    db.prepare('DELETE FROM user_docs WHERE id = ?').run(docId);
+    const chunks = db.prepare('SELECT * FROM user_doc_chunks WHERE doc_id = ?').all(docId);
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('FTS index stays in sync with law_chunks updates', () => {
+    const db = getDb();
+    const { lastInsertRowid: lawId } = db.prepare(
+      'INSERT INTO laws (title, content) VALUES (?, ?)'
+    ).run('测试法', '内容');
+    db.prepare(
+      'INSERT INTO law_chunks (law_id, chunk_index, content) VALUES (?, ?, ?)'
+    ).run(lawId, 0, '旧内容测试');
+    db.prepare(
+      'UPDATE law_chunks SET content = ? WHERE law_id = ? AND chunk_index = ?'
+    ).run('新内容更新', lawId, 0);
+    const newRows = db.prepare(
+      "SELECT rowid FROM law_chunks_fts WHERE law_chunks_fts MATCH '\"新内容更新\"'"
+    ).all();
+    expect(newRows.length).toBeGreaterThan(0);
+    const oldRows = db.prepare(
+      "SELECT rowid FROM law_chunks_fts WHERE law_chunks_fts MATCH '\"旧内容测试\"'"
+    ).all();
+    expect(oldRows).toHaveLength(0);
+  });
+
+  it('FTS index stays in sync with law_chunks deletes', () => {
+    const db = getDb();
+    const { lastInsertRowid: lawId } = db.prepare(
+      'INSERT INTO laws (title, content) VALUES (?, ?)'
+    ).run('删除测试法', '内容');
+    db.prepare(
+      'INSERT INTO law_chunks (law_id, chunk_index, content) VALUES (?, ?, ?)'
+    ).run(lawId, 0, '被删除的内容条文');
+    db.prepare('DELETE FROM laws WHERE id = ?').run(lawId);
+    const rows = db.prepare(
+      "SELECT rowid FROM law_chunks_fts WHERE law_chunks_fts MATCH '\"被删除的内容条文\"'"
+    ).all();
+    expect(rows).toHaveLength(0);
+  });
 });
