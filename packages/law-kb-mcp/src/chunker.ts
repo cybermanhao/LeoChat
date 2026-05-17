@@ -60,7 +60,8 @@ function splitAtClauses(
   articleNumber: string,
   hierarchyPath: string
 ): ChunkInput[] {
-  const parts = articleContent.split(CLAUSE_RE).filter(p => p.trim().length > 0);
+  // Lookahead preserves clause markers at the start of each part
+  const parts = articleContent.split(/(?=[（(][一二三四五六七八九十]+[）)])|(?=^[一二三四五六七八九十]+、)/m).filter(p => p.trim().length > 0);
   if (parts.length <= 1) {
     // No clause markers — use fixed window
     return fixedWindowChunks(hierarchyPath, articleContent).map(c => ({
@@ -77,7 +78,7 @@ function splitAtClauses(
 }
 
 function paragraphChunks(filename: string, content: string): ChunkInput[] {
-  const paragraphs = content.split(/\n{2,}|\n(?=\S)/).filter(p => p.trim().length > 0);
+  const paragraphs = content.split(/\n{2,}/).filter(p => p.trim().length > 0);
   const chunks: ChunkInput[] = [];
   let buffer = '';
   let idx = 0;

@@ -31,14 +31,20 @@ describe('chunkLaw', () => {
     const longText = '合同条款说明'.repeat(50); // ~300 chars, no article markers
     const chunks = chunkLaw('无结构文件', longText);
     expect(chunks.length).toBeGreaterThan(0);
-    chunks.forEach(c => expect(c.content.length).toBeLessThanOrEqual(220));
+    chunks.forEach(c => expect(c.content.length).toBeLessThanOrEqual(200));
   });
 
-  it('splits long articles at clause markers', () => {
-    const content = '第一条 ' + '（一）款一内容。'.repeat(5) + '（二）款二内容。'.repeat(5);
+  it('splits long articles at clause markers, preserving clause labels', () => {
+    // Article must exceed MAX_CHUNK=300 chars to trigger splitAtClauses
+    // Each clause string is ~25 chars; repeat(7) gives ~350 chars total — over 300
+    const clause1 = '（一）这是第一款内容，详细说明了具体要求和相关规定。'.repeat(7);
+    const clause2 = '（二）这是第二款内容，详细说明了另一方面的要求。'.repeat(7);
+    const content = '第一条 ' + clause1 + clause2; // ~354 chars — exceeds MAX_CHUNK=300
     const chunks = chunkLaw('测试法', content);
-    // Long article should be split into sub-chunks
-    expect(chunks.length).toBeGreaterThanOrEqual(1);
+    expect(chunks.length).toBeGreaterThan(1); // should split into multiple chunks
+    // Clause labels should be preserved in chunk content
+    const hasClauseLabel = chunks.some(c => c.content.includes('（一）') || c.content.includes('（二）'));
+    expect(hasClauseLabel).toBe(true);
   });
 });
 
@@ -58,7 +64,8 @@ describe('chunkUserDoc', () => {
   });
 
   it('respects 250-char limit per chunk', () => {
-    const longPara = '这是一个很长的段落。' + '补充内容。'.repeat(40);
+    // Build a paragraph well over 250 chars to exercise the overflow path
+    const longPara = '这是一个很长的段落正文内容。'.repeat(30); // ~390 chars with punctuation for split
     const chunks = chunkUserDoc('长文.txt', longPara);
     chunks.forEach(c => expect(c.content.length).toBeLessThanOrEqual(260));
   });
