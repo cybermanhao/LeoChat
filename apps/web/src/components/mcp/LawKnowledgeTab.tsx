@@ -47,11 +47,15 @@ export function LawKnowledgeTab() {
   useEffect(() => {
     if (modelStatus?.downloading) {
       pollRef.current = setInterval(async () => {
-        const s = await kbApi.getModelStatus();
-        setModelStatus(s);
-        if (s.ready) {
+        try {
+          const s = await kbApi.getModelStatus();
+          setModelStatus(s);
+          if (s.ready) {
+            clearInterval(pollRef.current!);
+            fetchStatus();
+          }
+        } catch {
           clearInterval(pollRef.current!);
-          fetchStatus();
         }
       }, 3000);
     }
@@ -146,7 +150,7 @@ export function LawKnowledgeTab() {
             <span className="text-[10px] text-muted-foreground ml-2">
               {modelStatus === null ? '检测中…' :
                modelStatus.ready ? '✅ 已就绪' :
-               modelStatus.downloading ? `下载中 ${modelStatus.progress}%` :
+               modelStatus.downloading ? `下载中 ${Math.round(modelStatus.progress)}%` :
                '未下载'}
             </span>
           </div>
@@ -165,7 +169,7 @@ export function LawKnowledgeTab() {
 
         {/* Migration progress */}
         {status && (status.migration_progress ?? 1) < 1 && (status.migration_progress ?? 1) > 0 && (
-          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs bg-blue-500/10 text-blue-600">
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs bg-primary/10 text-primary">
             <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
             向量索引构建中 {Math.round((status.migration_progress ?? 0) * 100)}%，当前使用关键词检索
           </div>
