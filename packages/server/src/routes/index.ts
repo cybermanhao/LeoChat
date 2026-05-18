@@ -586,6 +586,36 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
+  app.get('/kb/model-status', async (c) => {
+    try {
+      const { isModelReady, getDownloadStatus } = await import('@leochat/law-kb-mcp/embedder');
+      const ready = await isModelReady();
+      const { downloading, progress } = getDownloadStatus();
+      return c.json({ ready, downloading, progress: ready ? 100 : progress });
+    } catch (error) {
+      console.error('[KB model-status]', error);
+      return c.json({ error: 'Failed to get model status' }, 500);
+    }
+  });
+
+  app.post('/kb/download-model', async (c) => {
+    try {
+      const { downloadModel } = await import('@leochat/law-kb-mcp/embedder');
+      // Fire and forget — frontend polls /kb/model-status for progress
+      downloadModel((pct) => {
+        console.log(`[BGE-m3 download] ${pct}%`);
+      }).then(() => {
+        console.log('[BGE-m3 download] complete');
+      }).catch(err => {
+        console.error('[BGE-m3 download error]', err);
+      });
+      return c.json({ message: '模型下载已开始，请轮询 /kb/model-status 查看进度' });
+    } catch (error) {
+      console.error('[KB download-model]', error);
+      return c.json({ error: 'Failed to start download' }, 500);
+    }
+  });
+
   // Upload file content directly from browser (no server-side path needed)
   app.post('/kb/upload-content', async (c) => {
     let body: { filename: string; content: string };

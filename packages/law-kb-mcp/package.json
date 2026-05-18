@@ -24,6 +24,10 @@
     "./crawler/flk": {
       "types": "./dist/crawler/flk.d.ts",
       "default": "./dist/crawler/flk.js"
+    },
+    "./embedder": {
+      "types": "./dist/embedder.d.ts",
+      "default": "./dist/embedder.js"
     }
   },
   "scripts": {
