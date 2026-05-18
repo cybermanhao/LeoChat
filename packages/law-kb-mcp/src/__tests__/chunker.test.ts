@@ -67,6 +67,6 @@ describe('chunkUserDoc', () => {
     // Build a paragraph well over 250 chars to exercise the overflow path
     const longPara = '这是一个很长的段落正文内容。'.repeat(30); // ~390 chars with punctuation for split
     const chunks = chunkUserDoc('长文.txt', longPara);
-    chunks.forEach(c => expect(c.content.length).toBeLessThanOrEqual(260));
+    chunks.forEach(c => expect(c.content.length).toBeLessThanOrEqual(250));
   });
 });
