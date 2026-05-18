@@ -4,6 +4,10 @@ const BASE = '/api/kb';
 export interface KbStatus {
   law_count: number;
   user_doc_count: number;
+  law_chunks_count?: number;
+  user_doc_chunks_count?: number;
+  model_ready?: boolean;
+  migration_progress?: number;
 }
 
 export const kbApi = {
@@ -36,6 +40,18 @@ export const kbApi = {
       body: JSON.stringify({ filename, content }),
     });
     if (!res.ok) throw new Error('Failed to upload content');
+    return res.json();
+  },
+
+  async getModelStatus(): Promise<{ ready: boolean; downloading: boolean; progress: number }> {
+    const res = await fetch(`${BASE}/model-status`);
+    if (!res.ok) throw new Error('Failed to get model status');
+    return res.json();
+  },
+
+  async downloadModel(): Promise<{ message: string }> {
+    const res = await fetch(`${BASE}/download-model`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to start model download');
     return res.json();
   },
 };

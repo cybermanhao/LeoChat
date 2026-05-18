@@ -17,6 +17,8 @@ export function LawKnowledgeTab() {
   const [indexing, setIndexing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [modelStatus, setModelStatus] = useState<{ ready: boolean; downloading: boolean; progress: number } | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -29,7 +31,32 @@ export function LawKnowledgeTab() {
     }
   }, []);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  const fetchModelStatus = useCallback(async () => {
+    try {
+      setModelStatus(await kbApi.getModelStatus());
+    } catch {
+      setModelStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    fetchModelStatus();
+  }, [fetchStatus, fetchModelStatus]);
+
+  useEffect(() => {
+    if (modelStatus?.downloading) {
+      pollRef.current = setInterval(async () => {
+        const s = await kbApi.getModelStatus();
+        setModelStatus(s);
+        if (s.ready) {
+          clearInterval(pollRef.current!);
+          fetchStatus();
+        }
+      }, 3000);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [modelStatus?.downloading, fetchStatus]);
 
   const handleSyncFlk = async () => {
     setSyncState('syncing');
@@ -69,6 +96,15 @@ export function LawKnowledgeTab() {
     fetchStatus();
   };
 
+  const handleDownloadModel = async () => {
+    try {
+      await kbApi.downloadModel();
+      setModelStatus(s => s ? { ...s, downloading: true } : null);
+    } catch {
+      setMessage('模型下载启动失败');
+    }
+  };
+
   const isError = syncState === 'error';
 
   return (
@@ -100,6 +136,39 @@ export function LawKnowledgeTab() {
               count={status?.user_doc_count ?? 0}
             />
           </>
+        )}
+
+        {/* Model status row */}
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded-md bg-muted/20 border border-border">
+          <span className="text-sm">🤖</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium">BGE-m3 模型</span>
+            <span className="text-[10px] text-muted-foreground ml-2">
+              {modelStatus === null ? '检测中…' :
+               modelStatus.ready ? '✅ 已就绪' :
+               modelStatus.downloading ? `下载中 ${modelStatus.progress}%` :
+               '未下载'}
+            </span>
+          </div>
+          {modelStatus && !modelStatus.ready && !modelStatus.downloading && (
+            <button
+              onClick={handleDownloadModel}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            >
+              下载
+            </button>
+          )}
+          {modelStatus?.downloading && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {/* Migration progress */}
+        {status && (status.migration_progress ?? 1) < 1 && (status.migration_progress ?? 1) > 0 && (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs bg-blue-500/10 text-blue-600">
+            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+            向量索引构建中 {Math.round((status.migration_progress ?? 0) * 100)}%，当前使用关键词检索
+          </div>
         )}
 
         {message && (
