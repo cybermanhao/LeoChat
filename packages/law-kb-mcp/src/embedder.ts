@@ -1,0 +1,80 @@
+// packages/law-kb-mcp/src/embedder.ts
+import { join } from 'path';
+import { homedir } from 'os';
+import { existsSync } from 'fs';
+
+const MODEL_ID = 'BAAI/bge-m3';
+
+function getModelDir(): string {
+  const base = process.env.LAW_KB_DIR ?? join(homedir(), '.leochat-for-law');
+  return join(base, 'models', 'bge-m3');
+}
+
+let extractor: ((text: string, opts: object) => Promise<{ data: Float32Array }>) | null = null;
+let embeddingQueue: Promise<void> = Promise.resolve();
+let isDownloading = false;
+let downloadProgress = 0;
+
+export function getDownloadStatus(): { downloading: boolean; progress: number } {
+  return { downloading: isDownloading, progress: downloadProgress };
+}
+
+async function getExtractor() {
+  if (extractor) return extractor;
+  const { pipeline, env } = await import('@xenova/transformers');
+  const modelDir = getModelDir();
+  (env as any).remoteURL = 'https://hf-mirror.com/';
+  (env as any).allowLocalModels = true;
+  (env as any).localModelPath = modelDir;
+  extractor = await pipeline('feature-extraction', MODEL_ID, {
+    quantized: true,
+    cache_dir: modelDir,
+  }) as any;
+  return extractor!;
+}
+
+// BGE-m3 dense retrieval: query/document use the same encoding (no instruction prefix needed)
+// mode param is retained for API clarity and future use
+export async function getEmbedding(
+  text: string,
+  _mode: 'query' | 'document' = 'document'
+): Promise<Float32Array> {
+  const pipe = await getExtractor();
+  const output = await pipe(text, { pooling: 'cls', normalize: true });
+  return output.data;
+}
+
+export async function isModelReady(): Promise<boolean> {
+  return existsSync(join(getModelDir(), 'config.json'));
+}
+
+export async function downloadModel(onProgress: (pct: number) => void): Promise<void> {
+  isDownloading = true;
+  downloadProgress = 0;
+  try {
+    const { pipeline, env } = await import('@xenova/transformers');
+    const modelDir = getModelDir();
+    (env as any).remoteURL = 'https://hf-mirror.com/';
+    (env as any).allowLocalModels = false;
+    extractor = null; // reset so next getEmbedding reloads from local
+    await (pipeline as any)('feature-extraction', MODEL_ID, {
+      quantized: true,
+      cache_dir: modelDir,
+      progress_callback: (p: { progress?: number }) => {
+        if (p.progress != null) {
+          downloadProgress = Math.round(p.progress);
+          onProgress(downloadProgress);
+        }
+      },
+    });
+    extractor = null;
+  } finally {
+    isDownloading = false;
+  }
+}
+
+export function queueEmbedding(fn: () => Promise<void>): Promise<void> {
+  const next = embeddingQueue.then(fn).catch(err => console.error('[embedder queue]', err));
+  embeddingQueue = next;
+  return next;
+}
