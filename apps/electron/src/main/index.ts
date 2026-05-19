@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { join } from "path";
 import { readFile, writeFile, unlink, mkdir } from "fs/promises";
 import { createServer as createNetServer } from "net";
@@ -194,6 +194,14 @@ function setupIPC(): void {
     try {
       await unlink(join(storageDir, `${safeKey}.json`));
     } catch {}
+  });
+
+  // Native folder picker for onboarding work directory selection
+  ipcMain.handle("dialog:openDirectory", async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ["openDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0];
   });
 
   // Blocks until the server is ready, then returns the actual port.
