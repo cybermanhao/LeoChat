@@ -330,6 +330,59 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
+  // POST /api/llm/test-connection
+  app.post("/llm/test-connection", async (c) => {
+    let body: { provider: string; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ success: false, error: "Invalid JSON body" }, 400);
+    }
+
+    const { provider, apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.length > 2048) {
+      return c.json({ success: false, error: "Invalid API key" }, 400);
+    }
+
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi-code", "google"] as const;
+    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+      return c.json({ success: false, error: "Unknown provider" }, 400);
+    }
+
+    const providerUrls: Record<string, string> = {
+      deepseek: "https://api.deepseek.com/models",
+      openrouter: "https://openrouter.ai/api/v1/models",
+      openai: "https://api.openai.com/v1/models",
+      moonshot: "https://api.moonshot.cn/v1/models",
+      "kimi-code": "https://api.moonshot.cn/v1/models",
+      google: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    };
+
+    const url = providerUrls[provider];
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (provider !== "google") {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, { method: "GET", headers, signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        return c.json({ success: true });
+      }
+      return c.json({ success: false, error: "Authentication failed" });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ success: false, error: "Connection timed out" });
+      }
+      console.error("[LLM test-connection]", err);
+      return c.json({ success: false, error: "Connection failed" });
+    }
+  });
+
   // MCP server management
   app.post("/mcp/servers", async (c) => {
     let config: MCPServerConfig;
