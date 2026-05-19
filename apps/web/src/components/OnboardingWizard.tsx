@@ -5,7 +5,7 @@ import { useThemeStore } from "../stores/theme";
 import { useChatStore, type LLMProvider } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { chatApi } from "../lib/api";
-import { applyTheme, getThemeById } from "@ai-chatbox/shared";
+import { applyTheme, getThemeById, LLM_PROVIDERS } from "@ai-chatbox/shared";
 import { cn } from "@ai-chatbox/ui";
 
 // Electron detection
@@ -41,7 +41,7 @@ export function OnboardingWizard() {
   const { setOnboardingCompleted, setWorkDir: storeSetWorkDir } = useOnboardingStore();
   const { currentLocale, setLocale } = useI18nStore();
   const { currentTheme, setTheme } = useThemeStore();
-  const { setCurrentProvider, setProviderKey } = useChatStore();
+  const { setCurrentProvider, setProviderKey, setCurrentModel } = useChatStore();
   const { updateServer } = useMCPStore();
 
   const [stepIndex, setStepIndex] = useState(0);
@@ -52,6 +52,9 @@ export function OnboardingWizard() {
   const [apiKey, setApiKey] = useState("");
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testError, setTestError] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string>(
+    () => (LLM_PROVIDERS["deepseek"].models as readonly string[])[0] ?? ""
+  );
 
   // work-dir step
   const [workDir, setWorkDir] = useState("");
@@ -60,11 +63,19 @@ export function OnboardingWizard() {
   const [locale, setLocaleState] = useState<Locale>(currentLocale);
   const [theme, setThemeState] = useState(currentTheme);
 
-  // Reset test status when provider or key changes
+  // Reset test status and model when provider changes
   useEffect(() => {
     setTestStatus("idle");
     setTestError("");
-  }, [provider, apiKey]);
+    const models = (LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS]?.models as readonly string[] | undefined) ?? [];
+    setSelectedModel(models[0] ?? "");
+  }, [provider]);
+
+  // Reset test status when apiKey changes
+  useEffect(() => {
+    setTestStatus("idle");
+    setTestError("");
+  }, [apiKey]);
 
   // Preview theme live
   useEffect(() => {
@@ -97,11 +108,45 @@ export function OnboardingWizard() {
   );
 
   const handleNext = useCallback(async () => {
+    if (currentStep === "api-key") {
+      // No key entered — skip API key setup
+      if (!apiKey) {
+        goToStep(stepIndex + 1);
+        return;
+      }
+      // Don't double-fire while testing
+      if (testStatus === "testing") return;
+      // Already succeeded or user is continuing despite failure
+      if (testStatus === "ok" || testStatus === "fail") {
+        goToStep(stepIndex + 1);
+        return;
+      }
+      // First click: run test
+      setTestStatus("testing");
+      setTestError("");
+      try {
+        const result = await chatApi.testLLMConnection(provider, apiKey);
+        if (result.success) {
+          setTestStatus("ok");
+          // Auto-advance after a short pause so user sees the tick
+          setTimeout(() => goToStep(stepIndex + 1), 600);
+        } else {
+          setTestStatus("fail");
+          setTestError(result.error || "连接失败");
+        }
+      } catch (e) {
+        setTestStatus("fail");
+        setTestError(e instanceof Error ? e.message : "未知错误");
+      }
+      return;
+    }
+
     if (currentStep === "done") {
       // Write all values to stores
       if (apiKey) {
         setCurrentProvider(provider);
         setProviderKey(provider, apiKey);
+        if (selectedModel) setCurrentModel(selectedModel);
       }
       if (workDir) {
         storeSetWorkDir(workDir);
@@ -123,11 +168,14 @@ export function OnboardingWizard() {
     stepIndex,
     apiKey,
     provider,
+    selectedModel,
+    testStatus,
     workDir,
     locale,
     theme,
     setCurrentProvider,
     setProviderKey,
+    setCurrentModel,
     storeSetWorkDir,
     updateServer,
     setLocale,
@@ -145,24 +193,6 @@ export function OnboardingWizard() {
   const handleSkip = useCallback(() => {
     setOnboardingCompleted(true);
   }, [setOnboardingCompleted]);
-
-  const handleTestConnection = useCallback(async () => {
-    if (!apiKey || testStatus === "testing") return;
-    setTestStatus("testing");
-    setTestError("");
-    try {
-      const result = await chatApi.testLLMConnection(provider, apiKey);
-      if (result.success) {
-        setTestStatus("ok");
-      } else {
-        setTestStatus("fail");
-        setTestError(result.error || "连接失败");
-      }
-    } catch (e) {
-      setTestStatus("fail");
-      setTestError(e instanceof Error ? e.message : "未知错误");
-    }
-  }, [apiKey, provider, testStatus]);
 
   const handleBrowseDir = useCallback(async () => {
     try {
@@ -185,7 +215,11 @@ export function OnboardingWizard() {
       ? "开始"
       : currentStep === "done"
       ? "进入 LeoChat"
+      : currentStep === "api-key" && testStatus === "testing"
+      ? "验证中..."
       : "继续 →";
+
+  const isPrimaryDisabled = currentStep === "api-key" && testStatus === "testing";
 
   const isDoneStep = currentStep === "done";
 
@@ -212,7 +246,8 @@ export function OnboardingWizard() {
             setApiKey={setApiKey}
             testStatus={testStatus}
             testError={testError}
-            onTest={handleTestConnection}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
           />
         )}
         {currentStep === "work-dir" && (
@@ -236,10 +271,13 @@ export function OnboardingWizard() {
         <div className="flex justify-center">
           <button
             onClick={handleNext}
+            disabled={isPrimaryDisabled}
             className={cn(
               "rounded-full px-8 py-3 bg-primary text-primary-foreground font-medium",
               "transition-all duration-200",
-              "hover:opacity-90 active:scale-95"
+              isPrimaryDisabled
+                ? "opacity-60 cursor-not-allowed"
+                : "hover:opacity-90 active:scale-95"
             )}
           >
             {primaryLabel}
@@ -312,7 +350,8 @@ interface ApiKeyStepProps {
   setApiKey: (k: string) => void;
   testStatus: TestStatus;
   testError: string;
-  onTest: () => void;
+  selectedModel: string;
+  setSelectedModel: (m: string) => void;
 }
 
 function ApiKeyStep({
@@ -322,8 +361,12 @@ function ApiKeyStep({
   setApiKey,
   testStatus,
   testError,
-  onTest,
+  selectedModel,
+  setSelectedModel,
 }: ApiKeyStepProps) {
+  const providerConfig = LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS];
+  const modelList = (providerConfig?.models as readonly string[] | undefined) ?? [];
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
@@ -369,39 +412,60 @@ function ApiKeyStep({
         />
       </div>
 
-      {/* Test connection */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onTest}
-          disabled={!apiKey || testStatus === "testing"}
-          className={cn(
-            "rounded-lg border border-border px-4 py-2 text-sm font-medium",
-            "transition-all duration-200",
-            !apiKey || testStatus === "testing"
-              ? "opacity-50 cursor-not-allowed text-muted-foreground"
-              : "text-foreground hover:bg-muted cursor-pointer"
-          )}
-        >
-          {testStatus === "testing" ? "测试中..." : "测试连接"}
-        </button>
-
-        {testStatus === "ok" && (
-          <span
-            className="text-green-500 text-sm font-medium"
-            style={{ animation: "fadeIn 200ms ease-out" }}
+      {/* Model selection */}
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-foreground">默认模型</label>
+        {modelList.length > 0 ? (
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className={cn(
+              "w-full rounded-lg border border-border bg-card text-foreground px-3 py-2",
+              "focus:outline-none focus:ring-2 focus:ring-primary/50",
+              "transition-colors duration-200"
+            )}
           >
-            ✓ 连接成功
-          </span>
-        )}
-        {testStatus === "fail" && (
-          <span
-            className="text-destructive text-sm"
-            style={{ animation: "fadeIn 200ms ease-out" }}
-          >
-            ✗ {testError}
-          </span>
+            {modelList.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            placeholder="输入模型名称，如 anthropic/claude-3.5-sonnet"
+            className={cn(
+              "w-full rounded-lg border border-border bg-card text-foreground px-3 py-2",
+              "focus:outline-none focus:ring-2 focus:ring-primary/50",
+              "placeholder:text-muted-foreground transition-colors duration-200"
+            )}
+          />
         )}
       </div>
+
+      {/* Connection test status */}
+      {testStatus === "ok" && (
+        <span
+          className="text-green-500 text-sm font-medium"
+          style={{ animation: "fadeIn 200ms ease-out" }}
+        >
+          ✓ 连接成功
+        </span>
+      )}
+      {testStatus === "fail" && (
+        <div
+          className="flex flex-col gap-1"
+          style={{ animation: "fadeIn 200ms ease-out" }}
+        >
+          <span className="text-destructive text-sm">
+            ✗ 连接失败 — 你可以点击继续，稍后在设置中重新配置
+          </span>
+          {testError && (
+            <span className="text-muted-foreground text-xs">{testError}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
