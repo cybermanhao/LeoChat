@@ -1,6 +1,6 @@
 import { showToast } from "../stores/toast";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 const PROVIDER_TOP_UP: Partial<Record<LLMProvider, { label: string; url: string }>> = {
   deepseek:   { label: "去充值", url: "https://platform.deepseek.com/top_up" },

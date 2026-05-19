@@ -51,6 +51,12 @@ export const LLM_PROVIDERS = {
     models: ["kimi-for-coding"],
     envKey: "KIMI_API_KEY",
   },
+  google: {
+    name: "Google",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta",
+    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
+    envKey: "GOOGLE_API_KEY",
+  },
 } as const;
 
 // IPC channels for Electron
