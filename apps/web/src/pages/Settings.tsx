@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
+import { useOnboardingStore } from "../stores/onboarding";
 import {
   ThreeColumnLayout,
   LeftDrawer,
@@ -24,6 +25,7 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
 }) {
   const { t } = useT();
   const settingCategories = useMemo<SettingCategory[]>(() => [
+    { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
@@ -61,8 +63,9 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
 
 export function SettingsPage() {
   const { t } = useT();
-  const [currentCategory, setCurrentCategory] = useState("appearance");
+  const [currentCategory, setCurrentCategory] = useState("general");
   const settingCategories = useMemo<SettingCategory[]>(() => [
+    { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
@@ -72,6 +75,23 @@ export function SettingsPage() {
 
   const getCategoryContent = () => {
     switch (currentCategory) {
+      case "general":
+        return (
+          <div className="p-6 space-y-6">
+            <div>
+              <h3 className="text-base font-medium text-foreground mb-1">初始化向导</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                重新运行初始设置（API Key、工作目录、外观）
+              </p>
+              <button
+                onClick={() => useOnboardingStore.getState().setOnboardingCompleted(false)}
+                className="px-4 py-2 rounded-md border border-border text-sm text-foreground hover:bg-muted transition-colors duration-200"
+              >
+                重新运行初始化向导
+              </button>
+            </div>
+          </div>
+        );
       case "appearance":
         return <AppearanceSettings />;
       case "llm":
@@ -101,7 +121,7 @@ export function SettingsPage() {
           {getCategoryContent()}
 
           {/* Coming Soon Notice - 仅在未实装页面显示 */}
-          {currentCategory !== "appearance" && currentCategory !== "llm" && (
+          {currentCategory !== "general" && currentCategory !== "appearance" && currentCategory !== "llm" && (
             <div className="mt-8 p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
               <div className="flex items-start gap-3">
                 <SettingsIcon className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
