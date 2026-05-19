@@ -11,7 +11,7 @@ import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 interface ProviderConfig {
   name: string;

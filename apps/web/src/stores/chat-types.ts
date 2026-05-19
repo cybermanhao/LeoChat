@@ -9,7 +9,7 @@ import type {
   ContextMessage,
 } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 export interface Conversation {
   id: string;

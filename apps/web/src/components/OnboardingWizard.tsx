@@ -23,6 +23,7 @@ const PROVIDER_OPTIONS: { value: LLMProvider; label: string }[] = [
   { value: "openai", label: "OpenAI" },
   { value: "moonshot", label: "Moonshot" },
   { value: "kimi", label: "Kimi" },
+  { value: "google", label: "Google Gemini" },
 ];
 
 const THEME_OPTIONS: { id: string; label: string }[] = [

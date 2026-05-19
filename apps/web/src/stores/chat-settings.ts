@@ -7,6 +7,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     openai: "",
     moonshot: "",
     kimi: "",
+    google: "",
   },
   currentProvider: "deepseek" as LLMProvider,
   currentModel: "deepseek-chat",
@@ -41,6 +42,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       openai: "gpt-4o",
       moonshot: "moonshot-v1-8k",
       kimi: "kimi-code",
+      google: "gemini-2.0-flash",
     };
     set({
       currentProvider: provider,
@@ -65,6 +67,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         openai: "gpt-4o",
         moonshot: "moonshot-v1-8k",
         kimi: "kimi-code",
+        google: "gemini-2.0-flash",
       };
       const newProviderKeys: Record<LLMProvider, string> = { ...get().providerKeys };
       availableProviders.forEach((p) => {

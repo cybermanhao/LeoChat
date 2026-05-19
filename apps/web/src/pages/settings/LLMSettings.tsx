@@ -108,6 +108,11 @@ export function LLMSettings() {
       { id: "kimi-code", name: "Kimi k2.6", description: "Kimi coding model with 262K context", contextWindow: 262144, pricing: "" },
       { id: "kimi-for-coding", name: "Kimi k2.6 (upstream ID)", description: "Upstream model ID alias", contextWindow: 262144, pricing: "" },
     ],
+    google: [
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Fast and efficient Gemini model", contextWindow: 1000000, pricing: "$0.10/1M" },
+      { id: "gemini-2.0-flash-thinking-exp", name: "Gemini 2.0 Flash Thinking", description: "Gemini with extended thinking", contextWindow: 1000000, pricing: "$0.10/1M" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", description: "Powerful multimodal model", contextWindow: 2000000, pricing: "$1.25/1M" },
+    ],
   }), [t]);
 
   const [localKey, setLocalKey] = useState("");
