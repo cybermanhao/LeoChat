@@ -216,6 +216,36 @@ function setupIPC(): void {
     return join(process.resourcesPath, "leochat-mcp.js");
   });
 
+  // Unified resource path map for all built-in MCP servers.
+  // In dev: absolute paths into the monorepo; in prod: paths into resourcesPath.
+  ipcMain.handle("builtin:server-resources", () => {
+    if (is.dev) {
+      const root = join(__dirname, "../../../..");
+      return {
+        leochat:    join(root, "packages/leochat-mcp/dist/index.js"),
+        filesystem: join(root, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
+        everything: join(root, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
+        memory:     join(root, "node_modules/@modelcontextprotocol/server-memory/dist/index.js"),
+        fetch:      join(root, "node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"),
+        // Excel: use pre-compiled exe; fall back to uvx on non-Windows
+        excel: process.platform === "win32"
+          ? join(root, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe")
+          : null,
+      };
+    }
+    const r = process.resourcesPath;
+    return {
+      leochat:    join(r, "leochat-mcp.js"),
+      filesystem: join(r, "mcp-servers/filesystem.js"),
+      everything: join(r, "mcp-servers/everything.js"),
+      memory:     join(r, "mcp-servers/memory.js"),
+      fetch:      join(r, "mcp-servers/fetch.js"),
+      excel: process.platform === "win32"
+        ? join(r, "mcp-servers/excel-mcp-server.exe")
+        : null,
+    };
+  });
+
   // LLM chat (proxy to server)
   ipcMain.handle(IPC_CHANNELS.LLM_CHAT, async (_, messages, options) => {
     const port = await serverPortPromise;
