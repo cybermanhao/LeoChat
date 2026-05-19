@@ -55,6 +55,7 @@ export function OnboardingWizard() {
   const [selectedModel, setSelectedModel] = useState<string>(
     () => (LLM_PROVIDERS["deepseek"].models as readonly string[])[0] ?? ""
   );
+  const [modelList, setModelList] = useState<string[]>([]);
 
   // work-dir step
   const [workDir, setWorkDir] = useState("");
@@ -63,12 +64,13 @@ export function OnboardingWizard() {
   const [locale, setLocaleState] = useState<Locale>(currentLocale);
   const [theme, setThemeState] = useState(currentTheme);
 
-  // Reset test status and model when provider changes
+  // Reset test status, model list, and selection when provider changes
   useEffect(() => {
     setTestStatus("idle");
     setTestError("");
-    const models = (LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS]?.models as readonly string[] | undefined) ?? [];
-    setSelectedModel(models[0] ?? "");
+    setModelList([]);
+    const staticModels = (LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS]?.models as readonly string[] | undefined) ?? [];
+    setSelectedModel(staticModels[0] ?? "");
   }, [provider]);
 
   // Reset test status when apiKey changes
@@ -121,18 +123,26 @@ export function OnboardingWizard() {
         goToStep(stepIndex + 1);
         return;
       }
-      // First click: run test
+      // First click: run test + fetch models in parallel
       setTestStatus("testing");
       setTestError("");
       try {
-        const result = await chatApi.testLLMConnection(provider, apiKey);
-        if (result.success) {
+        const [testResult, modelsResult] = await Promise.allSettled([
+          chatApi.testLLMConnection(provider, apiKey),
+          chatApi.fetchLLMModels(provider, apiKey),
+        ]);
+        const testOk = testResult.status === "fulfilled" && testResult.value.success;
+        if (modelsResult.status === "fulfilled" && modelsResult.value.models.length > 0) {
+          setModelList(modelsResult.value.models);
+          setSelectedModel(modelsResult.value.models[0]);
+        }
+        if (testOk) {
           setTestStatus("ok");
-          // Auto-advance after a short pause so user sees the tick
-          setTimeout(() => goToStep(stepIndex + 1), 600);
+          // Stay on step so user can confirm/change model before continuing
         } else {
           setTestStatus("fail");
-          setTestError(result.error || "连接失败");
+          const err = testResult.status === "fulfilled" ? testResult.value.error : undefined;
+          setTestError(err || "连接失败");
         }
       } catch (e) {
         setTestStatus("fail");
@@ -169,6 +179,7 @@ export function OnboardingWizard() {
     apiKey,
     provider,
     selectedModel,
+    modelList,
     testStatus,
     workDir,
     locale,
@@ -248,6 +259,7 @@ export function OnboardingWizard() {
             testError={testError}
             selectedModel={selectedModel}
             setSelectedModel={setSelectedModel}
+            modelList={modelList}
           />
         )}
         {currentStep === "work-dir" && (
@@ -352,6 +364,7 @@ interface ApiKeyStepProps {
   testError: string;
   selectedModel: string;
   setSelectedModel: (m: string) => void;
+  modelList: string[];
 }
 
 function ApiKeyStep({
@@ -363,9 +376,11 @@ function ApiKeyStep({
   testError,
   selectedModel,
   setSelectedModel,
+  modelList,
 }: ApiKeyStepProps) {
-  const providerConfig = LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS];
-  const modelList = (providerConfig?.models as readonly string[] | undefined) ?? [];
+  // Use fetched models when available, fall back to static list
+  const staticModels = (LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS]?.models as readonly string[] | undefined) ?? [];
+  const displayModels = modelList.length > 0 ? modelList : staticModels;
 
   return (
     <div className="flex flex-col gap-6">
@@ -414,18 +429,25 @@ function ApiKeyStep({
 
       {/* Model selection */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-foreground">默认模型</label>
-        {modelList.length > 0 ? (
+        <label className="text-sm font-medium text-foreground">
+          默认模型
+          {testStatus === "testing" && (
+            <span className="ml-2 text-xs text-muted-foreground font-normal">获取列表中...</span>
+          )}
+        </label>
+        {displayModels.length > 0 ? (
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={testStatus === "testing"}
             className={cn(
               "w-full rounded-lg border border-border bg-card text-foreground px-3 py-2",
               "focus:outline-none focus:ring-2 focus:ring-primary/50",
-              "transition-colors duration-200"
+              "transition-colors duration-200",
+              testStatus === "testing" && "opacity-50"
             )}
           >
-            {modelList.map((m) => (
+            {displayModels.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
@@ -434,11 +456,13 @@ function ApiKeyStep({
             type="text"
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={testStatus === "testing"}
             placeholder="输入模型名称，如 anthropic/claude-3.5-sonnet"
             className={cn(
               "w-full rounded-lg border border-border bg-card text-foreground px-3 py-2",
               "focus:outline-none focus:ring-2 focus:ring-primary/50",
-              "placeholder:text-muted-foreground transition-colors duration-200"
+              "placeholder:text-muted-foreground transition-colors duration-200",
+              testStatus === "testing" && "opacity-50"
             )}
           />
         )}

@@ -203,6 +203,16 @@ export const chatApi = {
     return res.json();
   },
 
+  async fetchLLMModels(provider: string, apiKey: string): Promise<{ models: string[] }> {
+    const res = await fetch(`${await apiBase()}/llm/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, apiKey }),
+    });
+    if (!res.ok) return { models: [] };
+    return res.json();
+  },
+
   async approveToolCall(id: string, approved: boolean): Promise<void> {
     const response = await fetch(`${await apiBase()}/tools/approve/${encodeURIComponent(id)}`, {
       method: "POST",
