@@ -501,16 +501,35 @@ export const useMCPStore = create<MCPState>()(
 
       // 初始化
       initBuiltinServers: async () => {
-        // In Electron, resolve the leochat-mcp path dynamically so it works in
-        // both dev (repo path) and packaged app (extraResource path).
+        // In Electron, resolve all built-in server paths via IPC so they work in
+        // both dev (monorepo paths) and packaged app (extraResource paths).
         let builtinServers = BUILTIN_SERVERS;
-        const electronAPI = (window as unknown as { electronAPI?: { getLeochatMcpPath?: () => Promise<string> } }).electronAPI;
-        if (electronAPI?.getLeochatMcpPath) {
+        const electronAPI = (window as unknown as { electronAPI?: { invoke?: (ch: string) => Promise<unknown> } }).electronAPI;
+        if (electronAPI?.invoke) {
           try {
-            const mcpPath = await electronAPI.getLeochatMcpPath();
-            builtinServers = BUILTIN_SERVERS.map((s) =>
-              s.id === "leochat" ? { ...s, args: [mcpPath] } : s
-            );
+            const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
+            builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
+              switch (s.id) {
+                case "law-kb":
+                  return res["law-kb"] ? { ...s, args: [res["law-kb"]] } : s;
+                case "leochat":
+                  return res.leochat ? { ...s, args: [res.leochat] } : s;
+                case "filesystem":
+                  return res.filesystem ? { ...s, args: [res.filesystem] } : s;
+                case "everything":
+                  return res.everything ? { ...s, args: [res.everything] } : s;
+                case "memory":
+                  return res.memory ? { ...s, args: [res.memory] } : s;
+                case "fetch":
+                  return res.fetch ? { ...s, args: [res.fetch] } : s;
+                case "excel":
+                  return res.excel
+                    ? { ...s, command: res.excel, args: ["stdio"] }
+                    : s;
+                default:
+                  return s;
+              }
+            });
           } catch {
             // fall through with default paths
           }
@@ -525,10 +544,22 @@ export const useMCPStore = create<MCPState>()(
           const currentBuiltinMap = new Map(
             (currentBuiltinSource?.servers || []).map((s) => [s.id, s])
           );
-          // leochat 路径由 Electron 提供，不保留持久化的旧路径
-          const mergedBuiltin = builtinServers.map((s) =>
-            s.id === "leochat" ? s : (currentBuiltinMap.get(s.id) || s)
-          );
+          // IPC 解析路径的服务器每次都用新路径，不保留持久化的旧路径
+          // 对于 filesystem，保留用户配置的目录（args[1+]）
+          const PATH_RESOLVED = new Set(["law-kb", "leochat", "filesystem", "everything", "memory", "fetch", "excel"]);
+          const mergedBuiltin = builtinServers.map((s) => {
+            if (!PATH_RESOLVED.has(s.id)) {
+              return currentBuiltinMap.get(s.id) || s;
+            }
+            if (s.id === "filesystem") {
+              const persisted = currentBuiltinMap.get(s.id);
+              const allowedDirs = persisted?.args?.slice(1) ?? [];
+              return allowedDirs.length > 0
+                ? { ...s, args: [s.args![0], ...allowedDirs] }
+                : s;
+            }
+            return s;
+          });
 
           // 获取自定义服务
           const customSource = state.sources.find((s) => s.id === "custom");

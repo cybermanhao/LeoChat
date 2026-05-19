@@ -5,8 +5,7 @@ export const API_ENDPOINTS = {
   OPENAI: "https://api.openai.com/v1",
   ANTHROPIC: "https://api.anthropic.com/v1",
   MOONSHOT: "https://api.moonshot.cn/v1",
-  KIMI_CODE: "https://api.kimi.com/coding/v1",
-  GOOGLE: "https://generativelanguage.googleapis.com/v1beta",
+  KIMI: "https://api.kimi.com/coding/v1",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
 
@@ -46,17 +45,17 @@ export const LLM_PROVIDERS = {
     models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
     envKey: "MOONSHOT_API_KEY",
   },
-  "kimi-code": {
-    name: "Kimi Code",
+  kimi: {
+    name: "Kimi",
     baseURL: "https://api.kimi.com/coding/v1",
     models: ["kimi-for-coding"],
-    envKey: "KIMI_CODE_API_KEY",
+    envKey: "KIMI_API_KEY",
   },
   google: {
-    name: "Google Gemini",
+    name: "Google",
     baseURL: "https://generativelanguage.googleapis.com/v1beta",
-    models: ["gemini-2.0-flash", "gemini-2.0-flash-thinking-exp", "gemini-1.5-pro"],
-    envKey: "GEMINI_API_KEY",
+    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
+    envKey: "GOOGLE_API_KEY",
   },
 } as const;
 

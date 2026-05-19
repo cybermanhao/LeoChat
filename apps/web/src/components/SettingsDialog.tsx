@@ -11,7 +11,7 @@ import { Settings, Eye, EyeOff, ExternalLink, Check } from "lucide-react";
 import { useChatStore } from "../stores/chat";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 interface ProviderConfig {
   name: string;
@@ -50,26 +50,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       link: "https://platform.openai.com/api-keys",
       linkText: t("settings.api.linkTextOpenAI"),
     },
-    moonshot: {
-      name: "Moonshot",
+    kimi: {
+      name: "Kimi (Coding)",
       placeholder: t("settings.api.keyPlaceholder"),
-      description: t("settings.api.descriptionMoonshot"),
+      description: "Kimi k2.6 coding model — api.kimi.com/coding",
       link: "https://platform.moonshot.cn/console/api-keys",
-      linkText: t("settings.api.linkTextMoonshot"),
-    },
-    "kimi-code": {
-      name: "Kimi Code",
-      placeholder: t("settings.api.keyPlaceholder"),
-      description: t("settings.api.descriptionKimiCode"),
-      link: "https://platform.moonshot.cn/console/api-keys",
-      linkText: t("settings.api.linkTextKimiCode"),
-    },
-    google: {
-      name: "Google Gemini",
-      placeholder: t("settings.api.keyPlaceholder"),
-      description: t("settings.api.descriptionGoogle"),
-      link: "https://aistudio.google.com/app/apikey",
-      linkText: t("settings.api.linkTextGoogle"),
+      linkText: "获取 API Key",
     },
   }), [t]);
   const { providerKeys, setProviderKey, currentProvider, setCurrentProvider } = useChatStore();
@@ -78,17 +64,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     deepseek: "",
     openrouter: "",
     openai: "",
-    moonshot: "",
-    "kimi-code": "",
-    google: "",
+    kimi: "",
   });
   const [showKeys, setShowKeys] = useState<Partial<Record<LLMProvider, boolean>>>({
     deepseek: false,
     openrouter: false,
     openai: false,
-    moonshot: false,
-    "kimi-code": false,
-    google: false,
+    kimi: false,
   });
   const [saved, setSaved] = useState(false);
 
@@ -98,9 +80,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         deepseek: providerKeys.deepseek || "",
         openrouter: providerKeys.openrouter || "",
         openai: providerKeys.openai || "",
-        moonshot: providerKeys.moonshot || "",
-        "kimi-code": providerKeys["kimi-code"] || "",
-        google: providerKeys.google || "",
+        kimi: providerKeys.kimi || "",
       });
       setSaved(false);
     }

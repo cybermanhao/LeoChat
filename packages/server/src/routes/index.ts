@@ -330,6 +330,125 @@ export function createRoutes(context: ServerContext) {
     }
   });
 
+  // POST /api/llm/test-connection
+  app.post("/llm/test-connection", async (c) => {
+    let body: { provider: string; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ success: false, error: "Invalid JSON body" }, 400);
+    }
+
+    const { provider, apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.length > 2048) {
+      return c.json({ success: false, error: "Invalid API key" }, 400);
+    }
+
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"] as const;
+    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+      return c.json({ success: false, error: "Unknown provider" }, 400);
+    }
+
+    const providerUrls: Record<string, string> = {
+      deepseek: "https://api.deepseek.com/models",
+      openrouter: "https://openrouter.ai/api/v1/models",
+      openai: "https://api.openai.com/v1/models",
+      moonshot: "https://api.moonshot.cn/v1/models",
+      "kimi": "https://api.moonshot.cn/v1/models",
+      google: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    };
+
+    const url = providerUrls[provider];
+    const headers: Record<string, string> = {};
+    if (provider !== "google") {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, { method: "GET", headers, signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        return c.json({ success: true });
+      }
+      return c.json({ success: false, error: "Authentication failed" });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ success: false, error: "Connection timed out" });
+      }
+      console.error("[LLM test-connection]", err);
+      return c.json({ success: false, error: "Connection failed" });
+    }
+  });
+
+  // POST /api/llm/models — fetch model list with caller-supplied key (used during onboarding)
+  app.post("/llm/models", async (c) => {
+    let body: { provider: string; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const { provider, apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.length > 2048) {
+      return c.json({ error: "Invalid API key" }, 400);
+    }
+
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"] as const;
+    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+      return c.json({ error: "Unknown provider" }, 400);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      if (provider === "google") {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) return c.json({ error: "Failed to fetch models" }, 502);
+        const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+        const models = (data.models ?? [])
+          .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+          .map((m) => m.name.replace(/^models\//, ""))
+          .filter(Boolean);
+        return c.json({ models });
+      }
+
+      const baseURLs: Record<string, string> = {
+        deepseek: "https://api.deepseek.com",
+        openrouter: "https://openrouter.ai/api/v1",
+        openai: "https://api.openai.com/v1",
+        moonshot: "https://api.moonshot.cn/v1",
+        kimi: "https://api.moonshot.cn/v1",
+      };
+      const res = await fetch(`${baseURLs[provider]}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return c.json({ error: "Failed to fetch models" }, 502);
+      const data = await res.json() as { data?: Array<{ id: string }> };
+      let models = (data.data ?? []).map((m) => m.id).filter(Boolean).sort();
+      if (provider === "openai") {
+        models = models.filter((id) => /^(gpt-|o[1-9]|o[1-9]-|chatgpt-)/.test(id));
+      }
+      return c.json({ models });
+    } catch (err: unknown) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ error: "Request timed out" }, 504);
+      }
+      console.error("[llm/models]", err);
+      return c.json({ error: "Failed to fetch models" }, 502);
+    }
+  });
+
   // MCP server management
   app.post("/mcp/servers", async (c) => {
     let config: MCPServerConfig;

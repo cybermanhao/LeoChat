@@ -9,7 +9,7 @@ import type {
   ContextMessage,
 } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 export interface Conversation {
   id: string;
@@ -108,12 +108,15 @@ export interface GenerationSlice {
   toolCallStates: Record<string, ToolCallState>;
   activeTaskLoop: TaskLoopInstance | null;
   pendingApprovals: PendingApproval[];
+  /** Tools allowed for the entire session — not persisted, resets on page reload */
+  sessionAllowedTools: Set<string>;
 
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
-  _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
+  /** Approve this call AND mark toolName as auto-approved for the rest of the session */
   allowToolForSession: (approvalId: string, toolName: string) => void;
+  _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
 }
 
 // ─── Combined store ──────────────────────────────────────────────

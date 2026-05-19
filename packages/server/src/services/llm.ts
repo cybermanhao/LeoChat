@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatMessage, ToolCall } from "@ai-chatbox/shared";
 import { generateId, API_ENDPOINTS, DEFAULT_MODELS } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi-code" | "google";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
 
 export interface ChatRequest {
   messages: ChatMessage[];
@@ -90,10 +90,15 @@ export class LLMService {
       console.log("[LLM] Moonshot client initialized");
     }
 
-    // Google Gemini (frontend direct mode, no OpenAI client needed)
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (geminiKey) {
-      console.log("[LLM] Gemini API key found (frontend direct mode)");
+    // Kimi (api.kimi.com/coding) — requires claude-code user-agent
+    const kimiKey = process.env.KIMI_API_KEY;
+    if (kimiKey) {
+      this.clients.set("kimi", new OpenAI({
+        apiKey: kimiKey,
+        baseURL: API_ENDPOINTS.KIMI,
+        defaultHeaders: { "User-Agent": "claude-code/0.1.0" },
+      }));
+      console.log("[LLM] Kimi client initialized");
     }
 
     // 确定默认提供商
@@ -105,6 +110,8 @@ export class LLMService {
       this.defaultProvider = "openai";
     } else if (this.clients.has("moonshot")) {
       this.defaultProvider = "moonshot";
+    } else if (this.clients.has("kimi")) {
+      this.defaultProvider = "kimi";
     }
 
     console.log(`[LLM] Default provider: ${this.defaultProvider}`);
@@ -116,19 +123,12 @@ export class LLMService {
   setApiKey(provider: LLMProvider, apiKey: string): void {
     if (!apiKey) return;
 
-    // Frontend direct mode providers (kimi-code, google) use their own adapters
-    if (provider === "kimi-code" || provider === "google") {
-      console.log(`[LLM] ${provider} uses frontend direct mode, skipping backend client setup`);
-      return;
-    }
-
     const baseURLs: Record<LLMProvider, string> = {
       deepseek: API_ENDPOINTS.DEEPSEEK,
       openrouter: API_ENDPOINTS.OPENROUTER,
       openai: API_ENDPOINTS.OPENAI,
       moonshot: API_ENDPOINTS.MOONSHOT,
-      "kimi-code": "",
-      google: "",
+      kimi: API_ENDPOINTS.KIMI,
     };
 
     const options: ConstructorParameters<typeof OpenAI>[0] = {
@@ -142,6 +142,9 @@ export class LLMService {
         "X-Title": "LeoChat",
       };
     }
+    if (provider === "kimi") {
+      options.defaultHeaders = { "User-Agent": "claude-code/0.1.0" };
+    }
 
     this.clients.set(provider, new OpenAI(options));
     console.log(`[LLM] ${provider} client configured via UI`);
@@ -150,6 +153,21 @@ export class LLMService {
     if (this.clients.size === 1) {
       this.defaultProvider = provider;
     }
+  }
+
+  /**
+   * 从提供商的 /v1/models 端点获取模型列表
+   */
+  async listModels(provider: LLMProvider): Promise<string[]> {
+    const client = this.clients.get(provider);
+    if (!client) throw new Error(`Provider ${provider} not configured`);
+    const response = await client.models.list();
+    const ids = response.data.map((m) => m.id).sort();
+    // kimi-code is openclaw's canonical alias for kimi-for-coding
+    if (provider === "kimi" && !ids.includes("kimi-code")) {
+      return ["kimi-code", ...ids];
+    }
+    return ids;
   }
 
   /**
@@ -183,8 +201,8 @@ export class LLMService {
     if (model.startsWith("moonshot-")) {
       return "moonshot";
     }
-    if (model.startsWith("gemini-")) {
-      return "google";
+    if (model.startsWith("kimi-") || model === "kimi-for-coding" || model === "kimi-code" || model === "k2p5") {
+      return "kimi";
     }
     return this.defaultProvider;
   }
@@ -223,7 +241,7 @@ export class LLMService {
         };
       }
       if (msg.role === "assistant" && msg.tool_calls?.length) {
-        return {
+        const param: OpenAI.Chat.ChatCompletionMessageParam = {
           role: "assistant",
           content: msg.content || null,
           tool_calls: msg.tool_calls.map(tc => ({
@@ -235,6 +253,11 @@ export class LLMService {
             },
           })),
         };
+        // Reasoning models (Kimi, DeepSeek R1) require reasoning_content echoed back
+        if (msg.reasoning_content) {
+          (param as unknown as Record<string, unknown>).reasoning_content = msg.reasoning_content;
+        }
+        return param;
       }
       return {
         role: msg.role as "system" | "user" | "assistant",
