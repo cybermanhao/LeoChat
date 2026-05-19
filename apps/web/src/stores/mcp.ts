@@ -508,20 +508,22 @@ export const useMCPStore = create<MCPState>()(
         if (electronAPI?.invoke) {
           try {
             const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
+            // Use the resolved node binary path (bundled node.exe on Windows prod, system node elsewhere)
+            const nodeCmd = res.node ?? "node";
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
                 case "law-kb":
-                  return res["law-kb"] ? { ...s, args: [res["law-kb"]] } : s;
+                  return res["law-kb"] ? { ...s, command: nodeCmd, args: [res["law-kb"]] } : s;
                 case "leochat":
-                  return res.leochat ? { ...s, args: [res.leochat] } : s;
+                  return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
                 case "filesystem":
-                  return res.filesystem ? { ...s, args: [res.filesystem] } : s;
+                  return res.filesystem ? { ...s, command: nodeCmd, args: [res.filesystem] } : s;
                 case "everything":
-                  return res.everything ? { ...s, args: [res.everything] } : s;
+                  return res.everything ? { ...s, command: nodeCmd, args: [res.everything] } : s;
                 case "memory":
-                  return res.memory ? { ...s, args: [res.memory] } : s;
+                  return res.memory ? { ...s, command: nodeCmd, args: [res.memory] } : s;
                 case "fetch":
-                  return res.fetch ? { ...s, args: [res.fetch] } : s;
+                  return res.fetch ? { ...s, command: nodeCmd, args: [res.fetch] } : s;
                 case "excel":
                   return res.excel
                     ? { ...s, command: res.excel, args: ["stdio"] }

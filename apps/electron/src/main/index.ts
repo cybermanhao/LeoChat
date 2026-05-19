@@ -222,12 +222,13 @@ function setupIPC(): void {
     if (is.dev) {
       const root = join(__dirname, "../../../..");
       return {
+        node:       "node",  // use system node in dev
+        "law-kb":   join(root, "packages/law-kb-mcp/dist/index.js"),
         leochat:    join(root, "packages/leochat-mcp/dist/index.js"),
         filesystem: join(root, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
         everything: join(root, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
         memory:     join(root, "node_modules/@modelcontextprotocol/server-memory/dist/index.js"),
         fetch:      join(root, "node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"),
-        // Excel: use pre-compiled exe; fall back to uvx on non-Windows
         excel: process.platform === "win32"
           ? join(root, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe")
           : null,
@@ -235,6 +236,9 @@ function setupIPC(): void {
     }
     const r = process.resourcesPath;
     return {
+      // Bundled node.exe on Windows; fall back to system node on other platforms
+      node: process.platform === "win32" ? join(r, "node.exe") : "node",
+      "law-kb":   join(r, "mcp-servers/law-kb-mcp.js"),
       leochat:    join(r, "leochat-mcp.js"),
       filesystem: join(r, "mcp-servers/filesystem.js"),
       everything: join(r, "mcp-servers/everything.js"),

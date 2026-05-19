@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist out",
     "pack": "electron-builder --dir",
+    "predist": "node ../../scripts/download-node-win.mjs",
     "dist": "electron-builder"
   },
   "dependencies": {
