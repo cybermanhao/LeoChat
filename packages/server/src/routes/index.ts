@@ -345,7 +345,7 @@ export function createRoutes(context: ServerContext) {
       return c.json({ success: false, error: "Invalid API key" }, 400);
     }
 
-    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi-code", "google"] as const;
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"] as const;
     if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
       return c.json({ success: false, error: "Unknown provider" }, 400);
     }
@@ -355,12 +355,12 @@ export function createRoutes(context: ServerContext) {
       openrouter: "https://openrouter.ai/api/v1/models",
       openai: "https://api.openai.com/v1/models",
       moonshot: "https://api.moonshot.cn/v1/models",
-      "kimi-code": "https://api.moonshot.cn/v1/models",
+      "kimi": "https://api.moonshot.cn/v1/models",
       google: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
     };
 
     const url = providerUrls[provider];
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {};
     if (provider !== "google") {
       headers["Authorization"] = `Bearer ${apiKey}`;
     }
