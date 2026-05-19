@@ -165,11 +165,13 @@ export const useMCPStore = create<MCPState>()(
       connectingServerIds: new Set<string>(),
       serverVersions: {},
       searchText: "",
-      disabledToolIds: new Set<string>(
-        !(window as Window & { electronAPI?: unknown }).electronAPI
+      disabledToolIds: new Set<string>([
+        // bash 在法律助手场景下默认关闭，避免误执行系统命令
+        "leochat:bash",
+        ...(!(window as Window & { electronAPI?: unknown }).electronAPI
           ? ["leochat:resize_window"]
-          : []
-      ),
+          : []),
+      ]),
 
       // 新增方法：连接状态管理
       setConnecting: (serverId, connecting) => {
@@ -638,6 +640,8 @@ export const useMCPStore = create<MCPState>()(
           autoConnectServerIds: persistedData.autoConnectServerIds || [],
           disabledToolIds: (() => {
             const set = new Set<string>(persistedData.disabledToolIds || []);
+            // Always enforce these defaults regardless of persisted state
+            set.add("leochat:bash");
             if (!(window as Window & { electronAPI?: unknown }).electronAPI) {
               set.add("leochat:resize_window");
             }
