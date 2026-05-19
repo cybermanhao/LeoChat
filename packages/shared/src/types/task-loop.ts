@@ -51,7 +51,8 @@ export type TaskLoopEvent =
   | TaskLoopDoneEvent
   | TaskLoopRetryEvent
   | TaskLoopCircuitStateEvent
-  | TaskLoopCheckpointEvent;
+  | TaskLoopCheckpointEvent
+  | TaskLoopApprovalRequiredEvent;
 
 export interface TaskLoopAddEvent {
   type: "add";
@@ -135,6 +136,13 @@ export interface TaskLoopCheckpointEvent {
   checkpointId: string;
   /** Reason for checkpoint */
   reason: CheckpointReason;
+}
+
+export interface TaskLoopApprovalRequiredEvent {
+  type: "approval_required";
+  id: string;
+  toolName: string;
+  command: string;
 }
 
 /**

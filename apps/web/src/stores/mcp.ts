@@ -13,6 +13,13 @@ import { mcpApi } from "../lib/api";
 // 内置服务预设 (使用官方 MCP 服务器包)
 const BUILTIN_SERVERS: MCPServerConfig[] = [
   {
+    id: "law-kb",
+    name: "法律知识库",
+    transport: "stdio",
+    command: "node",
+    args: ["../../packages/law-kb-mcp/dist/index.js"],
+  },
+  {
     id: "leochat",
     name: "LeoChat",
     transport: "stdio",
