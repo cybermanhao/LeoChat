@@ -82,19 +82,20 @@ export function parseLawDetail(raw: { title: string; body: string; publish?: str
 }
 
 export async function syncAllLaws(
-  onProgress: (fetched: number, total: number) => void
+  onProgress: (fetched: number, total: number) => void,
+  keyword?: string,
 ): Promise<number> {
   const { insertLaw } = await import('../indexer.js');
   const pageSize = 20;
 
-  const first = await fetchLawList({ page: 1, pageSize });
+  const first = await fetchLawList({ page: 1, pageSize, keyword });
   const total = first.total;
   onProgress(0, total);
 
   const allItems: FlkLawItem[] = [...first.items];
   const totalPages = Math.ceil(total / pageSize);
   for (let p = 2; p <= totalPages; p++) {
-    const { items } = await fetchLawList({ page: p, pageSize });
+    const { items } = await fetchLawList({ page: p, pageSize, keyword });
     allItems.push(...items);
   }
 

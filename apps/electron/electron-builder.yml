@@ -29,6 +29,8 @@ win:
   extraResources:
     - from: "../../build-resources/node.exe"
       to: "node.exe"
+    - from: "../../build-resources/uv.exe"
+      to: "uv.exe"
     - from: "../../mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe"
       to: "mcp-servers/excel-mcp-server.exe"
 nsis:

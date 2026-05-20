@@ -517,6 +517,10 @@ export const useMCPStore = create<MCPState>()(
             const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
             // Use the resolved node binary path (bundled node.exe on Windows prod, system node elsewhere)
             const nodeCmd = res.node ?? "node";
+            // uv: bundled uv.exe on Windows prod, system uvx elsewhere
+            // For word (office-word-mcp-server via uvx): use `uv tool run` with bundled uv
+            const uvCmd = res.uv ?? "uvx";
+            const uvIsUvx = uvCmd === "uvx"; // dev/non-Windows: uvx command already handles tool run
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
                 case "law-kb":
@@ -535,6 +539,12 @@ export const useMCPStore = create<MCPState>()(
                   return res.excel
                     ? { ...s, command: res.excel, args: ["stdio"] }
                     : s;
+                case "word":
+                  // dev: uvx office-word-mcp-server
+                  // prod Windows: uv.exe tool run office-word-mcp-server
+                  return uvIsUvx
+                    ? { ...s, command: uvCmd, args: ["office-word-mcp-server"] }
+                    : { ...s, command: uvCmd, args: ["tool", "run", "office-word-mcp-server"] };
                 default:
                   return s;
               }
@@ -555,7 +565,7 @@ export const useMCPStore = create<MCPState>()(
           );
           // IPC 解析路径的服务器每次都用新路径，不保留持久化的旧路径
           // 对于 filesystem，保留用户配置的目录（args[1+]）
-          const PATH_RESOLVED = new Set(["law-kb", "leochat", "filesystem", "everything", "memory", "fetch", "excel"]);
+          const PATH_RESOLVED = new Set(["law-kb", "leochat", "filesystem", "everything", "memory", "fetch", "excel", "word"]);
           const mergedBuiltin = builtinServers.map((s) => {
             if (!PATH_RESOLVED.has(s.id)) {
               return currentBuiltinMap.get(s.id) || s;

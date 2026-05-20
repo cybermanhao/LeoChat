@@ -223,6 +223,7 @@ function setupIPC(): void {
       const root = join(__dirname, "../../../..");
       return {
         node:       "node",  // use system node in dev
+        uv:         "uvx",   // use system uvx in dev
         "law-kb":   join(root, "packages/law-kb-mcp/dist/index.js"),
         leochat:    join(root, "packages/leochat-mcp/dist/index.js"),
         filesystem: join(root, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
@@ -238,6 +239,8 @@ function setupIPC(): void {
     return {
       // Bundled node.exe on Windows; fall back to system node on other platforms
       node: process.platform === "win32" ? join(r, "node.exe") : "node",
+      // Bundled uv.exe on Windows; fall back to system uvx elsewhere
+      uv:   process.platform === "win32" ? join(r, "uv.exe") : "uvx",
       "law-kb":   join(r, "mcp-servers/law-kb-mcp.mjs"),
       leochat:    join(r, "leochat-mcp.js"),
       filesystem: join(r, "mcp-servers/filesystem.js"),

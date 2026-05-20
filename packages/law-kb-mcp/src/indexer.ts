@@ -86,6 +86,18 @@ async function embedChunks(
   }
 }
 
+export function listLaws(category?: string): Array<{ id: number; title: string; category: string | null; effective_date: string | null }> {
+  const db = getDb();
+  if (category) {
+    return db.prepare(
+      'SELECT id, title, category, effective_date FROM laws WHERE category = ? ORDER BY title'
+    ).all(category) as Array<{ id: number; title: string; category: string | null; effective_date: string | null }>;
+  }
+  return db.prepare(
+    'SELECT id, title, category, effective_date FROM laws ORDER BY category, title'
+  ).all() as Array<{ id: number; title: string; category: string | null; effective_date: string | null }>;
+}
+
 export async function listKnowledgeBases(): Promise<KnowledgeBaseStatus> {
   const db = getDb();
   const { law_count } = db.prepare('SELECT COUNT(*) as law_count FROM laws').get() as { law_count: number };
