@@ -63,6 +63,13 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     args: ["excel-mcp-server", "stdio"],
     env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
   },
+  {
+    id: "word",
+    name: "Word",
+    transport: "stdio",
+    command: "uvx",
+    args: ["office-word-mcp-server"],
+  },
 ];
 
 interface MCPState {
@@ -568,8 +575,11 @@ export const useMCPStore = create<MCPState>()(
           const customServers = customSource?.servers || [];
           customServers.forEach((s) => validServerIds.add(s.id));
 
-          // 过滤掉不存在的服务器的 enabledServerIds
+          // 过滤掉不存在的服务器的 enabledServerIds / autoConnectServerIds
           const validEnabledIds = state.enabledServerIds.filter((id) =>
+            validServerIds.has(id)
+          );
+          const validAutoConnectIds = state.autoConnectServerIds.filter((id) =>
             validServerIds.has(id)
           );
 
@@ -579,6 +589,16 @@ export const useMCPStore = create<MCPState>()(
               validServerIds.has(id)
             )
           );
+
+          // Fresh install: apply defaults when user has never configured anything
+          const DEFAULT_ENABLED = ["leochat", "law-kb", "filesystem"];
+          const isFreshInstall = validEnabledIds.length === 0 && validAutoConnectIds.length === 0;
+          const finalEnabledIds = isFreshInstall
+            ? DEFAULT_ENABLED.filter((id) => validServerIds.has(id))
+            : validEnabledIds;
+          const finalAutoConnectIds = isFreshInstall
+            ? DEFAULT_ENABLED.filter((id) => validServerIds.has(id))
+            : validAutoConnectIds;
 
           return {
             sources: [
@@ -595,7 +615,8 @@ export const useMCPStore = create<MCPState>()(
                 servers: customServers,
               },
             ],
-            enabledServerIds: validEnabledIds,
+            enabledServerIds: finalEnabledIds,
+            autoConnectServerIds: finalAutoConnectIds,
             serverStates: validServerStates,
           };
         });

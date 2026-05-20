@@ -52,6 +52,7 @@ export function OnboardingWizard() {
   const [apiKey, setApiKey] = useState("");
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testError, setTestError] = useState("");
+  const [confirmSkip, setConfirmSkip] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>(
     () => (LLM_PROVIDERS["deepseek"].models as readonly string[])[0] ?? ""
   );
@@ -77,7 +78,13 @@ export function OnboardingWizard() {
   useEffect(() => {
     setTestStatus("idle");
     setTestError("");
+    setConfirmSkip(false);
   }, [apiKey]);
+
+  // Reset confirmSkip when test status changes
+  useEffect(() => {
+    setConfirmSkip(false);
+  }, [testStatus]);
 
   // Preview theme live
   useEffect(() => {
@@ -109,6 +116,33 @@ export function OnboardingWizard() {
     []
   );
 
+  const handleTestConnection = useCallback(async () => {
+    if (!apiKey || testStatus === "testing") return;
+    setTestStatus("testing");
+    setTestError("");
+    try {
+      const [testResult, modelsResult] = await Promise.allSettled([
+        chatApi.testLLMConnection(provider, apiKey),
+        chatApi.fetchLLMModels(provider, apiKey),
+      ]);
+      const testOk = testResult.status === "fulfilled" && testResult.value.success;
+      if (modelsResult.status === "fulfilled" && modelsResult.value.models.length > 0) {
+        setModelList(modelsResult.value.models);
+        setSelectedModel(modelsResult.value.models[0]);
+      }
+      if (testOk) {
+        setTestStatus("ok");
+      } else {
+        setTestStatus("fail");
+        const err = testResult.status === "fulfilled" ? testResult.value.error : undefined;
+        setTestError(err || "连接失败");
+      }
+    } catch (e) {
+      setTestStatus("fail");
+      setTestError(e instanceof Error ? e.message : "未知错误");
+    }
+  }, [apiKey, provider, testStatus]);
+
   const handleNext = useCallback(async () => {
     if (currentStep === "api-key") {
       // No key entered — skip API key setup
@@ -116,38 +150,22 @@ export function OnboardingWizard() {
         goToStep(stepIndex + 1);
         return;
       }
-      // Don't double-fire while testing
       if (testStatus === "testing") return;
-      // Already succeeded or user is continuing despite failure
-      if (testStatus === "ok" || testStatus === "fail") {
+      if (testStatus === "ok") {
         goToStep(stepIndex + 1);
         return;
       }
-      // First click: run test + fetch models in parallel
-      setTestStatus("testing");
-      setTestError("");
-      try {
-        const [testResult, modelsResult] = await Promise.allSettled([
-          chatApi.testLLMConnection(provider, apiKey),
-          chatApi.fetchLLMModels(provider, apiKey),
-        ]);
-        const testOk = testResult.status === "fulfilled" && testResult.value.success;
-        if (modelsResult.status === "fulfilled" && modelsResult.value.models.length > 0) {
-          setModelList(modelsResult.value.models);
-          setSelectedModel(modelsResult.value.models[0]);
+      if (testStatus === "fail") {
+        // Require a second click to skip past a failed test
+        if (!confirmSkip) {
+          setConfirmSkip(true);
+          return;
         }
-        if (testOk) {
-          setTestStatus("ok");
-          // Stay on step so user can confirm/change model before continuing
-        } else {
-          setTestStatus("fail");
-          const err = testResult.status === "fulfilled" ? testResult.value.error : undefined;
-          setTestError(err || "连接失败");
-        }
-      } catch (e) {
-        setTestStatus("fail");
-        setTestError(e instanceof Error ? e.message : "未知错误");
+        goToStep(stepIndex + 1);
+        return;
       }
+      // idle with key → run test first
+      await handleTestConnection();
       return;
     }
 
@@ -179,8 +197,8 @@ export function OnboardingWizard() {
     apiKey,
     provider,
     selectedModel,
-    modelList,
     testStatus,
+    confirmSkip,
     workDir,
     locale,
     theme,
@@ -193,6 +211,7 @@ export function OnboardingWizard() {
     setTheme,
     setOnboardingCompleted,
     goToStep,
+    handleTestConnection,
   ]);
 
   const handleBack = useCallback(() => {
@@ -228,6 +247,8 @@ export function OnboardingWizard() {
       ? "进入 LeoChat"
       : currentStep === "api-key" && testStatus === "testing"
       ? "验证中..."
+      : currentStep === "api-key" && testStatus === "fail" && confirmSkip
+      ? "确认跳过？"
       : "继续 →";
 
   const isPrimaryDisabled = currentStep === "api-key" && testStatus === "testing";
@@ -260,6 +281,7 @@ export function OnboardingWizard() {
             selectedModel={selectedModel}
             setSelectedModel={setSelectedModel}
             modelList={modelList}
+            onTest={handleTestConnection}
           />
         )}
         {currentStep === "work-dir" && (
@@ -365,6 +387,7 @@ interface ApiKeyStepProps {
   selectedModel: string;
   setSelectedModel: (m: string) => void;
   modelList: string[];
+  onTest: () => void;
 }
 
 function ApiKeyStep({
@@ -377,6 +400,7 @@ function ApiKeyStep({
   selectedModel,
   setSelectedModel,
   modelList,
+  onTest,
 }: ApiKeyStepProps) {
   // Use fetched models when available, fall back to static list
   const staticModels = (LLM_PROVIDERS[provider as keyof typeof LLM_PROVIDERS]?.models as readonly string[] | undefined) ?? [];
@@ -467,6 +491,19 @@ function ApiKeyStep({
           />
         )}
       </div>
+
+      {/* Manual test button — visible when key entered but test not yet run */}
+      {apiKey && testStatus === "idle" && (
+        <button
+          onClick={onTest}
+          className={cn(
+            "self-start rounded-lg border border-border px-4 py-1.5 text-sm font-medium",
+            "text-foreground hover:bg-muted transition-colors duration-200"
+          )}
+        >
+          测试连接
+        </button>
+      )}
 
       {/* Connection test status */}
       {testStatus === "ok" && (
