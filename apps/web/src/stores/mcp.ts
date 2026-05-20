@@ -9,6 +9,7 @@ import type {
   MCPTool,
 } from "@ai-chatbox/shared";
 import { mcpApi } from "../lib/api";
+import { useNetworkStore } from "./network";
 
 // 内置服务预设 (使用官方 MCP 服务器包)
 const BUILTIN_SERVERS: MCPServerConfig[] = [
@@ -61,10 +62,7 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     transport: "stdio",
     command: "uvx",
     args: ["excel-mcp-server", "stdio"],
-    env: {
-      EXCEL_MCP_PAGING_CELLS_LIMIT: "4000",
-      UV_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple",
-    },
+    env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
   },
   {
     id: "word",
@@ -72,7 +70,6 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     transport: "stdio",
     command: "uvx",
     args: ["--from", "office-word-mcp-server", "word_mcp_server"],
-    env: { UV_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple" },
   },
 ];
 
@@ -521,6 +518,11 @@ export const useMCPStore = create<MCPState>()(
             const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
             // Use the resolved node binary path (bundled node.exe on Windows prod, system node elsewhere)
             const nodeCmd = res.node ?? "node";
+            // Mirror env vars from network settings
+            const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
+            const mirrorEnv = useChinaMirrors
+              ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
+              : {};
             // uv: bundled uv.exe on Windows prod, system uvx elsewhere
             // For word (office-word-mcp-server via uvx): use `uv tool run` with bundled uv
             const uvCmd = res.uv ?? "uvx";
@@ -528,7 +530,7 @@ export const useMCPStore = create<MCPState>()(
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
                 case "law-kb":
-                  return res["law-kb"] ? { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]] } : s;
+                  return res["law-kb"] ? { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: { ...s.env, ...mirrorEnv } } : s;
                 case "leochat":
                   return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
                 case "filesystem":
@@ -541,17 +543,14 @@ export const useMCPStore = create<MCPState>()(
                   return res.fetch ? { ...s, command: nodeCmd, args: [res.fetch] } : s;
                 case "excel":
                   return res.excel
-                    ? { ...s, command: res.excel, args: ["stdio"] }
-                    : s;
+                    ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
+                    : { ...s, env: { ...s.env, ...mirrorEnv } };
                 case "word": {
-                  // Isolate uv tools/cache inside app userData so it doesn't pollute system dirs
                   const uvDataDir = res.uvDataDir as string | undefined;
-                  const uvEnv = uvDataDir ? {
-                    UV_TOOL_DIR: `${uvDataDir}/tools`,
-                    UV_CACHE_DIR: `${uvDataDir}/cache`,
-                  } : {};
-                  // dev: uvx --from office-word-mcp-server word_mcp_server
-                  // prod Windows: uv.exe tool run --from office-word-mcp-server word_mcp_server
+                  const uvEnv = {
+                    ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),
+                    ...mirrorEnv,
+                  };
                   return uvIsUvx
                     ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
                     : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };

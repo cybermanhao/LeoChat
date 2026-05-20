@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap } from "lucide-react";
+import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap, Wifi } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
 import { useSearchParams } from "react-router-dom";
 import { useOnboardingStore } from "../stores/onboarding";
@@ -11,6 +11,7 @@ import {
 } from "../components/layout";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { LLMSettings } from "./settings/LLMSettings";
+import { NetworkSettings } from "./settings/NetworkSettings";
 import { useT } from "../i18n";
 
 interface SettingCategory {
@@ -29,6 +30,7 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
     { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "network", label: "网络", icon: Wifi },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
     { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
     { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
@@ -67,14 +69,14 @@ export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentCategory, setCurrentCategory] = useState(() => {
     const tab = searchParams.get("tab");
-    const validTabs = ["general", "appearance", "llm", "notifications", "privacy", "advanced"];
+    const validTabs = ["general", "appearance", "llm", "network", "notifications", "privacy", "advanced"];
     return tab && validTabs.includes(tab) ? tab : "general";
   });
 
   // 当 URL tab 参数变化时同步更新当前分类
   useEffect(() => {
     const tab = searchParams.get("tab");
-    const validTabs = ["general", "appearance", "llm", "notifications", "privacy", "advanced"];
+    const validTabs = ["general", "appearance", "llm", "network", "notifications", "privacy", "advanced"];
     if (tab && validTabs.includes(tab) && tab !== currentCategory) {
       setCurrentCategory(tab);
     }
@@ -88,6 +90,7 @@ export function SettingsPage() {
     { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "network", label: "网络", icon: Wifi },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
     { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
     { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
@@ -116,6 +119,8 @@ export function SettingsPage() {
         return <AppearanceSettings />;
       case "llm":
         return <LLMSettings />;
+      case "network":
+        return <NetworkSettings />;
       default:
         return (
           <div>
