@@ -61,7 +61,10 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     transport: "stdio",
     command: "uvx",
     args: ["excel-mcp-server", "stdio"],
-    env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
+    env: {
+      EXCEL_MCP_PAGING_CELLS_LIMIT: "4000",
+      UV_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple",
+    },
   },
   {
     id: "word",
@@ -69,6 +72,7 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     transport: "stdio",
     command: "uvx",
     args: ["--from", "office-word-mcp-server", "word_mcp_server"],
+    env: { UV_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple" },
   },
 ];
 
