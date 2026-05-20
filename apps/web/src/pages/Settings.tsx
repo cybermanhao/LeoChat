@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap } from "lucide-react";
+import { Settings as SettingsIcon, Palette, Globe, Bell, Shield, Zap, Wifi } from "lucide-react";
 import { Button, cn } from "@ai-chatbox/ui";
 import { useOnboardingStore } from "../stores/onboarding";
 import {
@@ -10,6 +10,7 @@ import {
 } from "../components/layout";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { LLMSettings } from "./settings/LLMSettings";
+import { NetworkSettings } from "./settings/NetworkSettings";
 import { useT } from "../i18n";
 
 interface SettingCategory {
@@ -28,6 +29,7 @@ function SettingsSidebar({ currentCategory, onSelectCategory }: {
     { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "network", label: "网络", icon: Wifi },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
     { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
     { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
@@ -68,6 +70,7 @@ export function SettingsPage() {
     { id: "general", label: "通用", icon: Zap },
     { id: "appearance", label: t("common.appearance"), icon: Palette },
     { id: "llm", label: t("settings.model.title"), icon: Globe },
+    { id: "network", label: "网络", icon: Wifi },
     { id: "notifications", label: t("settings.notifications.title"), icon: Bell },
     { id: "privacy", label: t("settings.privacy.title"), icon: Shield },
     { id: "advanced", label: t("settings.advanced.title"), icon: Zap },
@@ -96,6 +99,8 @@ export function SettingsPage() {
         return <AppearanceSettings />;
       case "llm":
         return <LLMSettings />;
+      case "network":
+        return <NetworkSettings />;
       default:
         return (
           <div>

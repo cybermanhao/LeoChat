@@ -9,6 +9,7 @@ import type {
   MCPTool,
 } from "@ai-chatbox/shared";
 import { mcpApi } from "../lib/api";
+import { useNetworkStore } from "./network";
 
 // 内置服务预设 (使用官方 MCP 服务器包)
 const BUILTIN_SERVERS: MCPServerConfig[] = [
@@ -55,6 +56,13 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     command: "uvx",
     args: ["excel-mcp-server", "stdio"],
     env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
+  },
+  {
+    id: "word",
+    name: "Word",
+    transport: "stdio",
+    command: "uvx",
+    args: ["--from", "office-word-mcp-server", "word_mcp_server"],
   },
 ];
 
@@ -499,6 +507,12 @@ export const useMCPStore = create<MCPState>()(
         if (electronAPI?.invoke) {
           try {
             const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
+            const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
+            const mirrorEnv = useChinaMirrors
+              ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
+              : {};
+            const uvCmd = res.uv ?? "uvx";
+            const uvIsUvx = uvCmd === "uvx";
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
                 case "leochat":
@@ -513,8 +527,18 @@ export const useMCPStore = create<MCPState>()(
                   return res.fetch ? { ...s, args: [res.fetch] } : s;
                 case "excel":
                   return res.excel
-                    ? { ...s, command: res.excel, args: ["stdio"] }
-                    : s;
+                    ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
+                    : { ...s, env: { ...s.env, ...mirrorEnv } };
+                case "word": {
+                  const uvDataDir = res.uvDataDir as string | undefined;
+                  const uvEnv = {
+                    ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),
+                    ...mirrorEnv,
+                  };
+                  return uvIsUvx
+                    ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
+                    : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
+                }
                 default:
                   return s;
               }
