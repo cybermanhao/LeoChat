@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-let db: Database.Database | null = null;
+let db: DatabaseSync | null = null;
 
 function getDbPath(): string {
   const dir = process.env.LAW_KB_DIR ?? join(homedir(), '.leochat-for-law');
@@ -11,11 +11,11 @@ function getDbPath(): string {
   return join(dir, 'law.db');
 }
 
-export function getDb(): Database.Database {
+export function getDb(): DatabaseSync {
   if (db) return db;
-  db = new Database(getDbPath());
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db = new DatabaseSync(getDbPath());
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
   initSchema(db);
   return db;
 }
@@ -25,7 +25,7 @@ export function closeDb(): void {
   db = null;
 }
 
-function initSchema(db: Database.Database): void {
+function initSchema(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS laws (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,

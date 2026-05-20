@@ -17,7 +17,7 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     name: "法律知识库",
     transport: "stdio",
     command: "node",
-    args: ["../../packages/law-kb-mcp/dist/index.js"],
+    args: ["--experimental-sqlite", "../../packages/law-kb-mcp/dist/index.js"],
   },
   {
     id: "leochat",
@@ -513,7 +513,7 @@ export const useMCPStore = create<MCPState>()(
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
                 case "law-kb":
-                  return res["law-kb"] ? { ...s, command: nodeCmd, args: [res["law-kb"]] } : s;
+                  return res["law-kb"] ? { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]] } : s;
                 case "leochat":
                   return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
                 case "filesystem":

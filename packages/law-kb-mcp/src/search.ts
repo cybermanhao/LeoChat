@@ -148,5 +148,5 @@ function buildUserDocResult(chunkId: number, similarity: number): SearchResult |
 export function getLawArticle(id: number): LawArticle | null {
   const db = getDb();
   const result = db.prepare('SELECT * FROM laws WHERE id = ?').get(id);
-  return result !== undefined ? (result as LawArticle) : null;
+  return result !== undefined ? (result as unknown as LawArticle) : null;
 }

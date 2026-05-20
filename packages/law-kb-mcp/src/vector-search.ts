@@ -18,7 +18,7 @@ function loadCache(table: TableName): CacheEntry[] {
   const parentCol = table === 'law' ? 'law_id' : 'doc_id';
   const rows = db.prepare(
     `SELECT id, ${parentCol} as parent_id, embedding FROM ${tbl} WHERE embedding IS NOT NULL`
-  ).all() as Array<{ id: number; parent_id: number; embedding: Buffer }>;
+  ).all() as Array<{ id: number; parent_id: number; embedding: Uint8Array }>;
 
   caches[table] = rows.map(r => ({
     chunk_id: r.id,
@@ -83,7 +83,8 @@ function storeLawChunks(lawId: number, chunks: ChunkInput[], embeddings: Float32
        (law_id, chunk_index, content, article_number, hierarchy_path, embedding)
      VALUES (?, ?, ?, ?, ?, ?)`
   );
-  db.transaction(() => {
+  db.exec('BEGIN');
+  try {
     chunks.forEach((chunk, i) => {
       insert.run(
         lawId, i, chunk.content,
@@ -92,7 +93,11 @@ function storeLawChunks(lawId: number, chunks: ChunkInput[], embeddings: Float32
         embeddings[i] ? float32ToBuffer(embeddings[i]) : null
       );
     });
-  })();
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 function storeUserDocChunks(docId: number, chunks: ChunkInput[], embeddings: Float32Array[]): void {
@@ -102,7 +107,8 @@ function storeUserDocChunks(docId: number, chunks: ChunkInput[], embeddings: Flo
        (doc_id, chunk_index, content, hierarchy_path, embedding)
      VALUES (?, ?, ?, ?, ?)`
   );
-  db.transaction(() => {
+  db.exec('BEGIN');
+  try {
     chunks.forEach((chunk, i) => {
       insert.run(
         docId, i, chunk.content,
@@ -110,7 +116,11 @@ function storeUserDocChunks(docId: number, chunks: ChunkInput[], embeddings: Flo
         embeddings[i] ? float32ToBuffer(embeddings[i]) : null
       );
     });
-  })();
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 /** RRF fusion: merges two ranked lists, returns top-k by fused score */
@@ -139,6 +149,6 @@ function float32ToBuffer(arr: Float32Array): Buffer {
   return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
 }
 
-function bufferToFloat32(buf: Buffer): Float32Array {
+function bufferToFloat32(buf: Uint8Array): Float32Array {
   return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 }
