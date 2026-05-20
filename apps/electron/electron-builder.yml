@@ -35,6 +35,8 @@ win:
       to: "uv.exe"
     - from: "../../mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe"
       to: "mcp-servers/excel-mcp-server.exe"
+    - from: "../../build-resources/word-mcp-server.exe"
+      to: "mcp-servers/word-mcp-server.exe"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

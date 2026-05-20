@@ -234,6 +234,9 @@ function setupIPC(): void {
         excel: process.platform === "win32"
           ? join(root, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe")
           : null,
+        word: process.platform === "win32"
+          ? join(root, "build-resources/word-mcp-server.exe")
+          : null,
       };
     }
     const r = process.resourcesPath;
@@ -252,6 +255,9 @@ function setupIPC(): void {
       fetch:      join(r, "mcp-servers/fetch.js"),
       excel: process.platform === "win32"
         ? join(r, "mcp-servers/excel-mcp-server.exe")
+        : null,
+      word: process.platform === "win32"
+        ? join(r, "mcp-servers/word-mcp-server.exe")
         : null,
     };
   });

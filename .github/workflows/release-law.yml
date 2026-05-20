@@ -39,11 +39,17 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
 
-      - name: Download node.exe and uv.exe, bundle MCP servers
+      - name: Setup Python (for Word MCP PyInstaller build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download node.exe and uv.exe, bundle MCP servers, build Word MCP exe
         run: |
           node scripts/download-node-win.mjs
           node scripts/download-uv-win.mjs
           node scripts/bundle-mcp-servers.mjs
+          node scripts/build-word-mcp-win.mjs
         env:
           NODE_MIRROR: https://npmmirror.com/mirrors/node
           UV_MIRROR: https://github.com/astral-sh/uv/releases/download
@@ -126,7 +132,7 @@ jobs:
             3. 运行 `LeoChat.exe`
 
             > 首次运行可能弹出 Windows 安全提示，点击"更多信息" → "仍要运行"即可。
-            > Node.js 已内置，无需单独安装。Word/Excel MCP 工具需要系统安装 uv。
+            > Node.js、Word MCP、uv 均已内置，无需单独安装。
 
             ### 法律知识库
 

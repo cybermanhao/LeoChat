@@ -546,6 +546,10 @@ export const useMCPStore = create<MCPState>()(
                     ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
                     : { ...s, env: { ...s.env, ...mirrorEnv } };
                 case "word": {
+                  // Prefer bundled exe (packaged app); fall back to uv/uvx for dev
+                  if (res.word) {
+                    return { ...s, command: res.word, args: [], env: { ...s.env, ...mirrorEnv } };
+                  }
                   const uvDataDir = res.uvDataDir as string | undefined;
                   const uvEnv = {
                     ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),

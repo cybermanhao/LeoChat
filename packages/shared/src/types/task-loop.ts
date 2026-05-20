@@ -214,6 +214,7 @@ export type LLMProvider =
   | "deepseek"
   | "moonshot"
   | "kimi"
+  | "kimi-code"
   | "custom";
 
 /**
