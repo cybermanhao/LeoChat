@@ -68,7 +68,7 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     name: "Word",
     transport: "stdio",
     command: "uvx",
-    args: ["office-word-mcp-server"],
+    args: ["--from", "office-word-mcp-server", "word_mcp_server"],
   },
 ];
 
@@ -539,12 +539,19 @@ export const useMCPStore = create<MCPState>()(
                   return res.excel
                     ? { ...s, command: res.excel, args: ["stdio"] }
                     : s;
-                case "word":
-                  // dev: uvx office-word-mcp-server
-                  // prod Windows: uv.exe tool run office-word-mcp-server
+                case "word": {
+                  // Isolate uv tools/cache inside app userData so it doesn't pollute system dirs
+                  const uvDataDir = res.uvDataDir as string | undefined;
+                  const uvEnv = uvDataDir ? {
+                    UV_TOOL_DIR: `${uvDataDir}/tools`,
+                    UV_CACHE_DIR: `${uvDataDir}/cache`,
+                  } : {};
+                  // dev: uvx --from office-word-mcp-server word_mcp_server
+                  // prod Windows: uv.exe tool run --from office-word-mcp-server word_mcp_server
                   return uvIsUvx
-                    ? { ...s, command: uvCmd, args: ["office-word-mcp-server"] }
-                    : { ...s, command: uvCmd, args: ["tool", "run", "office-word-mcp-server"] };
+                    ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
+                    : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
+                }
                 default:
                   return s;
               }
