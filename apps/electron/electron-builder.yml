@@ -25,9 +25,7 @@ extraMetadata:
   main: out/main/index.js
 win:
   target:
-    - nsis
-  # Code signing via SignPath (certificate thumbprint injected by CI)
-  # When CSC_LINK / CSC_KEY_PASSWORD env vars are absent, signing is skipped automatically.
+    - zip
   signingHashAlgorithms:
     - sha256
   extraResources:

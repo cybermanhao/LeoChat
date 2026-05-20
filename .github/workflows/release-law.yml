@@ -77,24 +77,18 @@ jobs:
           output-artifact-directory: apps/electron/release/signed
       # ─────────────────────────────────────────────────────────────────────
 
-      - name: Upload unsigned installer as artifact
+      - name: Upload zip as artifact
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-installer
-          path: apps/electron/release/LeoChat*.exe
+          path: apps/electron/release/LeoChat*.zip
           if-no-files-found: error
 
-      - name: Determine installer path
+      - name: Determine release file path
         id: installer
         shell: pwsh
         run: |
-          # Use signed version if SignPath ran, otherwise unsigned
-          $signed = "apps/electron/release/signed"
-          if (Test-Path $signed) {
-            $file = Get-ChildItem $signed -Filter "*.exe" | Select-Object -First 1
-          } else {
-            $file = Get-ChildItem "apps/electron/release" -Filter "LeoChat*.exe" | Select-Object -First 1
-          }
+          $file = Get-ChildItem "apps/electron/release" -Filter "LeoChat*.zip" | Select-Object -First 1
           echo "path=$($file.FullName)" >> $env:GITHUB_OUTPUT
           echo "name=$($file.Name)" >> $env:GITHUB_OUTPUT
 
@@ -127,9 +121,12 @@ jobs:
 
             ### 安装
 
-            下载 `${{ steps.installer.outputs.name }}` 安装即可，无需额外依赖（Node.js 已内置）。
+            1. 下载 `${{ steps.installer.outputs.name }}`
+            2. 解压到任意目录
+            3. 运行 `LeoChat.exe`
 
-            Word/Excel MCP 工具需要系统有 uv（Python 包管理工具），其余功能开箱即用。
+            > 首次运行可能弹出 Windows 安全提示，点击"更多信息" → "仍要运行"即可。
+            > Node.js 已内置，无需单独安装。Word/Excel MCP 工具需要系统安装 uv。
 
             ### 法律知识库
 
