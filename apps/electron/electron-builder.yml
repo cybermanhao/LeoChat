@@ -11,14 +11,16 @@ extraResources:
     to: "leochat-mcp.js"
   - from: "../../packages/law-kb-mcp/dist/bundle.mjs"
     to: "mcp-servers/law-kb-mcp.mjs"
-  - from: "../../node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+  - from: "../../build-resources/mcp-bundles/filesystem.js"
     to: "mcp-servers/filesystem.js"
-  - from: "../../node_modules/@modelcontextprotocol/server-everything/dist/index.js"
+  - from: "../../build-resources/mcp-bundles/everything.js"
     to: "mcp-servers/everything.js"
   - from: "../../node_modules/@modelcontextprotocol/server-memory/dist/index.js"
     to: "mcp-servers/memory.js"
-  - from: "../../node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"
+  - from: "../../build-resources/mcp-bundles/fetch.js"
     to: "mcp-servers/fetch.js"
+  - from: "../../build-resources/mcp-bundles/xhr-sync-worker.js"
+    to: "mcp-servers/xhr-sync-worker.js"
 extraMetadata:
   main: out/main/index.js
 win:
