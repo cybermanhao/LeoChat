@@ -238,7 +238,7 @@ function setupIPC(): void {
     return {
       // Bundled node.exe on Windows; fall back to system node on other platforms
       node: process.platform === "win32" ? join(r, "node.exe") : "node",
-      "law-kb":   join(r, "mcp-servers/law-kb-mcp.js"),
+      "law-kb":   join(r, "mcp-servers/law-kb-mcp.mjs"),
       leochat:    join(r, "leochat-mcp.js"),
       filesystem: join(r, "mcp-servers/filesystem.js"),
       everything: join(r, "mcp-servers/everything.js"),

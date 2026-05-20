@@ -9,8 +9,8 @@ files:
 extraResources:
   - from: "../../packages/leochat-mcp/dist/index.js"
     to: "leochat-mcp.js"
-  - from: "../../packages/law-kb-mcp/dist/index.js"
-    to: "mcp-servers/law-kb-mcp.js"
+  - from: "../../packages/law-kb-mcp/dist/bundle.mjs"
+    to: "mcp-servers/law-kb-mcp.mjs"
   - from: "../../node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
     to: "mcp-servers/filesystem.js"
   - from: "../../node_modules/@modelcontextprotocol/server-everything/dist/index.js"
