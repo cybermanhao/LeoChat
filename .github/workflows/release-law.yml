@@ -1,0 +1,139 @@
+name: Release Law Edition
+
+on:
+  push:
+    tags:
+      - 'leochat-law-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. leochat-law-v0.1.0)'
+        required: true
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # needed to create GitHub release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: leochat-for-law
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Download node.exe and uv.exe, bundle MCP servers
+        run: |
+          node scripts/download-node-win.mjs
+          node scripts/download-uv-win.mjs
+          node scripts/bundle-mcp-servers.mjs
+        env:
+          NODE_MIRROR: https://npmmirror.com/mirrors/node
+          UV_MIRROR: https://github.com/astral-sh/uv/releases/download
+
+      - name: Build Electron app
+        run: pnpm --filter @ai-chatbox/electron build
+
+      - name: Package (unsigned)
+        run: pnpm --filter @ai-chatbox/electron exec electron-builder --win --publish never
+        env:
+          # Disable built-in electron-builder signing — we sign via SignPath below
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # ── SignPath code signing ─────────────────────────────────────────────
+      # Requires SignPath Foundation approval + these repo secrets:
+      #   SIGNPATH_API_TOKEN        — from SignPath → CI User token
+      #   SIGNPATH_ORGANIZATION_ID  — from SignPath → Settings → Organization
+      #   SIGNPATH_PROJECT_SLUG     — e.g. "leochat"
+      #   SIGNPATH_POLICY_SLUG      — e.g. "release-signing"
+      - name: Sign installer with SignPath
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: exe-installer
+          github-artifact-id: unsigned-installer
+          wait-for-completion: true
+          output-artifact-directory: apps/electron/release/signed
+      # ─────────────────────────────────────────────────────────────────────
+
+      - name: Upload unsigned installer as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: apps/electron/release/LeoChat*.exe
+          if-no-files-found: error
+
+      - name: Determine installer path
+        id: installer
+        shell: pwsh
+        run: |
+          # Use signed version if SignPath ran, otherwise unsigned
+          $signed = "apps/electron/release/signed"
+          if (Test-Path $signed) {
+            $file = Get-ChildItem $signed -Filter "*.exe" | Select-Object -First 1
+          } else {
+            $file = Get-ChildItem "apps/electron/release" -Filter "LeoChat*.exe" | Select-Object -First 1
+          }
+          echo "path=$($file.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($file.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Determine release tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            echo "value=${{ github.event.inputs.tag }}" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "value=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Get version from package.json
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content apps/electron/package.json | ConvertFrom-Json).version
+          echo "value=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          name: LeoChat Law v${{ steps.version.outputs.value }}
+          body: |
+            ## LeoChat Law v${{ steps.version.outputs.value }}
+
+            专为法律工作场景定制的 LeoChat 版本。
+
+            ### 安装
+
+            下载 `${{ steps.installer.outputs.name }}` 安装即可，无需额外依赖（Node.js 已内置）。
+
+            Word/Excel MCP 工具需要系统有 uv（Python 包管理工具），其余功能开箱即用。
+
+            ### 法律知识库
+
+            首次使用请在对话中让 AI 调用 `sync_laws` 工具从全国人大官网同步法律数据，或指定关键词同步（如"民法典"）。
+          files: ${{ steps.installer.outputs.path }}
+          target_commitish: leochat-for-law
+          generate_release_notes: false

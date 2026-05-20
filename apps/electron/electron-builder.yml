@@ -26,6 +26,10 @@ extraMetadata:
 win:
   target:
     - nsis
+  # Code signing via SignPath (certificate thumbprint injected by CI)
+  # When CSC_LINK / CSC_KEY_PASSWORD env vars are absent, signing is skipped automatically.
+  signingHashAlgorithms:
+    - sha256
   extraResources:
     - from: "../../build-resources/node.exe"
       to: "node.exe"
