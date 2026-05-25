@@ -11,6 +11,8 @@ extraResources:
     to: "leochat-mcp.js"
   - from: "../../packages/law-kb-mcp/dist/bundle.mjs"
     to: "mcp-servers/law-kb-mcp.mjs"
+  - from: "../../packages/law-kb-mcp/data/laws.db"
+    to: "mcp-servers/laws.db"
   - from: "../../build-resources/mcp-bundles/filesystem.js"
     to: "mcp-servers/filesystem.js"
   - from: "../../build-resources/mcp-bundles/everything.js"

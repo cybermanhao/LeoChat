@@ -3,11 +3,12 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync } from 'fs';
 
-const MODEL_ID = 'BAAI/bge-m3';
+// bge-small-zh-v1.5: ~130MB quantized, strong Chinese semantic search, suitable for bundling
+const MODEL_ID = 'BAAI/bge-small-zh-v1.5';
 
 function getModelDir(): string {
   const base = process.env.LAW_KB_DIR ?? join(homedir(), '.leochat-for-law');
-  return join(base, 'models', 'bge-m3');
+  return join(base, 'models', 'bge-small-zh');
 }
 
 let extractor: ((text: string, opts: object) => Promise<{ data: Float32Array }>) | null = null;

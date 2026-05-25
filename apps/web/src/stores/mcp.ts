@@ -529,8 +529,15 @@ export const useMCPStore = create<MCPState>()(
             const uvIsUvx = uvCmd === "uvx"; // dev/non-Windows: uvx command already handles tool run
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
-                case "law-kb":
-                  return res["law-kb"] ? { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: { ...s.env, ...mirrorEnv } } : s;
+                case "law-kb": {
+                  if (!res["law-kb"]) return s;
+                  const lawEnv = {
+                    ...s.env,
+                    ...mirrorEnv,
+                    ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
+                  };
+                  return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
+                }
                 case "leochat":
                   return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
                 case "filesystem":

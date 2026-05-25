@@ -55,6 +55,15 @@ jobs:
           NODE_MIRROR: https://npmmirror.com/mirrors/node
           UV_MIRROR: https://github.com/astral-sh/uv/releases/download
 
+      - name: Ensure laws.db exists (static baseline if not committed)
+        run: |
+          if (!(Test-Path "packages/law-kb-mcp/data/laws.db")) {
+            node --experimental-sqlite scripts/seed-law-db.mjs --static --no-embed
+          } else {
+            Write-Host "laws.db already present, skipping seed"
+          }
+        shell: pwsh
+
       - name: Build Electron app
         run: pnpm --filter @ai-chatbox/electron build
 

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'fs';
+import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -11,9 +11,23 @@ function getDbPath(): string {
   return join(dir, 'law.db');
 }
 
+/** Copy pre-built laws.db to user data dir on first startup (if DB doesn't exist yet). */
+function initFromPrebuilt(dbPath: string): void {
+  const prebuilt = process.env.LAW_PREBUILT_DB;
+  if (!prebuilt || existsSync(dbPath)) return;
+  try {
+    copyFileSync(prebuilt, dbPath);
+    console.error('[law-kb] Copied pre-built laws.db to', dbPath);
+  } catch (err) {
+    console.error('[law-kb] Failed to copy pre-built DB:', err);
+  }
+}
+
 export function getDb(): DatabaseSync {
   if (db) return db;
-  db = new DatabaseSync(getDbPath());
+  const dbPath = getDbPath();
+  initFromPrebuilt(dbPath);
+  db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   initSchema(db);
