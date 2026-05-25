@@ -3,10 +3,12 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync } from 'fs';
 
-// bge-small-zh-v1.5: ~130MB quantized, strong Chinese semantic search, suitable for bundling
-const MODEL_ID = 'BAAI/bge-small-zh-v1.5';
+// Xenova/bge-small-zh-v1.5: ONNX-converted version, ~130MB quantized, strong Chinese semantic search
+const MODEL_ID = 'Xenova/bge-small-zh-v1.5';
 
 function getModelDir(): string {
+  // LAW_MODEL_DIR: explicit override (packaged app points here via extraResources)
+  if (process.env.LAW_MODEL_DIR) return process.env.LAW_MODEL_DIR;
   const base = process.env.LAW_KB_DIR ?? join(homedir(), '.leochat-for-law');
   return join(base, 'models', 'bge-small-zh');
 }
@@ -24,7 +26,7 @@ async function getExtractor() {
   if (extractor) return extractor;
   const { pipeline, env } = await import('@xenova/transformers');
   const modelDir = getModelDir();
-  (env as any).remoteURL = 'https://hf-mirror.com/';
+  if (!process.env.HF_ENDPOINT) process.env.HF_ENDPOINT = 'https://hf-mirror.com';
   (env as any).allowLocalModels = true;
   (env as any).localModelPath = modelDir;
   extractor = await pipeline('feature-extraction', MODEL_ID, {
@@ -46,7 +48,8 @@ export async function getEmbedding(
 }
 
 export async function isModelReady(): Promise<boolean> {
-  return existsSync(join(getModelDir(), 'config.json'));
+  // xenova stores at {modelDir}/Xenova/bge-small-zh-v1.5/config.json
+  return existsSync(join(getModelDir(), 'Xenova', 'bge-small-zh-v1.5', 'config.json'));
 }
 
 export async function downloadModel(onProgress: (pct: number) => void): Promise<void> {
@@ -55,7 +58,7 @@ export async function downloadModel(onProgress: (pct: number) => void): Promise<
   try {
     const { pipeline, env } = await import('@xenova/transformers');
     const modelDir = getModelDir();
-    (env as any).remoteURL = 'https://hf-mirror.com/';
+    if (!process.env.HF_ENDPOINT) process.env.HF_ENDPOINT = 'https://hf-mirror.com';
     (env as any).allowLocalModels = false;
     extractor = null; // reset so next getEmbedding reloads from local
     await (pipeline as any)('feature-extraction', MODEL_ID, {

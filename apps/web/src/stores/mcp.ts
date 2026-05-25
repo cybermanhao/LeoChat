@@ -535,6 +535,7 @@ export const useMCPStore = create<MCPState>()(
                     ...s.env,
                     ...mirrorEnv,
                     ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
+                    ...(res.lawModelDir ? { LAW_MODEL_DIR: res.lawModelDir as string } : {}),
                   };
                   return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
                 }

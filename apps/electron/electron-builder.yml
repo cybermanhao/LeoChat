@@ -13,6 +13,8 @@ extraResources:
     to: "mcp-servers/law-kb-mcp.mjs"
   - from: "../../packages/law-kb-mcp/data/laws.db"
     to: "mcp-servers/laws.db"
+  - from: "../../packages/law-kb-mcp/data/model/Xenova/bge-small-zh-v1.5"
+    to: "mcp-servers/model/Xenova/bge-small-zh-v1.5"
   - from: "../../build-resources/mcp-bundles/filesystem.js"
     to: "mcp-servers/filesystem.js"
   - from: "../../build-resources/mcp-bundles/everything.js"

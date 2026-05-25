@@ -222,12 +222,14 @@ function setupIPC(): void {
     if (is.dev) {
       const root = join(__dirname, "../../../..");
       const devLawsDb = join(root, "packages/law-kb-mcp/data/laws.db");
+      const devModelDir = join(root, "packages/law-kb-mcp/data/model");
       return {
         node:       "node",  // use system node in dev
         uv:         "uvx",   // use system uvx in dev
         uvDataDir:  join(app.getPath("userData"), "uv"),
         "law-kb":   join(root, "packages/law-kb-mcp/dist/index.js"),
         lawsDb:     require("fs").existsSync(devLawsDb) ? devLawsDb : null,
+        lawModelDir: require("fs").existsSync(devModelDir) ? devModelDir : null,
         leochat:    join(root, "packages/leochat-mcp/dist/index.js"),
         filesystem: join(root, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
         everything: join(root, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
@@ -252,6 +254,7 @@ function setupIPC(): void {
       uvDataDir: join(app.getPath("userData"), "uv"),
       "law-kb":   join(r, "mcp-servers/law-kb-mcp.mjs"),
       lawsDb:     require("fs").existsSync(prodLawsDb) ? prodLawsDb : null,
+      lawModelDir: join(r, "mcp-servers/model"),
       leochat:    join(r, "leochat-mcp.js"),
       filesystem: join(r, "mcp-servers/filesystem.js"),
       everything: join(r, "mcp-servers/everything.js"),

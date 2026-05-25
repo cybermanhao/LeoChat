@@ -36,6 +36,7 @@ const ONLY_STATIC = ARGS.has('--static');
 const FLK_ONLY = ARGS.has('--flk-only');
 const CASES_ONLY = ARGS.has('--cases-only');
 const NO_EMBED = ARGS.has('--no-embed');
+const EMBED_ONLY = ARGS.has('--embed-only'); // skip crawling, only embed existing chunks
 
 mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(STATIC_DIR, { recursive: true });
@@ -508,15 +509,17 @@ async function embedAll(db) {
   console.log('\n[embed] 开始向量化...');
 
   mkdirSync(MODEL_DIR, { recursive: true });
+  // HF_ENDPOINT env var is the standard way to override huggingface base URL
+  if (!process.env.HF_ENDPOINT) process.env.HF_ENDPOINT = 'https://hf-mirror.com';
   const { pipeline, env } = await import('@xenova/transformers');
-  const hfMirror = process.env.HF_ENDPOINT ?? 'https://hf-mirror.com';
-  env.remoteURL = hfMirror + '/';
+  // Xenova/ namespace has ONNX-converted models; BAAI/ only has PyTorch weights
   env.allowLocalModels = true;
   env.localModelPath = MODEL_DIR;
   env.cacheDir = MODEL_DIR;
 
-  console.log('  [embed] 加载模型 BAAI/bge-small-zh-v1.5 ...');
-  const pipe = await pipeline('feature-extraction', 'BAAI/bge-small-zh-v1.5', {
+  const MODEL_ID = 'Xenova/bge-small-zh-v1.5';
+  console.log(`  [embed] 加载模型 ${MODEL_ID} ...`);
+  const pipe = await pipeline('feature-extraction', MODEL_ID, {
     quantized: true,
     cache_dir: MODEL_DIR,
     progress_callback: (p) => {
@@ -556,21 +559,23 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   console.log('=== 法律知识库构建脚本 ===');
   console.log(`输出路径: ${DB_PATH}`);
-  console.log(`模式: ${ONLY_STATIC ? 'static-only' : FLK_ONLY ? 'flk-only' : CASES_ONLY ? 'cases-only' : '全量'}\n`);
+  console.log(`模式: ${EMBED_ONLY ? 'embed-only' : ONLY_STATIC ? 'static-only' : FLK_ONLY ? 'flk-only' : CASES_ONLY ? 'cases-only' : '全量'}\n`);
 
   const db = openDb();
   let total = 0;
 
-  if (!FLK_ONLY && !CASES_ONLY) {
-    total += await loadStaticData(db);
-  }
+  if (!EMBED_ONLY) {
+    if (!FLK_ONLY && !CASES_ONLY) {
+      total += await loadStaticData(db);
+    }
 
-  if (!ONLY_STATIC && !CASES_ONLY) {
-    total += await crawlFlk(db);
-  }
+    if (!ONLY_STATIC && !CASES_ONLY) {
+      total += await crawlFlk(db);
+    }
 
-  if (!ONLY_STATIC && !FLK_ONLY) {
-    total += await crawlCourtCases(db);
+    if (!ONLY_STATIC && !FLK_ONLY) {
+      total += await crawlCourtCases(db);
+    }
   }
 
   const { law_count } = db.prepare('SELECT COUNT(*) as law_count FROM laws').get();
