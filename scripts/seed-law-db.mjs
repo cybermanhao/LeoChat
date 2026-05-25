@@ -18,11 +18,11 @@
  * 此文件将通过 Task 33 打包进 Electron extraResources，运行时复制到用户目录。
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { createInterface } from 'readline';
 import { DatabaseSync } from 'node:sqlite';
+import { execFileSync, execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -227,93 +227,102 @@ async function loadStaticData(db) {
   return count;
 }
 
-// ─── Source 2: flk.npc.gov.cn (captcha + search API) ────────────────────────
+// ─── Source 2: flk.npc.gov.cn search API (no captcha needed) ────────────────
 
 const FLK_BASE = 'https://flk.npc.gov.cn/law-search';
 const FLK_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Referer': 'https://flk.npc.gov.cn/',
-  'Origin': 'https://flk.npc.gov.cn',
-  'Content-Type': 'application/json',
+  'Content-Type': 'application/json;charset=utf-8',
 };
 
-async function solveMathCaptcha(base64Img) {
-  try {
-    const { execSync } = await import('child_process');
-    const tmp = join(DATA_DIR, '_captcha_tmp.jpg');
-    writeFileSync(tmp, Buffer.from(base64Img, 'base64'));
-    const result = execSync(
-      `python -c "import ddddocr; ocr=ddddocr.DdddOcr(show_ad=False); print(ocr.classification(open('${tmp.replace(/\\/g, '/')}','rb').read()))"`,
-      { timeout: 10000, encoding: 'utf-8' }
-    ).trim();
-    const expr = result.replace(/[=？?].*$/, '').trim();
-    const answer = String(eval(expr)); // safe: input is from our own OCR of known math captcha
-    console.log(`  [flk] Captcha OCR: "${result}" → answer: ${answer}`);
-    return answer;
-  } catch { /* fallback to manual */ }
+const EXTRACT_PY_SCRIPT = join(__dirname, '_extract-docx.py');
+const VENV_PY = join(ROOT, '.venv-seed/Scripts/python.exe');
+const TMP_DOCX = join(DATA_DIR, '_tmp_seed_law.docx');
 
-  return new Promise((resolve) => {
-    const tmp = join(DATA_DIR, '_captcha_tmp.jpg');
-    writeFileSync(tmp, Buffer.from(base64Img, 'base64'));
-    console.log(`\n  [flk] 请打开验证码图片并输入答案: ${tmp}`);
-    try { import('child_process').then(({ execSync }) => execSync(`start "" "${tmp}"`)); } catch {}
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    rl.question('  验证码答案: ', (ans) => { rl.close(); resolve(ans.trim()); });
-  });
+function findPython() {
+  if (existsSync(VENV_PY)) return VENV_PY;
+  try { execSync('python --version', { stdio: 'pipe' }); return 'python'; } catch {}
+  try { execSync('python3 --version', { stdio: 'pipe' }); return 'python3'; } catch {}
+  throw new Error('Python not found — cannot extract docx');
 }
 
-async function flkLogin() {
-  const capResp = await fetch(`${FLK_BASE}/index/captchaImage`, { headers: FLK_HEADERS });
-  const capData = await capResp.json();
-  const setCookie = capResp.headers.get('set-cookie') ?? '';
-  const uuid = capData.uuid;
+async function flkDownloadDocxText(bbbs) {
+  // Step 1: get signed download URL
+  const urlResp = await fetch(
+    `${FLK_BASE}/download/pc?bbbs=${encodeURIComponent(bbbs)}&format=docx`,
+    { headers: { ...FLK_HEADERS, 'Content-Type': undefined }, redirect: 'manual' },
+  );
 
-  const answer = await solveMathCaptcha(capData.img);
+  let docxBuf;
+  const status = urlResp.status;
+  const ct = urlResp.headers.get('content-type') ?? '';
 
-  const loginResp = await fetch(`${FLK_BASE}/index/fljc`, {
-    method: 'POST',
-    headers: { ...FLK_HEADERS, 'Cookie': setCookie },
-    body: JSON.stringify({ uuid, code: answer }),
-  });
-  const loginData = await loginResp.json();
-  if (loginData.code !== 200) {
-    throw new Error(`Captcha failed: ${loginData.msg}`);
+  if (status === 301 || status === 302 || status === 307 || status === 308) {
+    const loc = urlResp.headers.get('location');
+    if (!loc) return null;
+    const r2 = await fetch(loc, { headers: { 'User-Agent': FLK_HEADERS['User-Agent'] } });
+    if (!r2.ok) return null;
+    docxBuf = Buffer.from(await r2.arrayBuffer());
+  } else if (ct.includes('json') || ct.includes('text')) {
+    const json = await urlResp.json().catch(() => null);
+    const signedUrl = json?.url ?? json?.data?.url ?? json?.data;
+    if (!signedUrl || typeof signedUrl !== 'string') return null;
+    const r2 = await fetch(signedUrl, { headers: { 'User-Agent': FLK_HEADERS['User-Agent'] } });
+    if (!r2.ok) return null;
+    docxBuf = Buffer.from(await r2.arrayBuffer());
+  } else {
+    // Assume direct octet-stream
+    if (!urlResp.ok) return null;
+    docxBuf = Buffer.from(await urlResp.arrayBuffer());
   }
 
-  const loginCookie = (loginResp.headers.get('set-cookie') ?? '') || setCookie;
-  const token = loginData.data?.token ?? loginData.token ?? '';
-  console.log('  [flk] Login OK, token:', token ? token.slice(0, 20) + '...' : '(cookie-based)');
-  return { cookie: loginCookie, token };
+  if (!docxBuf || docxBuf.length < 100) return null;
+
+  // Step 2: extract text via Python
+  writeFileSync(TMP_DOCX, docxBuf);
+  try {
+    const py = findPython();
+    const text = execFileSync(py, [EXTRACT_PY_SCRIPT, TMP_DOCX], {
+      timeout: 30_000,
+      encoding: 'utf-8',
+    }).trim();
+    return text || null;
+  } finally {
+    try { unlinkSync(TMP_DOCX); } catch {}
+  }
 }
 
-async function flkSearchPage(auth, keyword, page, pageSize = 20) {
-  const headers = {
-    ...FLK_HEADERS,
-    'Cookie': auth.cookie,
-    ...(auth.token ? { 'Authorization': `Bearer ${auth.token}` } : {}),
-  };
+// Search body must use searchContent + orderByParam as object (not conditionList format)
+async function flkSearchPage(keyword, page, pageSize = 20) {
   const resp = await fetch(`${FLK_BASE}/search/list`, {
     method: 'POST',
-    headers,
+    headers: FLK_HEADERS,
     body: JSON.stringify({
+      searchContent: keyword ?? '',
+      searchType: 1,
+      searchRange: 1,
+      orderByParam: { order: '-1', sort: '' },
+      flfgCodeId: [],
+      zdjgCodeId: [],
+      gbrqYear: [],
+      sxrq: [],
+      gbrq: [],
+      sxx: [],
+      scoreDto: { ppdScore: null, flfgflScore: null, zdjgScore: null, sxxScore: null },
       pageNum: page,
       pageSize,
-      conditionList: keyword
-        ? [{ fieldName: 'title', values: [keyword], link: 0, searchType: 2 }]
-        : [],
-      sortList: [{ fieldName: 'f_bbrq_s', sortType: 'desc' }],
     }),
   });
   return resp.json();
 }
 
-async function flkGetDetail(auth, id, bbbs = '1') {
-  const headers = {
-    ...FLK_HEADERS,
-    'Cookie': auth.cookie,
-    ...(auth.token ? { 'Authorization': `Bearer ${auth.token}` } : {}),
-  };
-  const resp = await fetch(`${FLK_BASE}/search/flfgDetails?id=${encodeURIComponent(id)}&bbbs=${bbbs}`, { headers });
+// ID for flfgDetails is Buffer.from(bbbs_hex_string).toString('base64')
+async function flkGetDetail(bbbs) {
+  const id = Buffer.from(bbbs).toString('base64');
+  const resp = await fetch(`${FLK_BASE}/search/flfgDetails?id=${encodeURIComponent(id)}&bbbs=${bbbs}`, {
+    headers: FLK_HEADERS,
+  });
   return resp.json();
 }
 
@@ -336,55 +345,58 @@ const FLK_TARGET_KEYWORDS = [
 
 async function crawlFlk(db) {
   console.log('\n[flk.npc.gov.cn] 开始爬取...');
-
-  let auth;
-  try {
-    auth = await flkLogin();
-  } catch (e) {
-    console.error('  [flk] 登录失败:', e.message, '— 跳过 flk 数据源');
-    return 0;
-  }
-
   let total = 0;
 
   for (const keyword of FLK_TARGET_KEYWORDS) {
     process.stdout.write(`  [flk] 搜索: ${keyword} ...`);
     try {
-      const result = await flkSearchPage(auth, keyword, 1, 10);
-      if (result.code !== 200 || !result.data?.list?.length) {
+      // Search returns top result matching the keyword; we want exact title match for P0/P1 laws
+      const result = await flkSearchPage(keyword, 1, 10);
+      if (result.code !== 200 || !result.rows?.length) {
         console.log(` 无结果 (code=${result.code})`);
         continue;
       }
-      const items = result.data.list;
+      // Filter to only national-level laws (flfgCodeId 100-299 = 宪法/法律/行政法规)
+      const items = result.rows.filter(r => r.flfgCodeId < 300);
       console.log(` ${items.length} 条`);
 
       for (const item of items) {
-        const detail = await flkGetDetail(auth, item.id ?? item.bbbs, item.bbbs ?? '1');
+        const bbbs = item.bbbs;
+        if (!bbbs) continue;
+        const detail = await flkGetDetail(bbbs);
         if (detail.code !== 200 || !detail.data) continue;
 
         const d = detail.data;
-        const content = (d.body ?? d.content ?? '')
-          .replace(/<[^>]+>/g, '')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-          .replace(/\n{3,}/g, '\n\n').trim();
+        const title = (d.title ?? item.title ?? '').replace(/<[^>]+>/g, '').trim();
+        if (!title) continue;
 
-        if (!content) continue;
+        // Law content is delivered as a docx download, NOT in d.content (which is a tree object)
+        let content = null;
+        try {
+          content = await flkDownloadDocxText(bbbs);
+        } catch (e) {
+          process.stdout.write(` [docx失败:${e.message.slice(0, 60)}]`);
+        }
+        if (!content) {
+          process.stdout.write(` [跳过 ${title.slice(0, 20)}: 无法获取正文]\n`);
+          continue;
+        }
 
         insertLawWithChunks(db, {
-          title: d.title ?? item.title,
+          title,
           content,
-          category: d.type ?? item.type ?? '法律',
-          effective_date: d.publish ?? item.publish,
-          source_url: `https://flk.npc.gov.cn/detail2.html?${item.id ?? ''}`,
+          category: d.type ?? item.flxz ?? '法律',
+          effective_date: d.sxrq ?? item.sxrq ?? d.gbrq ?? item.gbrq,
+          source_url: `https://flk.npc.gov.cn/detail2.html?${encodeURIComponent(Buffer.from(bbbs).toString('base64'))}`,
         });
         total++;
-        await sleep(300);
+        process.stdout.write(` ✓${title.slice(0, 15)}`);
+        await sleep(400);
       }
     } catch (e) {
       console.error(`  [flk] ${keyword} 出错:`, e.message);
     }
-    await sleep(800);
+    await sleep(600);
   }
 
   console.log(`[flk] 完成，共导入 ${total} 条法律`);

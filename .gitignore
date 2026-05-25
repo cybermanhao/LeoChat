@@ -61,7 +61,11 @@ build-resources/
 .pyinstaller-spec/
 
 # Law KB seed artifacts
+.venv-seed/
 packages/law-kb-mcp/data/model/
-packages/law-kb-mcp/data/_captcha_tmp.jpg
+packages/law-kb-mcp/data/_captcha*.jpg
+packages/law-kb-mcp/data/_extracted.txt
+packages/law-kb-mcp/data/_tmp_*.docx
+packages/law-kb-mcp/data/_tmp_seed_law.docx
 # laws.db is tracked (pre-built by developer, packaged into Electron)
 # Add to git with: git add -f packages/law-kb-mcp/data/laws.db
