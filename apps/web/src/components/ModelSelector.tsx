@@ -48,8 +48,8 @@ export function ModelSelector({
   const [searchQuery, setSearchQuery] = useState("");
 
   const DEEPSEEK_MODELS = useMemo<Model[]>(() => [
-    { id: "deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
-    { id: "deepseek-reasoner", name: "DeepSeek R1", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
   ], [t]);
 
   const OPENAI_MODELS = useMemo<Model[]>(() => [
@@ -63,7 +63,7 @@ export function ModelSelector({
     { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15.00 / 1M tokens" },
     { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25 / 1M tokens" },
     { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
-    { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
+    { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
   ], [t]);
 
   const MOONSHOT_MODELS = useMemo<Model[]>(() => [

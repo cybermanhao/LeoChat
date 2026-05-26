@@ -109,11 +109,11 @@ export function ChatArea() {
           name: toolCall.name || '',
           status: (state?.status || persistedStatus || "pending") as "pending" | "running" | "success" | "error",
           arguments: toolCall.arguments,
-          result: state?.result,
-          error: state?.error,
+          result: state?.result ?? (typeof toolCall.result === "string" ? toolCall.result : undefined),
+          error: state?.error ?? (toolCall as ToolCall & { error?: string }).error,
           duration: state?.endTime && state?.startTime
             ? state.endTime - state.startTime
-            : undefined,
+            : (toolCall as ToolCall & { duration?: number }).duration,
         };
       });
     },

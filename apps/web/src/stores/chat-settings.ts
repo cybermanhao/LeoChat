@@ -10,9 +10,9 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     google: "",
   },
   currentProvider: "deepseek" as LLMProvider,
-  currentModel: "deepseek-chat",
+  currentModel: "deepseek-v4-flash",
   enableMarkdown: true,
-  maxEpochs: 10,
+  maxEpochs: 50,
   contextLevel: 5,
   uiMode: "simple" as "simple" | "professional",
   temperature: 0.7,
@@ -37,7 +37,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
   setCurrentProvider: (provider) => {
     const defaultModels: Record<LLMProvider, string> = {
-      deepseek: "deepseek-chat",
+      deepseek: "deepseek-v4-flash",
       openrouter: "anthropic/claude-3.5-sonnet",
       openai: "gpt-4o",
       moonshot: "moonshot-v1-8k",
@@ -62,7 +62,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     if (availableProviders.length > 0 && defaultProvider) {
       const provider = defaultProvider as LLMProvider;
       const defaultModels: Record<LLMProvider, string> = {
-        deepseek: "deepseek-chat",
+        deepseek: "deepseek-v4-flash",
         openrouter: "anthropic/claude-3.5-sonnet",
         openai: "gpt-4o",
         moonshot: "moonshot-v1-8k",

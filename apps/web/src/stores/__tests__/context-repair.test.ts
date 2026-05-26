@@ -18,6 +18,7 @@ function assistantMsg(content: string, toolCallIds?: string[]): ContextMessage {
       id,
       name: "some_tool",
       arguments: {},
+      status: "pending" as const,
     })),
   };
 }
@@ -74,7 +75,7 @@ describe("patchIncompleteToolCalls", () => {
     patches.forEach((p) => expect(p.role).toBe("tool"));
   });
 
-  it("部分完成：tc-1 有 result，tc-2 没有 → 只补 tc-2", () => {
+  it("部分完成：tc-1 有 result，tc-2 没有 → 只补 tc-2，插到 assistant 紧后", () => {
     const msgs: ContextMessage[] = [
       userMsg("run tools"),
       assistantMsg("calling...", ["tc-1", "tc-2"]),
@@ -84,8 +85,10 @@ describe("patchIncompleteToolCalls", () => {
     const result = patchIncompleteToolCalls(msgs);
 
     expect(result).toHaveLength(4); // 3 + 1 个补丁
-    const patch = result[3];
-    expect(patch.tool_call_id).toBe("tc-2");
+    // 补丁插到 assistant（index 1）紧后 → index 2，tc-1 result 被推到 index 3
+    expect(result[2].role).toBe("tool");
+    expect(result[2].tool_call_id).toBe("tc-2");
+    expect(result[3].tool_call_id).toBe("tc-1");
   });
 
   it("成功完成的历史（含多轮工具调用）→ no-op", () => {
@@ -119,5 +122,62 @@ describe("patchIncompleteToolCalls", () => {
   it("空数组 → 原样返回", () => {
     const msgs: ContextMessage[] = [];
     expect(patchIncompleteToolCalls(msgs)).toBe(msgs);
+  });
+
+  // ── 关键回归：补丁必须插入 assistant 消息紧后方，而非 append 末尾 ──────────
+
+  it("孤立 tool_call 后有 user 消息 → 补丁插到 assistant 紧后，不跑到 user 后面", () => {
+    const msgs: ContextMessage[] = [
+      userMsg("first"),
+      assistantMsg("calling...", ["tc-1"]),
+      // tc-1 result 缺失
+      { id: "u2", role: "user", content: "继续", timestamp: 0 },
+    ];
+    const result = patchIncompleteToolCalls(msgs);
+
+    expect(result).toHaveLength(4);
+    // 补丁应在 index 2（assistant 紧后），user "继续" 应在 index 3
+    expect(result[2].role).toBe("tool");
+    expect(result[2].tool_call_id).toBe("tc-1");
+    expect(result[3].role).toBe("user");
+    expect(result[3].content).toBe("继续");
+  });
+
+  it("多轮：中间某轮孤立，后续有完整轮 → 孤立轮就地修补，后续轮不受影响", () => {
+    const msgs: ContextMessage[] = [
+      userMsg("first"),
+      assistantMsg("round1", ["tc-1"]),
+      // tc-1 缺失（中断）
+      { id: "u2", role: "user", content: "继续", timestamp: 0 },
+      assistantMsg("round2", ["tc-2"]),
+      toolResultMsg("tc-2"),
+    ];
+    const result = patchIncompleteToolCalls(msgs);
+
+    expect(result).toHaveLength(6);
+    // 补丁在 index 2（round1 assistant 紧后）
+    expect(result[2].role).toBe("tool");
+    expect(result[2].tool_call_id).toBe("tc-1");
+    // user 继续在 index 3
+    expect(result[3].role).toBe("user");
+    // round2 assistant 在 index 4，tc-2 result 在 index 5
+    expect(result[4].role).toBe("assistant");
+    expect(result[5].tool_call_id).toBe("tc-2");
+  });
+
+  it("多个孤立 tool_call 在同一 assistant → 所有补丁都插到该 assistant 紧后", () => {
+    const msgs: ContextMessage[] = [
+      userMsg("go"),
+      assistantMsg("multi-tool", ["tc-a", "tc-b"]),
+      // 两个都缺
+      { id: "u2", role: "user", content: "继续", timestamp: 0 },
+    ];
+    const result = patchIncompleteToolCalls(msgs);
+
+    expect(result).toHaveLength(5); // 3 + 2 patches
+    expect(result[2].tool_call_id).toBe("tc-a");
+    expect(result[3].tool_call_id).toBe("tc-b");
+    expect(result[4].role).toBe("user");
+    expect(result[4].content).toBe("继续");
   });
 });

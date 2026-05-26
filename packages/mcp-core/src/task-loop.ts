@@ -519,6 +519,12 @@ export class TaskLoop {
     // 1. 按消息数截断
     if (this.contextLength > 0) {
       nonSystem = nonSystem.slice(-this.contextLength);
+      // 截断后可能从 tool/assistant(tool_calls) 消息开头，导致 API 400。
+      // 推进到第一条 user 消息作为安全起点。
+      const firstUserIdx = nonSystem.findIndex(m => m.role === "user");
+      if (firstUserIdx > 0) {
+        nonSystem = nonSystem.slice(firstUserIdx);
+      }
     }
 
     // 2. Token 感知截断：如果模型有 context 上限，按 token 估算继续截断
@@ -528,6 +534,11 @@ export class TaskLoop {
         const estimated = estimateTokens([...systemMessages, ...nonSystem]);
         if (estimated <= budget) break;
         nonSystem = nonSystem.slice(1);
+      }
+      // 同样确保不从 tool/assistant(tool_calls) 开头
+      const firstUserIdx = nonSystem.findIndex(m => m.role === "user");
+      if (firstUserIdx > 0) {
+        nonSystem = nonSystem.slice(firstUserIdx);
       }
     }
 
