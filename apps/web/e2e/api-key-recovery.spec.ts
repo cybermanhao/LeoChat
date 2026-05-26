@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { resetStateBypassOnboarding } from "./helpers";
 
 /**
  * E2E Test: API Key Invalid → Toast with action button to Settings > LLM
@@ -13,13 +14,8 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("API Key Recovery Flow", () => {
   test.beforeEach(async ({ page }) => {
-    // Clear persisted state to ensure a clean test environment
     await page.goto("/");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+    await resetStateBypassOnboarding(page);
   });
 
   test("should show toast with '去配置' action when backend sends SSE error (401)", async ({ page }) => {

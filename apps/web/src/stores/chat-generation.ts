@@ -15,6 +15,7 @@ import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
 import { getServerBaseUrl } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
+import { patchIncompleteToolCalls } from "./context-repair";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
 // TaskLoop 懒加载，避免构建顺序问题
@@ -62,7 +63,9 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const history = conv?.contextMessages || [];
     const contextSnapshot = [...history];
     const displaySnapshot = [...(conv?.displayMessages || [])];
-    const historyWithoutSystem = history.filter((m) => m.role !== "system");
+    const historyWithoutSystem = patchIncompleteToolCalls(
+      history.filter((m) => m.role !== "system")
+    );
 
     const providerConfig = LLM_PROVIDERS[currentProvider];
     const llmConfig: LLMConfig = {
@@ -300,11 +303,21 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
                     ...c,
                     displayMessages: c.displayMessages.map((msg) => ({
                       ...msg,
-                      contentItems: msg.contentItems.map((item) =>
-                        item.type === "tool-call" && (item.content as ToolCall).id === event.toolCallId
-                          ? { ...item, status: contentItemStatus }
-                          : item
-                      ),
+                      contentItems: msg.contentItems.map((item) => {
+                        if (item.type !== "tool-call") return item;
+                        const tc = item.content as ToolCall;
+                        if (tc.id !== event.toolCallId) return item;
+                        // Persist result into contentItem so it survives toolCallStates reset
+                        return {
+                          ...item,
+                          status: contentItemStatus,
+                          content: {
+                            ...tc,
+                            result: event.error ? undefined : rawResult,
+                            error: event.error,
+                          } as ToolCall,
+                        };
+                      }),
                     })),
                   }
             ),
@@ -354,24 +367,25 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
 
       case "done": {
         if (event.internalMessages) {
+          const rawContextMessages = (event.internalMessages || []).map((msg: ChatMessage) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content || "",
+            tool_calls: msg.tool_calls,
+            tool_call_id: msg.tool_call_id,
+            timestamp: msg.timestamp,
+            metadata: msg.metadata,
+          }));
+          // Always sanitize before storing — guards against orphaned tool_calls
+          // from interrupted generations or edge cases in the backend loop.
+          const safeContextMessages = patchIncompleteToolCalls(rawContextMessages);
           set((state) => ({
             cardStatus: "stable",
             isGenerating: false,
             pendingApprovals: [],
             conversations: state.conversations.map((c) =>
               c.id === chatId
-                ? {
-                    ...c,
-                    contextMessages: (event.internalMessages || []).map((msg: ChatMessage) => ({
-                      id: msg.id,
-                      role: msg.role,
-                      content: msg.content || "",
-                      tool_calls: msg.tool_calls,
-                      tool_call_id: msg.tool_call_id,
-                      timestamp: msg.timestamp,
-                      metadata: msg.metadata,
-                    })),
-                  }
+                ? { ...c, contextMessages: safeContextMessages }
                 : c
             ),
           }));

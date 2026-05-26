@@ -397,6 +397,9 @@ export const useMCPStore = create<MCPState>()(
 
           set((state) => ({
             enabledServerIds: [...state.enabledServerIds, serverId],
+            autoConnectServerIds: state.autoConnectServerIds.includes(serverId)
+              ? state.autoConnectServerIds
+              : [...state.autoConnectServerIds, serverId],
             serverStates: {
               ...state.serverStates,
               [serverId]: {
@@ -437,6 +440,7 @@ export const useMCPStore = create<MCPState>()(
 
         set((state) => ({
           enabledServerIds: state.enabledServerIds.filter((id) => id !== serverId),
+          autoConnectServerIds: state.autoConnectServerIds.filter((id) => id !== serverId),
           serverStates: {
             ...state.serverStates,
             [serverId]: {
@@ -520,7 +524,7 @@ export const useMCPStore = create<MCPState>()(
             const nodeCmd = res.node ?? "node";
             // Mirror env vars from network settings
             const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
-            const mirrorEnv = useChinaMirrors
+            const mirrorEnv: Record<string, string> = useChinaMirrors
               ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
               : {};
             // uv: bundled uv.exe on Windows prod, system uvx elsewhere

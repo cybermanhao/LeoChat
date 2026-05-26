@@ -11,10 +11,23 @@ function getDbPath(): string {
   return join(dir, 'law.db');
 }
 
-/** Copy pre-built laws.db to user data dir on first startup (if DB doesn't exist yet). */
+/** Copy pre-built laws.db to user data dir if local DB is missing or empty. */
 function initFromPrebuilt(dbPath: string): void {
   const prebuilt = process.env.LAW_PREBUILT_DB;
-  if (!prebuilt || existsSync(dbPath)) return;
+  if (!prebuilt || !existsSync(prebuilt)) return;
+
+  // Copy if DB doesn't exist, or exists but has no laws (empty schema from a prior blank run)
+  if (existsSync(dbPath)) {
+    try {
+      const tmp = new (require('node:sqlite').DatabaseSync)(dbPath);
+      const row = tmp.prepare('SELECT COUNT(*) as n FROM laws').get() as { n: number } | undefined;
+      tmp.close();
+      if ((row?.n ?? 0) > 0) return; // has data — don't overwrite
+    } catch {
+      // DB corrupted or schema missing — fall through to overwrite
+    }
+  }
+
   try {
     copyFileSync(prebuilt, dbPath);
     console.error('[law-kb] Copied pre-built laws.db to', dbPath);

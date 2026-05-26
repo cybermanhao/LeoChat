@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { resetStateBypassOnboarding } from "./helpers";
 
 /**
  * E2E Test: Missing API Key → Settings → Configure Kimi Code → Retry Successfully
@@ -18,13 +19,8 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("Kimi Code Provider Setup Flow", () => {
   test.beforeEach(async ({ page }) => {
-    // Clear persisted state to ensure a clean test environment
     await page.goto("/");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+    await resetStateBypassOnboarding(page);
   });
 
   test("should handle missing key error, navigate to settings, configure Kimi Code, and retry successfully", async ({ page }) => {
@@ -68,13 +64,13 @@ test.describe("Kimi Code Provider Setup Flow", () => {
     // Phase 2: Configure Kimi Code in settings
     // ==========================================
 
-    // Select Kimi Code provider
-    const kimiButton = page.getByRole("button", { name: /Kimi Code/ });
+    // Select Kimi (Coding) provider
+    const kimiButton = page.getByRole("button", { name: /Kimi \(Coding\)/ });
     await expect(kimiButton).toBeVisible();
     await kimiButton.click();
 
-    // Verify provider switched: API Key section should show "Kimi Code API Key"
-    await expect(page.getByText(/Kimi Code API Key/)).toBeVisible();
+    // Verify provider switched: API Key section should show "Kimi (Coding) API Key"
+    await expect(page.getByRole("heading", { name: /Kimi \(Coding\) API Key/ })).toBeVisible();
 
     // Enter API key
     const keyInput = page.locator('input[type="password"]');
@@ -90,8 +86,8 @@ test.describe("Kimi Code Provider Setup Flow", () => {
     // Verify key is saved by checking "已配置" badge appears on Kimi Code card
     await expect(page.getByText("已配置").first()).toBeVisible({ timeout: 5000 });
 
-    // Verify model is auto-selected (kimi-for-coding)
-    await expect(page.getByText("Kimi for Coding")).toBeVisible();
+    // Verify model list is shown for Kimi
+    await expect(page.getByText(/Kimi k2\.6/).first()).toBeVisible();
 
     // ==========================================
     // Phase 3: Return to chat and retry with mock success
@@ -100,8 +96,9 @@ test.describe("Kimi Code Provider Setup Flow", () => {
     // Navigate back to home page
     await page.goto("/");
 
-    // Mock Kimi Code direct API for successful SSE streaming response
-    await page.route("https://api.kimi.com/coding/chat/completions", async (route) => {
+    // Mock backend proxy to return successful SSE streaming response
+    // (app always uses useBackendProxy: true, so requests go to /api/chat)
+    await page.route("**/api/chat", async (route) => {
       await route.fulfill({
         status: 200,
         headers: {
@@ -110,11 +107,10 @@ test.describe("Kimi Code Provider Setup Flow", () => {
           "Connection": "keep-alive",
         },
         body: [
-          'data: {"id":"chatcmpl-test","choices":[{"delta":{"content":"你好"},"finish_reason":null}]}\n\n',
-          'data: {"id":"chatcmpl-test","choices":[{"delta":{"content":"，"},"finish_reason":null}]}\n\n',
-          'data: {"id":"chatcmpl-test","choices":[{"delta":{"content":"世界"},"finish_reason":null}]}\n\n',
-          'data: {"id":"chatcmpl-test","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
-          'data: [DONE]\n\n',
+          'event: chunk\ndata: {"content":"你好","index":1}\n\n',
+          'event: chunk\ndata: {"content":"，","index":2}\n\n',
+          'event: chunk\ndata: {"content":"世界","index":3}\n\n',
+          'event: complete\ndata: {"role":"assistant","content":"你好，世界"}\n\n',
         ].join(""),
       });
     });

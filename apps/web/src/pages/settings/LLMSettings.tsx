@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check, Eye, EyeOff, ExternalLink, Sparkles, RefreshCw, Search } from "lucide-react";
-import { chatApi } from "../../lib/api";
+import { getServerBaseUrl } from "../../lib/api";
 import { cn } from "@ai-chatbox/ui";
 import { useChatStore, type LLMProvider } from "../../stores/chat";
 import { useT } from "../../i18n";
@@ -84,15 +84,15 @@ export function LLMSettings() {
 
   const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
     deepseek: [
-      { id: "deepseek-chat", name: "DeepSeek Chat", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
-      { id: "deepseek-reasoner", name: "DeepSeek R1", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
+      { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
+      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
     ],
     openrouter: [
       { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3/1M" },
       { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15/1M" },
       { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25/1M" },
       { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50/1M" },
-      { id: "deepseek/deepseek-chat", name: "DeepSeek (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
+      { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
     ],
     openai: [
       { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
@@ -147,11 +147,27 @@ export function LLMSettings() {
   }, [currentProvider, providerKeys]);
 
   const handleFetchModels = async () => {
+    const keyToUse = localKey.trim() || providerKeys[currentProvider] || "";
+    if (!keyToUse) return;
     setFetchingModels(true);
     setFetchError(null);
     try {
-      const models = await chatApi.getModels(currentProvider);
-      setFetchedModels(models);
+      const serverBase = await getServerBaseUrl();
+      const res = await fetch(`${serverBase}/api/llm/models`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: currentProvider, apiKey: keyToUse }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { models: string[] };
+      if (data.models.length > 0) {
+        setFetchedModels(data.models);
+      } else {
+        setFetchError("未返回模型列表");
+      }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "获取失败");
     } finally {
@@ -172,7 +188,7 @@ export function LLMSettings() {
 
   const currentProviderInfo = PROVIDERS.find((p) => p.id === currentProvider)!;
   const models = MODELS_BY_PROVIDER[currentProvider] || [];
-  const hasKey = !!(providerKeys[currentProvider] && providerKeys[currentProvider] !== "");
+  const hasKey = !!(localKey.trim() || (providerKeys[currentProvider] && providerKeys[currentProvider] !== ""));
 
   return (
     <div className="space-y-8">

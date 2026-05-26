@@ -11,9 +11,9 @@ export const API_ENDPOINTS = {
 
 // Default models
 export const DEFAULT_MODELS = {
-  CHAT: "deepseek-chat",          // DeepSeek 为默认
-  FAST: "deepseek-chat",
-  REASONING: "deepseek-reasoner", // DeepSeek R1
+  CHAT: "deepseek-v4-flash",
+  FAST: "deepseek-v4-flash",
+  REASONING: "deepseek-v4-pro",
   // OpenRouter 模型
   OPENROUTER_CHAT: "anthropic/claude-3.5-sonnet",
   OPENROUTER_FAST: "anthropic/claude-3-haiku",
@@ -24,7 +24,7 @@ export const LLM_PROVIDERS = {
   deepseek: {
     name: "DeepSeek",
     baseURL: "https://api.deepseek.com",
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     envKey: "DEEPSEEK_API_KEY",
   },
   openrouter: {

@@ -38,7 +38,10 @@ export function handleApiError(message: string, provider?: LLMProvider): void {
     return;
   }
   if (message.includes("401") || /unauthorized|invalid.*key|api.?key/i.test(message)) {
-    showToast("API Key 无效，请在设置中检查后重试。", "destructive");
+    showToast("API Key 无效，请在设置中检查后重试。", "destructive", {
+      label: "去配置",
+      onClick: () => { window.location.href = "/settings?tab=llm"; },
+    });
     return;
   }
   if (message.includes("429") || /rate.?limit|too many request/i.test(message)) {

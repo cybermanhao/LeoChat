@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { resetStateBypassOnboarding } from "./helpers";
 
 const VALID_MCP_JSON = JSON.stringify({
   mcpServers: {
@@ -27,11 +28,7 @@ const NO_SERVERS_JSON = JSON.stringify({
 test.describe("MCP JSON Import Flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/mcp/servers");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+    await resetStateBypassOnboarding(page);
   });
 
   test("should navigate to JSON import mode from sidebar", async ({ page }) => {

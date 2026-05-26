@@ -79,6 +79,17 @@ function createWindow(): void {
     }
   });
 
+  // F12 toggles DevTools in any mode
+  mainWindow.webContents.on("before-input-event", (_e, input) => {
+    if (input.key === "F12" && input.type === "keyDown") {
+      if (mainWindow?.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow?.webContents.openDevTools();
+      }
+    }
+  });
+
   // Hard fallback: show after 1 s even if ready-to-show never fires.
   const showFallback = setTimeout(() => mainWindow?.show(), 1000);
   mainWindow.once("show", () => clearTimeout(showFallback));
