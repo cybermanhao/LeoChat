@@ -18,11 +18,12 @@ await build({
   outfile: join(root, "dist/bundle.mjs"),
   // Inject CJS globals so @xenova/transformers' require("fs") / __filename / __dirname work in ESM
   banner: {
+    // Use aliased name to avoid collision with createRequire imported by db.ts
     js: [
-      "import { createRequire } from 'module';",
+      "import { createRequire as __bannerCR } from 'module';",
       "import { fileURLToPath as __fup } from 'url';",
       "import { dirname as __dn } from 'path';",
-      "const require = createRequire(import.meta.url);",
+      "const require = __bannerCR(import.meta.url);",
       "const __filename = __fup(import.meta.url);",
       "const __dirname = __dn(__filename);",
     ].join(" "),

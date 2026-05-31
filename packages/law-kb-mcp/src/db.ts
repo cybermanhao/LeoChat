@@ -1,9 +1,24 @@
-import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { createRequire } from 'module';
 
-let db: DatabaseSync | null = null;
+const _req = createRequire(import.meta.url);
+
+// node:sqlite is Node 22.5+ only. In Electron 33 (Node 20), fall back to better-sqlite3.
+// Both libraries expose an identical synchronous API.
+function openDb(path: string): any {
+  try {
+    const { DatabaseSync } = _req('node:sqlite') as typeof import('node:sqlite');
+    return new DatabaseSync(path);
+  } catch {
+    const Bs3: any = (_req('better-sqlite3') as any).default ?? _req('better-sqlite3');
+    return new Bs3(path);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let db: any | null = null;
 
 function getDbPath(): string {
   const dir = process.env.LAW_KB_DIR ?? join(homedir(), '.leochat-for-law');
@@ -19,7 +34,7 @@ function initFromPrebuilt(dbPath: string): void {
   // Copy if DB doesn't exist, or exists but has no laws (empty schema from a prior blank run)
   if (existsSync(dbPath)) {
     try {
-      const tmp = new (require('node:sqlite').DatabaseSync)(dbPath);
+      const tmp = openDb(dbPath);
       const row = tmp.prepare('SELECT COUNT(*) as n FROM laws').get() as { n: number } | undefined;
       tmp.close();
       if ((row?.n ?? 0) > 0) return; // has data — don't overwrite
@@ -36,11 +51,12 @@ function initFromPrebuilt(dbPath: string): void {
   }
 }
 
-export function getDb(): DatabaseSync {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getDb(): any {
   if (db) return db;
   const dbPath = getDbPath();
   initFromPrebuilt(dbPath);
-  db = new DatabaseSync(dbPath);
+  db = openDb(dbPath);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   initSchema(db);
@@ -52,7 +68,9 @@ export function closeDb(): void {
   db = null;
 }
 
-function initSchema(db: DatabaseSync): void {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function initSchema(db: any): void {
+  // Regular tables — safe for node:sqlite (MCP subprocess) and better-sqlite3 (Electron)
   db.exec(`
     CREATE TABLE IF NOT EXISTS laws (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,24 +83,6 @@ function initSchema(db: DatabaseSync): void {
       created_at      TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE VIRTUAL TABLE IF NOT EXISTS laws_fts USING fts5(
-      title,
-      content,
-      tokenize = 'unicode61',
-      content = laws,
-      content_rowid = id
-    );
-
-    CREATE TRIGGER IF NOT EXISTS laws_fts_insert AFTER INSERT ON laws BEGIN
-      INSERT INTO laws_fts(rowid, title, content)
-      VALUES (new.id, new.title, new.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS laws_fts_delete AFTER DELETE ON laws BEGIN
-      INSERT INTO laws_fts(laws_fts, rowid, title, content)
-      VALUES ('delete', old.id, old.title, old.content);
-    END;
-
     CREATE TABLE IF NOT EXISTS user_docs (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       filename  TEXT NOT NULL,
@@ -90,24 +90,6 @@ function initSchema(db: DatabaseSync): void {
       file_path TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS user_docs_fts USING fts5(
-      filename,
-      content,
-      tokenize = 'unicode61',
-      content = user_docs,
-      content_rowid = id
-    );
-
-    CREATE TRIGGER IF NOT EXISTS user_docs_fts_insert AFTER INSERT ON user_docs BEGIN
-      INSERT INTO user_docs_fts(rowid, filename, content)
-      VALUES (new.id, new.filename, new.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS user_docs_fts_delete AFTER DELETE ON user_docs BEGIN
-      INSERT INTO user_docs_fts(user_docs_fts, rowid, filename, content)
-      VALUES ('delete', old.id, old.filename, old.content);
-    END;
 
     CREATE TABLE IF NOT EXISTS law_chunks (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,26 +114,126 @@ function initSchema(db: DatabaseSync): void {
       UNIQUE(doc_id, chunk_index)
     );
 
-    -- FTS5 virtual table for law chunk full-text search
-    CREATE VIRTUAL TABLE IF NOT EXISTS law_chunks_fts USING fts5(
-      content,
-      content='law_chunks',
-      content_rowid='id',
-      tokenize='unicode61'
+    CREATE TABLE IF NOT EXISTS cases (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      title           TEXT NOT NULL,
+      case_number     TEXT,
+      court           TEXT,
+      judgment_date   TEXT,
+      case_type       TEXT,
+      summary         TEXT,
+      content         TEXT NOT NULL,
+      source_url      TEXT,
+      created_at      TEXT DEFAULT (datetime('now'))
     );
 
-    -- Triggers to keep FTS index in sync with law_chunks
-    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_insert AFTER INSERT ON law_chunks BEGIN
-      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_delete AFTER DELETE ON law_chunks BEGIN
-      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS law_chunks_fts_update AFTER UPDATE ON law_chunks BEGIN
-      INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
-      INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
-    END;
+    CREATE TABLE IF NOT EXISTS case_chunks (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id         INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      chunk_index     INTEGER NOT NULL,
+      content         TEXT NOT NULL,
+      hierarchy_path  TEXT,
+      embedding       BLOB,
+      created_at      TEXT DEFAULT (datetime('now')),
+      UNIQUE(case_id, chunk_index)
+    );
   `);
+
+  // FTS5 virtual tables and triggers — only supported by better-sqlite3 (Electron HTTP server).
+  // node:sqlite (MCP subprocess, Node 22 built-in) has no FTS5; skip gracefully so MCP starts up.
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS laws_fts USING fts5(
+        title,
+        content,
+        tokenize = 'unicode61',
+        content = laws,
+        content_rowid = id
+      );
+
+      CREATE TRIGGER IF NOT EXISTS laws_fts_insert AFTER INSERT ON laws BEGIN
+        INSERT INTO laws_fts(rowid, title, content)
+        VALUES (new.id, new.title, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS laws_fts_delete AFTER DELETE ON laws BEGIN
+        INSERT INTO laws_fts(laws_fts, rowid, title, content)
+        VALUES ('delete', old.id, old.title, old.content);
+      END;
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS user_docs_fts USING fts5(
+        filename,
+        content,
+        tokenize = 'unicode61',
+        content = user_docs,
+        content_rowid = id
+      );
+
+      CREATE TRIGGER IF NOT EXISTS user_docs_fts_insert AFTER INSERT ON user_docs BEGIN
+        INSERT INTO user_docs_fts(rowid, filename, content)
+        VALUES (new.id, new.filename, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS user_docs_fts_delete AFTER DELETE ON user_docs BEGIN
+        INSERT INTO user_docs_fts(user_docs_fts, rowid, filename, content)
+        VALUES ('delete', old.id, old.filename, old.content);
+      END;
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS cases_fts USING fts5(
+        title,
+        summary,
+        content,
+        tokenize = 'unicode61',
+        content = cases,
+        content_rowid = id
+      );
+
+      CREATE TRIGGER IF NOT EXISTS cases_fts_insert AFTER INSERT ON cases BEGIN
+        INSERT INTO cases_fts(rowid, title, summary, content)
+        VALUES (new.id, new.title, new.summary, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS cases_fts_delete AFTER DELETE ON cases BEGIN
+        INSERT INTO cases_fts(cases_fts, rowid, title, summary, content)
+        VALUES ('delete', old.id, old.title, old.summary, old.content);
+      END;
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS case_chunks_fts USING fts5(
+        content,
+        content='case_chunks',
+        content_rowid='id',
+        tokenize='unicode61'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS case_chunks_fts_insert AFTER INSERT ON case_chunks BEGIN
+        INSERT INTO case_chunks_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS case_chunks_fts_delete AFTER DELETE ON case_chunks BEGIN
+        INSERT INTO case_chunks_fts(case_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+      END;
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS law_chunks_fts USING fts5(
+        content,
+        content='law_chunks',
+        content_rowid='id',
+        tokenize='unicode61'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS law_chunks_fts_insert AFTER INSERT ON law_chunks BEGIN
+        INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS law_chunks_fts_delete AFTER DELETE ON law_chunks BEGIN
+        INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS law_chunks_fts_update AFTER UPDATE ON law_chunks BEGIN
+        INSERT INTO law_chunks_fts(law_chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+        INSERT INTO law_chunks_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+    `);
+  } catch {
+    // node:sqlite (MCP subprocess) doesn't support FTS5; keyword search falls back to LIKE
+  }
 }
