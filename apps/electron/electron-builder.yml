@@ -41,6 +41,14 @@ win:
       to: "mcp-servers/excel-mcp-server.exe"
     - from: "../../build-resources/word-mcp-server.exe"
       to: "mcp-servers/word-mcp-server.exe"
+    # onnxruntime-node: placed at node_modules/onnxruntime-node so require() resolves
+    # from resources/mcp-servers/ via normal Node.js directory traversal
+    - from: "../../node_modules/onnxruntime-node/dist"
+      to: "node_modules/onnxruntime-node/dist"
+    - from: "../../node_modules/onnxruntime-node/bin/napi-v3/win32/x64"
+      to: "node_modules/onnxruntime-node/bin/napi-v3/win32/x64"
+    - from: "../../node_modules/onnxruntime-node/package.json"
+      to: "node_modules/onnxruntime-node/package.json"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

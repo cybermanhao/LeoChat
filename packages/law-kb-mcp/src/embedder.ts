@@ -14,6 +14,7 @@ function getModelDir(): string {
 }
 
 let extractor: ((text: string, opts: object) => Promise<{ data: Float32Array }>) | null = null;
+let extractorFailed = false; // true when runtime load failed; skip further attempts
 let embeddingQueue: Promise<void> = Promise.resolve();
 let isDownloading = false;
 let downloadProgress = 0;
@@ -24,25 +25,32 @@ export function getDownloadStatus(): { downloading: boolean; progress: number } 
 
 async function getExtractor() {
   if (extractor) return extractor;
-  const { pipeline, env } = await import('@xenova/transformers');
-  const modelDir = getModelDir();
-  if (!process.env.HF_ENDPOINT) process.env.HF_ENDPOINT = 'https://hf-mirror.com';
-  (env as any).allowLocalModels = true;
-  (env as any).localModelPath = modelDir;
-  extractor = await pipeline('feature-extraction', MODEL_ID, {
-    quantized: true,
-    cache_dir: modelDir,
-  }) as any;
-  return extractor!;
+  if (extractorFailed) return null;
+  try {
+    const { pipeline, env } = await import('@xenova/transformers');
+    const modelDir = getModelDir();
+    if (!process.env.HF_ENDPOINT) process.env.HF_ENDPOINT = 'https://hf-mirror.com';
+    (env as any).allowLocalModels = true;
+    (env as any).localModelPath = modelDir;
+    extractor = await pipeline('feature-extraction', MODEL_ID, {
+      quantized: true,
+      cache_dir: modelDir,
+    }) as any;
+    return extractor!;
+  } catch (err) {
+    extractorFailed = true;
+    console.error('[embedder] Runtime load failed, falling back to keyword search:', (err as Error).message);
+    return null;
+  }
 }
 
-// BGE-m3 dense retrieval: query/document use the same encoding (no instruction prefix needed)
-// mode param is retained for API clarity and future use
+// Returns null when the runtime is unavailable; callers should fall back to keyword search.
 export async function getEmbedding(
   text: string,
   _mode: 'query' | 'document' = 'document'
-): Promise<Float32Array> {
+): Promise<Float32Array | null> {
   const pipe = await getExtractor();
+  if (!pipe) return null;
   const output = await pipe(text, { pooling: 'cls', normalize: true });
   return output.data;
 }

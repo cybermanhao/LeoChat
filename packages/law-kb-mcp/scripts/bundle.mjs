@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Bundles law-kb-mcp into a single self-contained ESM file for packaging.
-// onnxruntime-node and sharp are native addons that can't be bundled.
-// We stub them inline so the ESM static import doesn't crash at load time;
-// @xenova/transformers detects the stub and falls back to WASM automatically.
+// onnxruntime-node is kept external — the packaged app ships it under
+// resources/node_modules/onnxruntime-node/ so Node.js directory traversal
+// finds it from resources/mcp-servers/ (one level up).
 import { build } from "esbuild";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -10,33 +10,12 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 
-// Plugin: replace native addons with stubs bundled inline.
-// Without this, esbuild emits static ESM `import` statements for externals,
-// and Node.js throws ERR_MODULE_NOT_FOUND before @xenova/transformers can catch it.
-const nativeStubPlugin = {
-  name: "native-stub",
-  setup(build) {
-    for (const pkg of ["onnxruntime-node", "sharp"]) {
-      build.onResolve({ filter: new RegExp(`^${pkg}$`) }, () => ({
-        path: pkg,
-        namespace: "native-stub",
-      }));
-    }
-    build.onLoad({ filter: /.*/, namespace: "native-stub" }, (args) => ({
-      // Throw so @xenova/transformers' try/catch triggers WASM fallback
-      contents: `throw new Error("${args.path} not available in packaged app — using WASM fallback");`,
-      loader: "js",
-    }));
-  },
-};
-
 await build({
   entryPoints: [join(root, "dist/index.js")],
   bundle: true,
   platform: "node",
   format: "esm",
   outfile: join(root, "dist/bundle.mjs"),
-  plugins: [nativeStubPlugin],
   // Inject CJS globals so @xenova/transformers' require("fs") / __filename / __dirname work in ESM
   banner: {
     // Use aliased name to avoid collision with createRequire imported by db.ts
@@ -53,6 +32,8 @@ await build({
     "node:*",
     "fs", "path", "os", "url", "crypto", "http", "https", "stream", "buffer",
     "util", "events", "assert", "zlib", "net", "tls", "child_process",
+    "onnxruntime-node", // shipped in resources/node_modules/onnxruntime-node/
+    "sharp",            // not needed for text-only embeddings
   ],
   minify: false,
 });

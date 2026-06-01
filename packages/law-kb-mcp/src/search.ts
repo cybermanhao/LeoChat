@@ -75,6 +75,14 @@ export async function searchLaw(query: string, limit: number): Promise<SearchRes
   }
 
   const queryEmb = await getEmbedding(safe, 'query');
+  if (!queryEmb) {
+    // Runtime unavailable — keyword-only
+    return ftsChunks
+      .slice(0, limit)
+      .map(r => buildLawResult(r.chunk_id, 0))
+      .filter((r): r is SearchResult => r !== null);
+  }
+
   const vecResults = vectorSearch('law', queryEmb, 10);
 
   const fused = rrf(
@@ -105,6 +113,10 @@ export async function searchUserDoc(query: string, limit: number): Promise<Searc
   }
 
   const queryEmb = await getEmbedding(safe, 'query');
+  if (!queryEmb) {
+    return ftsRows.slice(0, limit).map(r => buildUserDocResult(r.chunk_id, 0)).filter((r): r is SearchResult => r !== null);
+  }
+
   const vecResults = vectorSearch('user_doc', queryEmb, 10);
 
   const fused = rrf(
@@ -188,16 +200,20 @@ export async function searchCase(query: string, limit: number): Promise<SearchRe
       .filter((r): r is SearchResult => r !== null);
   } else {
     const queryEmb = await getEmbedding(safe, 'query');
-    const vecResults = vectorSearch('case', queryEmb, 10);
-    const fused = rrf(
-      ftsChunks.map(r => ({ id: r.chunk_id })),
-      vecResults.map(r => ({ id: r.chunk_id })),
-      limit
-    );
-    const simMap = new Map(vecResults.map(r => [r.chunk_id, r.similarity]));
-    results = fused
-      .map(r => buildCaseResult(r.id, simMap.get(r.id) ?? 0))
-      .filter((r): r is SearchResult => r !== null);
+    if (!queryEmb) {
+      results = ftsChunks.slice(0, limit).map(r => buildCaseResult(r.chunk_id, 0)).filter((r): r is SearchResult => r !== null);
+    } else {
+      const vecResults = vectorSearch('case', queryEmb, 10);
+      const fused = rrf(
+        ftsChunks.map(r => ({ id: r.chunk_id })),
+        vecResults.map(r => ({ id: r.chunk_id })),
+        limit
+      );
+      const simMap = new Map(vecResults.map(r => [r.chunk_id, r.similarity]));
+      results = fused
+        .map(r => buildCaseResult(r.id, simMap.get(r.id) ?? 0))
+        .filter((r): r is SearchResult => r !== null);
+    }
   }
 
   // Merge direct matches (deduplicate by case id)

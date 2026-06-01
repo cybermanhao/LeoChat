@@ -116,6 +116,7 @@ async function embedChunks(
   for (let i = 0; i < chunks.length; i++) {
     try {
       const emb = await getEmbedding(chunks[i].content, 'document');
+      if (!emb) continue;
       const buf = Buffer.from(emb.buffer, emb.byteOffset, emb.byteLength);
       db.prepare(
         `UPDATE ${tbl} SET embedding = ? WHERE ${parentCol} = ? AND chunk_index = ?`
@@ -142,6 +143,7 @@ async function embedChunksMissingOnly(
     if (chunks[i].embedding != null) continue; // already embedded
     try {
       const emb = await getEmbedding(chunks[i].content, 'document');
+      if (!emb) continue;
       const buf = Buffer.from(emb.buffer, emb.byteOffset, emb.byteLength);
       db.prepare(
         `UPDATE ${tbl} SET embedding = ? WHERE ${parentCol} = ? AND chunk_index = ?`

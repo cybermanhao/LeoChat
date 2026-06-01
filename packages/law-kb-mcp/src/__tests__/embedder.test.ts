@@ -20,7 +20,7 @@ describe('getEmbedding', () => {
   it('returns Float32Array of length 1024', async () => {
     const result = await getEmbedding('劳动合同解除');
     expect(result).toBeInstanceOf(Float32Array);
-    expect(result.length).toBe(1024);
+    expect((result as Float32Array).length).toBe(1024);
   });
 
   it('accepts mode parameter without error', async () => {
