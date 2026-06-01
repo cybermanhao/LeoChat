@@ -37,6 +37,7 @@ jobs:
       - name: Build packages
         run: |
           pnpm build:packages
+          pnpm --filter @ai-chatbox/server run build
           pnpm --filter @ai-chatbox/leochat-mcp run build
           pnpm --filter @leochat/law-kb-mcp run build
 
