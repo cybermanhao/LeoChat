@@ -47,21 +47,49 @@ export interface ChunkInput {
   hierarchy_path?: string;
 }
 
+export interface Case {
+  id: number;
+  title: string;
+  case_number: string | null;
+  court: string | null;
+  judgment_date: string | null;
+  case_type: string | null;
+  summary: string | null;
+  content: string;
+  source_url: string | null;
+  created_at: string;
+}
+
+export interface InsertCaseParams {
+  title: string;
+  case_number?: string;
+  court?: string;
+  judgment_date?: string;
+  case_type?: string;
+  summary?: string;
+  content: string;
+  source_url?: string;
+}
+
 export interface SearchResult {
   id: number;
   title: string;
   article_number: string | null;
   snippet: string;
   rank: number;
-  source: 'law' | 'user_doc';
+  source: 'law' | 'user_doc' | 'case';
   hierarchy_path?: string | null;
   chunk_id?: number;
   similarity?: number;
+  case_number?: string | null;
+  court?: string | null;
+  judgment_date?: string | null;
 }
 
 export interface KnowledgeBaseStatus {
   law_count: number;
   user_doc_count: number;
+  case_count: number;
   law_chunks_count?: number;
   user_doc_chunks_count?: number;
   model_ready?: boolean;

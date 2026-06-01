@@ -2,8 +2,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { searchLaw, getLawArticle, searchUserDoc } from './search.js';
-import { indexDocument, listKnowledgeBases, listLaws, migrateIfNeeded } from './indexer.js';
+import { searchLaw, getLawArticle, searchUserDoc, searchCase } from './search.js';
+import { indexDocument, listKnowledgeBases, listLaws, listCases, migrateIfNeeded } from './indexer.js';
 import { syncAllLaws } from './crawler/flk.js';
 
 const server = new McpServer({ name: 'law-kb-mcp', version: '2.0.0' });
@@ -62,6 +62,45 @@ server.tool(
           : `未找到 ID 为 ${id} 的法条`,
       }],
     };
+  }
+);
+
+server.tool(
+  'search_case',
+  '检索司法判例（裁判文书、指导案例），返回相关案例及裁判要旨摘要',
+  {
+    query: z.string().describe('搜索关键词或法律问题，如"股权转让纠纷"、"劳动合同解除赔偿"'),
+    limit: z.number().int().min(1).max(50).optional().default(10),
+  },
+  async ({ query, limit }) => {
+    const results = await searchCase(query, limit ?? 10);
+    return {
+      content: [{
+        type: 'text',
+        text: results.length === 0
+          ? '未找到相关判例'
+          : JSON.stringify(results, null, 2),
+      }],
+    };
+  }
+);
+
+server.tool(
+  'list_cases',
+  '列出知识库中已收录的判例，可按案件类型筛选',
+  {
+    case_type: z.string().optional().describe('按案件类型筛选，如"民事"、"刑事"、"行政"、"指导案例"。为空则列出全部'),
+  },
+  async ({ case_type }) => {
+    const cases = listCases(case_type);
+    if (cases.length === 0) {
+      return { content: [{ type: 'text', text: '判例库为空' }] };
+    }
+    const lines = [`判例库共收录 ${cases.length} 个案例：\n`];
+    for (const c of cases) {
+      lines.push(`• ${c.title}${c.case_number ? ` [${c.case_number}]` : ''}${c.court ? ` — ${c.court}` : ''}${c.judgment_date ? ` (${c.judgment_date.slice(0, 10)})` : ''}`);
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 );
 

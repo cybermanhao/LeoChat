@@ -1,7 +1,7 @@
 import { getDb } from './db.js';
 import type { ChunkInput } from './types.js';
 
-type TableName = 'law' | 'user_doc';
+type TableName = 'law' | 'user_doc' | 'case';
 
 interface CacheEntry {
   chunk_id: number;
@@ -9,13 +9,18 @@ interface CacheEntry {
   embedding: Float32Array;
 }
 
-const caches: Record<TableName, CacheEntry[] | null> = { law: null, user_doc: null };
+const caches: Record<TableName, CacheEntry[] | null> = { law: null, user_doc: null, case: null };
+
+function tableInfo(table: TableName): { tbl: string; parentCol: string } {
+  if (table === 'law') return { tbl: 'law_chunks', parentCol: 'law_id' };
+  if (table === 'case') return { tbl: 'case_chunks', parentCol: 'case_id' };
+  return { tbl: 'user_doc_chunks', parentCol: 'doc_id' };
+}
 
 function loadCache(table: TableName): CacheEntry[] {
   if (caches[table]) return caches[table]!;
   const db = getDb();
-  const tbl = table === 'law' ? 'law_chunks' : 'user_doc_chunks';
-  const parentCol = table === 'law' ? 'law_id' : 'doc_id';
+  const { tbl, parentCol } = tableInfo(table);
   const rows = db.prepare(
     `SELECT id, ${parentCol} as parent_id, embedding FROM ${tbl} WHERE embedding IS NOT NULL`
   ).all() as Array<{ id: number; parent_id: number; embedding: Uint8Array }>;
@@ -30,7 +35,7 @@ function loadCache(table: TableName): CacheEntry[] {
 
 export function invalidateCache(table?: TableName): void {
   if (table) { caches[table] = null; }
-  else { caches.law = null; caches.user_doc = null; }
+  else { caches.law = null; caches.user_doc = null; caches.case = null; }
 }
 
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
@@ -70,10 +75,12 @@ export function storeChunks(
 ): void {
   if (table === 'law') {
     storeLawChunks(parentId, chunks, embeddings);
+  } else if (table === 'case') {
+    storeCaseChunks(parentId, chunks, embeddings);
   } else {
     storeUserDocChunks(parentId, chunks, embeddings);
   }
-  caches[table] = null; // invalidate; reload lazily on next search
+  caches[table] = null;
 }
 
 function storeLawChunks(lawId: number, chunks: ChunkInput[], embeddings: Float32Array[]): void {
@@ -89,6 +96,29 @@ function storeLawChunks(lawId: number, chunks: ChunkInput[], embeddings: Float32
       insert.run(
         lawId, i, chunk.content,
         chunk.article_number ?? null,
+        chunk.hierarchy_path ?? null,
+        embeddings[i] ? float32ToBuffer(embeddings[i]) : null
+      );
+    });
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function storeCaseChunks(caseId: number, chunks: ChunkInput[], embeddings: Float32Array[]): void {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT OR REPLACE INTO case_chunks
+       (case_id, chunk_index, content, hierarchy_path, embedding)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  db.exec('BEGIN');
+  try {
+    chunks.forEach((chunk, i) => {
+      insert.run(
+        caseId, i, chunk.content,
         chunk.hierarchy_path ?? null,
         embeddings[i] ? float32ToBuffer(embeddings[i]) : null
       );
