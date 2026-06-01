@@ -188,6 +188,10 @@ async function createSSETransportAsync(
 
   const transport = new SSEClientTransport(new URL(config.url));
 
+  // SSEClientTransport establishes the actual TCP connection only when
+  // client.connect(transport) is called by the caller. We cannot validate
+  // the connection here, so we just surface the transport and let the
+  // MCP client's connect() call handle timeouts via its own AbortSignal.
   options.onStatusChange?.("connected");
   return {
     transport,

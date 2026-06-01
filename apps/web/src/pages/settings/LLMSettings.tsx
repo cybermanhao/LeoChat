@@ -120,14 +120,6 @@ export function LLMSettings() {
   const [saved, setSaved] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (savedTimerRef.current) {
-        clearTimeout(savedTimerRef.current);
-      }
-    };
-  }, []);
-
   // 模型获取状态
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);

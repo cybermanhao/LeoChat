@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Server } from "lucide-react";
-import { Button } from "@ai-chatbox/ui";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Server, FileJson, FormInput } from "lucide-react";
+import { Button, cn } from "@ai-chatbox/ui";
 import { useT } from "../../i18n";
 import { useMCPStore } from "../../stores/mcp";
 import { ServerForm } from "../../components/mcp/ServerForm";
+import { McpJsonImporter } from "../../components/mcp/McpJsonImporter";
 import type { MCPServerConfigValidated } from "@ai-chatbox/shared";
 
 export function MCPServerAddPage() {
   const { t } = useT();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const addServer = useMCPStore((s) => s.addServer);
   const setAutoConnect = useMCPStore((s) => s.setAutoConnect);
   const [isSaving, setIsSaving] = useState(false);
+  const [mode, setMode] = useState<"form" | "json">(() => {
+    return searchParams.get("mode") === "json" ? "json" : "form";
+  });
 
   const handleSave = async (data: MCPServerConfigValidated) => {
     setIsSaving(true);
@@ -46,6 +51,20 @@ export function MCPServerAddPage() {
     navigate("/mcp/servers");
   };
 
+  const handleJsonImport = (servers: MCPServerConfigValidated[]) => {
+    servers.forEach((config, index) => {
+      const serverId = `custom-${Date.now()}-${index}`;
+      addServer("custom", {
+        ...config,
+        id: serverId,
+      });
+      if (config.autoConnect) {
+        setAutoConnect(serverId, true);
+      }
+    });
+    navigate("/mcp/servers");
+  };
+
   return (
     <div className="h-full flex flex-col overflow-y-auto bg-background">
       {/* Header */}
@@ -73,21 +92,76 @@ export function MCPServerAddPage() {
       {/* Content */}
       <div className="flex-1 max-w-5xl mx-auto px-6 py-6 w-full">
         <div className="bg-card rounded-lg border p-6">
-          <div className="flex items-start gap-4 mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
-            <Server className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-blue-900 mb-1">{t("mcp.serverAdd.infoTitle")}</p>
-              <p className="text-blue-700">
-                {t("mcp.serverAdd.infoDesc")}
-              </p>
-            </div>
+          {/* Mode tabs */}
+          <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-muted/50 border">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "form"}
+              onClick={() => setMode("form")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+                mode === "form"
+                  ? "bg-card text-foreground shadow-sm border"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <FormInput className="h-4 w-4" />
+              {t("mcp.jsonImport.tabForm")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "json"}
+              onClick={() => setMode("json")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+                mode === "json"
+                  ? "bg-card text-foreground shadow-sm border"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <FileJson className="h-4 w-4" />
+              {t("mcp.jsonImport.tabJson")}
+            </button>
           </div>
 
-          <ServerForm
-            onSubmit={handleSave}
-            onCancel={handleCancel}
-            submitLabel={isSaving ? t("mcp.adding") : t("mcp.addServer")}
-          />
+          {mode === "form" ? (
+            <>
+              <div className="flex items-start gap-4 mb-6 p-4 rounded-lg bg-primary/5 border border-primary/10">
+                <Server className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-foreground mb-1">{t("mcp.serverAdd.infoTitle")}</p>
+                  <p className="text-muted-foreground">
+                    {t("mcp.serverAdd.infoDesc")}
+                  </p>
+                </div>
+              </div>
+
+              <ServerForm
+                onSubmit={handleSave}
+                onCancel={handleCancel}
+                submitLabel={isSaving ? t("mcp.adding") : t("mcp.addServer")}
+              />
+            </>
+          ) : (
+            <>
+              <div className="flex items-start gap-4 mb-6 p-4 rounded-lg bg-primary/5 border border-primary/10">
+                <FileJson className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-foreground mb-1">{t("mcp.jsonImport.infoTitle")}</p>
+                  <p className="text-muted-foreground">
+                    {t("mcp.jsonImport.infoDesc")}
+                  </p>
+                </div>
+              </div>
+
+              <McpJsonImporter
+                onImport={handleJsonImport}
+                onCancel={handleCancel}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

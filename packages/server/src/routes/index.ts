@@ -99,6 +99,8 @@ export function createRoutes(context: ServerContext) {
       stream.onAbort(() => {
         aborted = true;
         abortController.abort();
+        // Immediately reject any bash approvals that are waiting, so their
+        // Promises don't hang for the full 60s timeout.
         for (const [id, resolve] of context.pendingApprovals) {
           context.pendingApprovals.delete(id);
           resolve(false);
@@ -349,7 +351,7 @@ export function createRoutes(context: ServerContext) {
     }
 
     const providerUrls: Record<string, string> = {
-      deepseek: "https://api.deepseek.com/models",
+      deepseek: "https://api.deepseek.com/v1/models",
       openrouter: "https://openrouter.ai/api/v1/models",
       openai: "https://api.openai.com/v1/models",
       moonshot: "https://api.moonshot.cn/v1/models",
@@ -419,7 +421,7 @@ export function createRoutes(context: ServerContext) {
       }
 
       const baseURLs: Record<string, string> = {
-        deepseek: "https://api.deepseek.com",
+        deepseek: "https://api.deepseek.com/v1",
         openrouter: "https://openrouter.ai/api/v1",
         openai: "https://api.openai.com/v1",
         moonshot: "https://api.moonshot.cn/v1",
@@ -611,7 +613,6 @@ export function createRoutes(context: ServerContext) {
     resolve(body.approved === true);
     return c.json({ success: true });
   });
-
 
   // Image proxy
   app.get("/proxy/image", async (c) => {

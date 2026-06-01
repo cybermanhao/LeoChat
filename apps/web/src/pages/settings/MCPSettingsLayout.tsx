@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Plus, CheckCircle2, XCircle, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
+import { Plus, FileJson, CheckCircle2, XCircle, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
 import { Button, Separator, cn } from "@ai-chatbox/ui";
+import { useT } from "../../i18n";
 import {
   ThreeColumnLayout,
   LeftDrawer,
@@ -33,6 +34,7 @@ const ENV_META: Array<{
 ];
 
 function MCPSidebar() {
+  const { t } = useT();
   const navigate = useNavigate();
   const [tools, setTools] = useState<EnvToolStatus[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,7 +74,15 @@ function MCPSidebar() {
             onClick={() => navigate("/mcp/servers/add")}
           >
             <Plus className="h-4 w-4" />
-            添加 MCP
+            {t("mcp.addServer")}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => navigate("/mcp/servers/add?mode=json")}
+          >
+            <FileJson className="h-4 w-4" />
+            {t("mcp.jsonImport.fromJson")}
           </Button>
 
           <Separator />

@@ -376,6 +376,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             timestamp: msg.timestamp,
             metadata: msg.metadata,
           }));
+          // Always sanitize before storing — guards against orphaned tool_calls
+          // from interrupted generations or edge cases in the backend loop.
           const safeContextMessages = patchIncompleteToolCalls(rawContextMessages);
           set((state) => ({
             cardStatus: "stable",

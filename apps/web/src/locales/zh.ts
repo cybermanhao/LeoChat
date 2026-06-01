@@ -93,6 +93,10 @@ const zh: TranslationDictionary = {
       "linkTextOpenAI": "前往 OpenAI 获取",
       "descriptionMoonshot": "月之暗面 Kimi，支持超长上下文，最高 128K tokens",
       "linkTextMoonshot": "前往 Moonshot 获取",
+      "descriptionKimiCode": "Kimi Code，专为编程优化的模型，支持 Anthropic API 格式",
+      "linkTextKimiCode": "前往 Kimi 获取",
+      "descriptionGoogle": "Google Gemini，多模态大模型，超长上下文",
+      "linkTextGoogle": "前往 Google AI Studio 获取",
       "getConfigured": "已配置",
       "saveSuccess": "保存成功",
       "save": "保存",
@@ -161,12 +165,17 @@ const zh: TranslationDictionary = {
       "opus": { "description": "最强大的 Claude 模型" }
     },
     "google": {
-      "geminiPro": { "description": "超长上下文窗口" }
+      "geminiPro": { "description": "超长上下文窗口，支持最多 200 万 token" },
+      "geminiFlash": { "description": "快速高效的多模态模型" },
+      "geminiFlashThinking": { "description": "支持推理过程的实验性模型" }
     },
     "moonshot": {
       "8k": { "description": "适合短文本对话，响应快速" },
       "32k": { "description": "适合长文档处理，平衡速度与能力" },
       "128k": { "description": "超长上下文，可处理整本书" }
+    },
+    "kimiCode": {
+      "description": "专为编程场景优化的 Kimi 模型"
     },
     "common": {
       "viaOpenRouter": "通过 OpenRouter 访问"
@@ -363,6 +372,29 @@ const zh: TranslationDictionary = {
       "subtitle": "配置新的模型上下文协议服务器",
       "infoTitle": "添加 MCP 服务器",
       "infoDesc": "填写以下信息以添加新的 MCP 服务器。STDIO 类型适用于本地进程通信，HTTP 类型适用于远程服务器连接。"
+    },
+    "jsonImport": {
+      "fromJson": "从 JSON 导入",
+      "tabForm": "手动填写",
+      "tabJson": "JSON 导入",
+      "infoTitle": "从 JSON 导入 MCP 服务器",
+      "infoDesc": "粘贴 claude_desktop_config.json 或 mcp.json 的内容，快速批量导入服务器配置。",
+      "pasteLabel": "粘贴配置",
+      "placeholder": '{\n  "mcpServers": {\n    "memory": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-memory"]\n    }\n  }\n}',
+      "hint": "支持 Claude Desktop / OpenMCP 标准格式（mcpServers 对象），也支持直接粘贴服务器配置对象。",
+      "parse": "解析配置",
+      "previewTitle": "发现 {{count}} 个服务器",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "selectedCount": "已选择 {{count}} / {{total}} 个",
+      "import": "导入选中项",
+      "importSuccess": "成功导入 {{count}} 个服务器",
+      "importFailed": "导入失败，请检查配置",
+      "errorEmpty": "请输入 JSON 配置内容",
+      "errorInvalidJson": "JSON 格式无效，请检查语法",
+      "errorNoServers": "未找到 mcpServers 配置对象",
+      "errorNoValidServers": "未找到有效的服务器配置（STDIO 需要 command，HTTP 需要 url）",
+      "errorNoSelection": "请至少选择一个服务器导入"
     },
     "sources": {
       "builtin": "内置服务",

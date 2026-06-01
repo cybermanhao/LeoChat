@@ -77,9 +77,6 @@ export interface ConversationsSlice {
   currentConversationId: string | null;
   input: string;
 
-  displayMessages: DisplayMessage[];
-  contextMessages: ContextMessage[];
-
   setInput: (input: string) => void;
   createConversation: () => string;
   setCurrentConversation: (id: string) => void;
@@ -94,6 +91,8 @@ export interface ConversationsSlice {
     delta: { content_delta?: string; reasoning_delta?: string; tool_calls?: ToolCall[] }
   ) => void;
 }
+
+// ─── Bash approval (tool-call permission gate) ───────────────────
 
 export interface PendingApproval {
   id: string;
@@ -116,7 +115,7 @@ export interface GenerationSlice {
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
   /** Approve this call AND mark toolName as auto-approved for the rest of the session */
-  allowToolForSession: (id: string, toolName: string) => void;
+  allowToolForSession: (approvalId: string, toolName: string) => void;
   _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
 }
 
