@@ -1,12 +1,13 @@
 import { showToast } from "../stores/toast";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
-const PROVIDER_TOP_UP: Record<LLMProvider, { label: string; url: string }> = {
+const PROVIDER_TOP_UP: Partial<Record<LLMProvider, { label: string; url: string }>> = {
   deepseek:   { label: "去充值", url: "https://platform.deepseek.com/top_up" },
   openai:     { label: "去充值", url: "https://platform.openai.com/account/billing" },
   openrouter: { label: "去充值", url: "https://openrouter.ai/credits" },
   moonshot:   { label: "去充值", url: "https://console.moonshot.cn/billing" },
+  kimi:       { label: "去充值", url: "https://platform.moonshot.cn/console/billing" },
 };
 
 /** 判断错误是否属于"余额/配额不足" */
@@ -37,7 +38,10 @@ export function handleApiError(message: string, provider?: LLMProvider): void {
     return;
   }
   if (message.includes("401") || /unauthorized|invalid.*key|api.?key/i.test(message)) {
-    showToast("API Key 无效，请在设置中检查后重试。", "destructive");
+    showToast("API Key 无效，请在设置中检查后重试。", "destructive", {
+      label: "去配置",
+      onClick: () => { window.location.href = "/settings?tab=llm"; },
+    });
     return;
   }
   if (message.includes("429") || /rate.?limit|too many request/i.test(message)) {

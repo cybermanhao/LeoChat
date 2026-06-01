@@ -6,11 +6,42 @@ directories:
 files:
   - out/**/*
   - package.json
+  # Exclude non-Windows native module binaries to keep Windows zip size down
+  - "!**/onnxruntime-node/bin/napi-v3/darwin{,/**}"
+  - "!**/onnxruntime-node/bin/napi-v3/linux{,/**}"
+  - "!**/onnxruntime-node/bin/napi-v3/win32/arm64{,/**}"
+  - "!**/sharp/vendor/**/linux{,/**}"
+  - "!**/sharp/vendor/**/darwin{,/**}"
+  - "!**/better-sqlite3/deps/sqlite3/sqlite3.c"
+extraResources:
+  - from: "../../packages/leochat-mcp/dist/index.js"
+    to: "leochat-mcp.js"
+  - from: "../../build-resources/mcp-bundles/filesystem.js"
+    to: "mcp-servers/filesystem.js"
+  - from: "../../build-resources/mcp-bundles/everything.js"
+    to: "mcp-servers/everything.js"
+  - from: "../../node_modules/@modelcontextprotocol/server-memory/dist/index.js"
+    to: "mcp-servers/memory.js"
+  - from: "../../build-resources/mcp-bundles/fetch.js"
+    to: "mcp-servers/fetch.js"
+  - from: "../../build-resources/mcp-bundles/xhr-sync-worker.js"
+    to: "mcp-servers/xhr-sync-worker.js"
 extraMetadata:
   main: out/main/index.js
 win:
   target:
-    - nsis
+    - zip
+  signingHashAlgorithms:
+    - sha256
+  extraResources:
+    - from: "../../build-resources/node.exe"
+      to: "node.exe"
+    - from: "../../build-resources/uv.exe"
+      to: "uv.exe"
+    - from: "../../mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe"
+      to: "mcp-servers/excel-mcp-server.exe"
+    - from: "../../build-resources/word-mcp-server.exe"
+      to: "mcp-servers/word-mcp-server.exe"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

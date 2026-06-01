@@ -9,7 +9,7 @@ import {
 import { Sparkles, Check, ExternalLink } from "lucide-react";
 import { useT } from "../i18n";
 
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot";
+type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 interface Model {
   id: string;
@@ -25,6 +25,8 @@ const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
   openai: { name: "OpenAI", link: "https://platform.openai.com" },
   openrouter: { name: "OpenRouter", link: "https://openrouter.ai/models" },
   moonshot: { name: "Moonshot (Kimi)", link: "https://platform.moonshot.cn" },
+  kimi: { name: "Kimi (Coding)", link: "https://platform.moonshot.cn/console/api-keys" },
+  google: { name: "Google Gemini", link: "https://aistudio.google.com/app/apikey" },
 };
 
 interface ModelSelectorProps {
@@ -46,8 +48,8 @@ export function ModelSelector({
   const [searchQuery, setSearchQuery] = useState("");
 
   const DEEPSEEK_MODELS = useMemo<Model[]>(() => [
-    { id: "deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
-    { id: "deepseek-reasoner", name: "DeepSeek R1", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
   ], [t]);
 
   const OPENAI_MODELS = useMemo<Model[]>(() => [
@@ -61,7 +63,7 @@ export function ModelSelector({
     { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15.00 / 1M tokens" },
     { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25 / 1M tokens" },
     { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
-    { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
+    { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
   ], [t]);
 
   const MOONSHOT_MODELS = useMemo<Model[]>(() => [
@@ -70,12 +72,25 @@ export function ModelSelector({
     { id: "moonshot-v1-128k", name: "Moonshot v1 128K", provider: "Moonshot", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60 / 1M tokens" },
   ], [t]);
 
+  const KIMI_MODELS = useMemo<Model[]>(() => [
+    { id: "kimi-code", name: "Kimi k2.6", provider: "Kimi", description: "Kimi coding model — 262K context", contextWindow: 262144 },
+    { id: "kimi-for-coding", name: "Kimi k2.6 (upstream ID)", provider: "Kimi", contextWindow: 262144 },
+  ], []);
+
+  const GOOGLE_MODELS = useMemo<Model[]>(() => [
+    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", description: "Fast and efficient Gemini model", contextWindow: 1000000, pricing: "$0.10 / 1M tokens" },
+    { id: "gemini-2.0-flash-thinking-exp", name: "Gemini 2.0 Flash Thinking", provider: "Google", description: "Gemini with extended thinking", contextWindow: 1000000, pricing: "$0.10 / 1M tokens" },
+    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google", description: "Powerful multimodal model", contextWindow: 2000000, pricing: "$1.25 / 1M tokens" },
+  ], []);
+
   const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
     deepseek: DEEPSEEK_MODELS,
     openai: OPENAI_MODELS,
     openrouter: OPENROUTER_MODELS,
     moonshot: MOONSHOT_MODELS,
-  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS]);
+    kimi: KIMI_MODELS,
+    google: GOOGLE_MODELS,
+  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS, KIMI_MODELS, GOOGLE_MODELS]);
 
   const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const providerInfo = PROVIDER_INFO[currentProvider];

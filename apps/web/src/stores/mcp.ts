@@ -9,9 +9,17 @@ import type {
   MCPTool,
 } from "@ai-chatbox/shared";
 import { mcpApi } from "../lib/api";
+import { useNetworkStore } from "./network";
 
 // 内置服务预设 (使用官方 MCP 服务器包)
 const BUILTIN_SERVERS: MCPServerConfig[] = [
+  {
+    id: "law-kb",
+    name: "法律知识库",
+    transport: "stdio",
+    command: "node",
+    args: ["--experimental-sqlite", "../../packages/law-kb-mcp/dist/index.js"],
+  },
   {
     id: "leochat",
     name: "LeoChat",
@@ -55,6 +63,13 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     command: "uvx",
     args: ["excel-mcp-server", "stdio"],
     env: { EXCEL_MCP_PAGING_CELLS_LIMIT: "4000" },
+  },
+  {
+    id: "word",
+    name: "Word",
+    transport: "stdio",
+    command: "uvx",
+    args: ["--from", "office-word-mcp-server", "word_mcp_server"],
   },
 ];
 
@@ -122,7 +137,7 @@ interface MCPState {
   autoConnectAll: () => Promise<void>;
 
   // 初始化
-  initBuiltinServers: () => void;
+  initBuiltinServers: () => Promise<void>;
   syncWithBackend: () => Promise<void>;
 }
 
@@ -158,11 +173,13 @@ export const useMCPStore = create<MCPState>()(
       connectingServerIds: new Set<string>(),
       serverVersions: {},
       searchText: "",
-      disabledToolIds: new Set<string>(
-        !(window as Window & { electronAPI?: unknown }).electronAPI
+      disabledToolIds: new Set<string>([
+        // bash 在法律助手场景下默认关闭，避免误执行系统命令
+        "leochat:bash",
+        ...(!(window as Window & { electronAPI?: unknown }).electronAPI
           ? ["leochat:resize_window"]
-          : []
-      ),
+          : []),
+      ]),
 
       // 新增方法：连接状态管理
       setConnecting: (serverId, connecting) => {
@@ -380,6 +397,9 @@ export const useMCPStore = create<MCPState>()(
 
           set((state) => ({
             enabledServerIds: [...state.enabledServerIds, serverId],
+            autoConnectServerIds: state.autoConnectServerIds.includes(serverId)
+              ? state.autoConnectServerIds
+              : [...state.autoConnectServerIds, serverId],
             serverStates: {
               ...state.serverStates,
               [serverId]: {
@@ -420,6 +440,7 @@ export const useMCPStore = create<MCPState>()(
 
         set((state) => ({
           enabledServerIds: state.enabledServerIds.filter((id) => id !== serverId),
+          autoConnectServerIds: state.autoConnectServerIds.filter((id) => id !== serverId),
           serverStates: {
             ...state.serverStates,
             [serverId]: {
@@ -491,27 +512,110 @@ export const useMCPStore = create<MCPState>()(
       },
 
       // 初始化
-      initBuiltinServers: () => {
+      initBuiltinServers: async () => {
+        // In Electron, resolve all built-in server paths via IPC so they work in
+        // both dev (monorepo paths) and packaged app (extraResource paths).
+        let builtinServers = BUILTIN_SERVERS;
+        const electronAPI = (window as unknown as { electronAPI?: { invoke?: (ch: string) => Promise<unknown> } }).electronAPI;
+        if (electronAPI?.invoke) {
+          try {
+            const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
+            // Use the resolved node binary path (bundled node.exe on Windows prod, system node elsewhere)
+            const nodeCmd = res.node ?? "node";
+            // Mirror env vars from network settings
+            const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
+            const mirrorEnv: Record<string, string> = useChinaMirrors
+              ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
+              : {};
+            // uv: bundled uv.exe on Windows prod, system uvx elsewhere
+            // For word (office-word-mcp-server via uvx): use `uv tool run` with bundled uv
+            const uvCmd = res.uv ?? "uvx";
+            const uvIsUvx = uvCmd === "uvx"; // dev/non-Windows: uvx command already handles tool run
+            builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
+              switch (s.id) {
+                case "law-kb": {
+                  if (!res["law-kb"]) return s;
+                  const lawEnv = {
+                    ...s.env,
+                    ...mirrorEnv,
+                    ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
+                    ...(res.lawModelDir ? { LAW_MODEL_DIR: res.lawModelDir as string } : {}),
+                  };
+                  return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
+                }
+                case "leochat":
+                  return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
+                case "filesystem":
+                  return res.filesystem ? { ...s, command: nodeCmd, args: [res.filesystem] } : s;
+                case "everything":
+                  return res.everything ? { ...s, command: nodeCmd, args: [res.everything] } : s;
+                case "memory":
+                  return res.memory ? { ...s, command: nodeCmd, args: [res.memory] } : s;
+                case "fetch":
+                  return res.fetch ? { ...s, command: nodeCmd, args: [res.fetch] } : s;
+                case "excel":
+                  return res.excel
+                    ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
+                    : { ...s, env: { ...s.env, ...mirrorEnv } };
+                case "word": {
+                  // Prefer bundled exe (packaged app); fall back to uv/uvx for dev
+                  if (res.word) {
+                    return { ...s, command: res.word, args: [], env: { ...s.env, ...mirrorEnv } };
+                  }
+                  const uvDataDir = res.uvDataDir as string | undefined;
+                  const uvEnv = {
+                    ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),
+                    ...mirrorEnv,
+                  };
+                  return uvIsUvx
+                    ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
+                    : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
+                }
+                default:
+                  return s;
+              }
+            });
+          } catch {
+            // fall through with default paths
+          }
+        }
+
         // 同步内置服务列表：新增/删除跟随 BUILTIN_SERVERS，保留用户对已有服务器的修改
         set((state) => {
-          const validServerIds = new Set(BUILTIN_SERVERS.map((s) => s.id));
+          const validServerIds = new Set(builtinServers.map((s) => s.id));
 
           // 保留用户对 builtin 服务器的修改（如 env、args、timeout 等）
           const currentBuiltinSource = state.sources.find((s) => s.id === "builtin");
           const currentBuiltinMap = new Map(
             (currentBuiltinSource?.servers || []).map((s) => [s.id, s])
           );
-          const mergedBuiltin = BUILTIN_SERVERS.map((s) =>
-            currentBuiltinMap.get(s.id) || s
-          );
+          // IPC 解析路径的服务器每次都用新路径，不保留持久化的旧路径
+          // 对于 filesystem，保留用户配置的目录（args[1+]）
+          const PATH_RESOLVED = new Set(["law-kb", "leochat", "filesystem", "everything", "memory", "fetch", "excel", "word"]);
+          const mergedBuiltin = builtinServers.map((s) => {
+            if (!PATH_RESOLVED.has(s.id)) {
+              return currentBuiltinMap.get(s.id) || s;
+            }
+            if (s.id === "filesystem") {
+              const persisted = currentBuiltinMap.get(s.id);
+              const allowedDirs = persisted?.args?.slice(1) ?? [];
+              return allowedDirs.length > 0
+                ? { ...s, args: [s.args![0], ...allowedDirs] }
+                : s;
+            }
+            return s;
+          });
 
           // 获取自定义服务
           const customSource = state.sources.find((s) => s.id === "custom");
           const customServers = customSource?.servers || [];
           customServers.forEach((s) => validServerIds.add(s.id));
 
-          // 过滤掉不存在的服务器的 enabledServerIds
+          // 过滤掉不存在的服务器的 enabledServerIds / autoConnectServerIds
           const validEnabledIds = state.enabledServerIds.filter((id) =>
+            validServerIds.has(id)
+          );
+          const validAutoConnectIds = state.autoConnectServerIds.filter((id) =>
             validServerIds.has(id)
           );
 
@@ -521,6 +625,16 @@ export const useMCPStore = create<MCPState>()(
               validServerIds.has(id)
             )
           );
+
+          // Fresh install: apply defaults when user has never configured anything
+          const DEFAULT_ENABLED = ["leochat", "law-kb", "filesystem"];
+          const isFreshInstall = validEnabledIds.length === 0 && validAutoConnectIds.length === 0;
+          const finalEnabledIds = isFreshInstall
+            ? DEFAULT_ENABLED.filter((id) => validServerIds.has(id))
+            : validEnabledIds;
+          const finalAutoConnectIds = isFreshInstall
+            ? DEFAULT_ENABLED.filter((id) => validServerIds.has(id))
+            : validAutoConnectIds;
 
           return {
             sources: [
@@ -537,7 +651,8 @@ export const useMCPStore = create<MCPState>()(
                 servers: customServers,
               },
             ],
-            enabledServerIds: validEnabledIds,
+            enabledServerIds: finalEnabledIds,
+            autoConnectServerIds: finalAutoConnectIds,
             serverStates: validServerStates,
           };
         });
@@ -554,7 +669,7 @@ export const useMCPStore = create<MCPState>()(
               newServerStates[session.serverId] = {
                 ...newServerStates[session.serverId],
                 serverId: session.serverId,
-                enabled: session.status === "connected" || session.status === "reconnecting",
+                enabled: session.status === "connected",
                 session,
               };
             }
@@ -615,6 +730,8 @@ export const useMCPStore = create<MCPState>()(
           autoConnectServerIds: persistedData.autoConnectServerIds || [],
           disabledToolIds: (() => {
             const set = new Set<string>(persistedData.disabledToolIds || []);
+            // Always enforce these defaults regardless of persisted state
+            set.add("leochat:bash");
             if (!(window as Window & { electronAPI?: unknown }).electronAPI) {
               set.add("leochat:resize_window");
             }

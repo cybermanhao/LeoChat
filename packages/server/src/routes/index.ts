@@ -99,6 +99,12 @@ export function createRoutes(context: ServerContext) {
       stream.onAbort(() => {
         aborted = true;
         abortController.abort();
+        // Immediately reject any bash approvals that are waiting, so their
+        // Promises don't hang for the full 60s timeout.
+        for (const [id, resolve] of context.pendingApprovals) {
+          context.pendingApprovals.delete(id);
+          resolve(false);
+        }
       });
 
       // Safe write helper: swallows errors after abort so we don't double-throw
@@ -137,7 +143,39 @@ export function createRoutes(context: ServerContext) {
                 hasToolCalls = true;
                 currentToolCalls.push(toolCall);
 
-                await safeWrite("tool_call", JSON.stringify(toolCall));
+                // Bash requires interactive user approval before execution
+                if (toolCall.name === "bash") {
+                  const command = (toolCall.arguments as { command?: string }).command || "";
+                  // Notify frontend: emit tool_call first so UI shows the pending tool, then request approval
+                  await safeWrite("tool_call", JSON.stringify(toolCall));
+                  await safeWrite("tool_approval_required", JSON.stringify({
+                    requiresApproval: true,
+                    id: toolCall.id,
+                    toolName: "bash",
+                    command,
+                  }));
+
+                  const approved = await new Promise<boolean>((resolve) => {
+                    context.pendingApprovals.set(toolCall.id, resolve);
+                    setTimeout(() => {
+                      if (context.pendingApprovals.has(toolCall.id)) {
+                        context.pendingApprovals.delete(toolCall.id);
+                        resolve(false);
+                      }
+                    }, 60000);
+                  });
+
+                  if (!approved) {
+                    const denied = "用户拒绝执行此命令";
+                    await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: denied }));
+                    toolCall.status = "error";
+                    toolCall.result = { error: denied };
+                    return;
+                  }
+                  // Approved — fall through to execute the tool
+                } else {
+                  await safeWrite("tool_call", JSON.stringify(toolCall));
+                }
 
                 // Execute tool
                 try {
@@ -184,10 +222,12 @@ export function createRoutes(context: ServerContext) {
           // Strip result/status from tool_calls — they don't belong in the assistant
           // message per OpenAI spec, and keeping them was the main source of the
           // oversized final SSE event.
+          const completedMsg = completedMessage as ChatMessage | null;
           const assistantMessage: ChatMessage = {
             id: `assistant-${Date.now()}-${toolRound}`,
             role: "assistant",
-            content: (completedMessage as ChatMessage | null)?.content || "",
+            content: completedMsg?.content || "",
+            reasoning_content: completedMsg?.reasoning_content,
             tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
               id,
               name,
@@ -256,7 +296,7 @@ export function createRoutes(context: ServerContext) {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
     const { provider, apiKey } = body;
-    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot"];
+    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi"];
     if (!provider || !validProviders.includes(provider)) {
       return c.json({ error: "provider must be one of: " + validProviders.join(", ") }, 400);
     }
@@ -272,6 +312,141 @@ export function createRoutes(context: ServerContext) {
       availableProviders: llmService.getAvailableProviders(),
       defaultProvider: llmService.getDefaultProvider(),
     });
+  });
+
+  // List models from provider's /v1/models endpoint
+  app.get("/llm/models", async (c) => {
+    const provider = c.req.query("provider") as LLMProvider;
+    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi"];
+    if (!provider || !validProviders.includes(provider)) {
+      return c.json({ error: "Invalid provider" }, 400);
+    }
+    try {
+      const models = await llmService.listModels(provider);
+      return c.json({ models });
+    } catch (error) {
+      console.error("[Models Error]", error);
+      return c.json({ error: "Failed to fetch models" }, 502);
+    }
+  });
+
+  // POST /api/llm/test-connection
+  app.post("/llm/test-connection", async (c) => {
+    let body: { provider: string; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ success: false, error: "Invalid JSON body" }, 400);
+    }
+
+    const { provider, apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.length > 2048) {
+      return c.json({ success: false, error: "Invalid API key" }, 400);
+    }
+
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"] as const;
+    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+      return c.json({ success: false, error: "Unknown provider" }, 400);
+    }
+
+    const providerUrls: Record<string, string> = {
+      deepseek: "https://api.deepseek.com/v1/models",
+      openrouter: "https://openrouter.ai/api/v1/models",
+      openai: "https://api.openai.com/v1/models",
+      moonshot: "https://api.moonshot.cn/v1/models",
+      "kimi": "https://api.moonshot.cn/v1/models",
+      google: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    };
+
+    const url = providerUrls[provider];
+    const headers: Record<string, string> = {};
+    if (provider !== "google") {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url, { method: "GET", headers, signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        return c.json({ success: true });
+      }
+      return c.json({ success: false, error: "Authentication failed" });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ success: false, error: "Connection timed out" });
+      }
+      console.error("[LLM test-connection]", err);
+      return c.json({ success: false, error: "Connection failed" });
+    }
+  });
+
+  // POST /api/llm/models — fetch model list with caller-supplied key (used during onboarding)
+  app.post("/llm/models", async (c) => {
+    let body: { provider: string; apiKey: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const { provider, apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.length > 2048) {
+      return c.json({ error: "Invalid API key" }, 400);
+    }
+
+    const ALLOWED_PROVIDERS = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"] as const;
+    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+      return c.json({ error: "Unknown provider" }, 400);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      if (provider === "google") {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) return c.json({ error: "Failed to fetch models" }, 502);
+        const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+        const models = (data.models ?? [])
+          .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+          .map((m) => m.name.replace(/^models\//, ""))
+          .filter(Boolean);
+        return c.json({ models });
+      }
+
+      const baseURLs: Record<string, string> = {
+        deepseek: "https://api.deepseek.com/v1",
+        openrouter: "https://openrouter.ai/api/v1",
+        openai: "https://api.openai.com/v1",
+        moonshot: "https://api.moonshot.cn/v1",
+        kimi: "https://api.moonshot.cn/v1",
+      };
+      const res = await fetch(`${baseURLs[provider]}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return c.json({ error: "Failed to fetch models" }, 502);
+      const data = await res.json() as { data?: Array<{ id: string }> };
+      let models = (data.data ?? []).map((m) => m.id).filter(Boolean).sort();
+      if (provider === "openai") {
+        models = models.filter((id) => /^(gpt-|o[1-9]|o[1-9]-|chatgpt-)/.test(id));
+      }
+      return c.json({ models });
+    } catch (err: unknown) {
+      clearTimeout(timeout);
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ error: "Request timed out" }, 504);
+      }
+      console.error("[llm/models]", err);
+      return c.json({ error: "Failed to fetch models" }, 502);
+    }
   });
 
   // MCP server management
@@ -419,6 +594,24 @@ export function createRoutes(context: ServerContext) {
       console.error("[Tool Error]", error);
       return c.json({ error: "Tool execution failed" }, 500);
     }
+  });
+
+  // Bash tool approval
+  app.post("/tools/approve/:id", async (c) => {
+    const id = c.req.param("id");
+    let body: { approved: boolean };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const resolve = context.pendingApprovals.get(id);
+    if (!resolve) {
+      return c.json({ error: "No pending approval for this id" }, 404);
+    }
+    context.pendingApprovals.delete(id);
+    resolve(body.approved === true);
+    return c.json({ success: true });
   });
 
   // Image proxy

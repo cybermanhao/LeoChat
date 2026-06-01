@@ -456,6 +456,8 @@ export function ServerForm({
     setValue,
     formState: { errors, isDirty },
   } = useForm<MCPServerConfigValidated>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v4/v3 resolver type mismatch
     resolver: zodResolver(MCPServerConfigSchema) as Resolver<MCPServerConfigValidated, any>,
     defaultValues: {
       transport: "stdio",

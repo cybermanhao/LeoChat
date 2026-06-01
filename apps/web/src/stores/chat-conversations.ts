@@ -8,13 +8,17 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
   input: "",
 
   get displayMessages() {
-    const { conversations, currentConversationId } = get();
+    const state = get();
+    if (!state) return [];
+    const { conversations, currentConversationId } = state;
     const current = conversations.find((c) => c.id === currentConversationId);
     return current?.displayMessages || [];
   },
 
   get contextMessages() {
-    const { conversations, currentConversationId } = get();
+    const state = get();
+    if (!state) return [];
+    const { conversations, currentConversationId } = state;
     const current = conversations.find((c) => c.id === currentConversationId);
     return current?.contextMessages || [];
   },

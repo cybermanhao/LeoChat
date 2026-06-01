@@ -7,6 +7,7 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
+import { exec } from "child_process";
 
 /**
  * LeoChat MCP Server
@@ -112,6 +113,48 @@ function getThemeDescriptions(): string {
   return themePresets
     .map((t) => `  - ${t.id}: ${t.name}${t.isDark ? " (深色)" : " (浅色)"}`)
     .join("\n");
+}
+
+// ============================================================================
+// Bash 工具
+// ============================================================================
+
+const BASH_BANNED_COMMANDS = [
+  "rm", "rmdir", "del", "rd", "format", "mkfs",
+  "shutdown", "reboot", "halt", "poweroff",
+  "dd", "fdisk", "parted",
+  "chmod", "chown", "sudo", "su",
+  "passwd", "useradd", "userdel",
+];
+
+const BASH_MAX_OUTPUT = 30000;
+
+function truncateBashOutput(text: string): { content: string; totalLines: number } {
+  const lines = text.split("\n");
+  const totalLines = lines.length;
+  if (text.length <= BASH_MAX_OUTPUT) return { content: text, totalLines };
+  const half = Math.floor(BASH_MAX_OUTPUT / 2);
+  const head = text.slice(0, half);
+  const tail = text.slice(-half);
+  const skippedLines = text.slice(half, -half).split("\n").length;
+  return {
+    content: `${head}\n\n... [${skippedLines} lines truncated] ...\n\n${tail}`,
+    totalLines,
+  };
+}
+
+function runBash(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number | null }> {
+  return new Promise((resolve) => {
+    const child = exec(command, { timeout: timeoutMs, shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash" }, (err, stdout, stderr) => {
+      resolve({
+        stdout: stdout || "",
+        stderr: stderr || (err && !stdout ? err.message : ""),
+        code: err?.code ?? 0,
+      });
+    });
+    // Ensure child is killed on timeout
+    child.on("close", () => {});
+  });
 }
 
 // ============================================================================
@@ -386,6 +429,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // through this MCP tool.
       // -----------------------------------------------------------------------
       {
+        name: "bash",
+        description: `在 shell 中执行命令并返回输出。禁止命令: ${BASH_BANNED_COMMANDS.join(", ")}`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            command: { type: "string", description: "要执行的 shell 命令" },
+            timeout: { type: "number", description: "超时时间(ms)，默认 30000，最大 600000" },
+          },
+          required: ["command"],
+        },
+      },
+      {
         name: "generate_waifu",
         description: "生成随机二次元图片（waifu/头像等），以 LeoCard 卡片形式返回。",
         inputSchema: {
@@ -497,6 +552,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         preset?: "small" | "medium" | "large" | "fullscreen";
       };
       return makeResponse(createUICommand("resize_window", { width, height, preset }));
+    }
+
+    case "bash": {
+      const { command, timeout: timeoutMs = 30000 } = args as { command: string; timeout?: number };
+
+      const baseCmd = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+      if (BASH_BANNED_COMMANDS.includes(baseCmd)) {
+        return makeError(`命令 '${baseCmd}' 因安全原因被禁止`);
+      }
+
+      const clampedTimeout = Math.min(Math.max(timeoutMs, 1000), 600000);
+      const result = await runBash(command, clampedTimeout);
+
+      const { content: stdoutContent, totalLines: stdoutLines } = truncateBashOutput(result.stdout.trim());
+      const { content: stderrContent } = truncateBashOutput(result.stderr.trim());
+
+      const parts: string[] = [];
+      if (stdoutContent) parts.push(stdoutContent);
+      if (stderrContent) parts.push(`[stderr]\n${stderrContent}`);
+      if (result.code !== 0 && result.code !== null) parts.push(`[exit code: ${result.code}]`);
+      if (parts.length === 0) parts.push("(no output)");
+
+      const summary = stdoutLines > 50 ? ` (共 ${stdoutLines} 行)` : "";
+      return {
+        content: [{ type: "text" as const, text: parts.join("\n") + summary }],
+      };
     }
 
     case "test_tool_call": {

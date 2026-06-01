@@ -5,14 +5,16 @@ export const API_ENDPOINTS = {
   OPENAI: "https://api.openai.com/v1",
   ANTHROPIC: "https://api.anthropic.com/v1",
   MOONSHOT: "https://api.moonshot.cn/v1",
+  KIMI: "https://api.kimi.com/coding/v1",
+  GOOGLE: "https://generativelanguage.googleapis.com/v1beta",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
 
 // Default models
 export const DEFAULT_MODELS = {
-  CHAT: "deepseek-chat",          // DeepSeek 为默认
-  FAST: "deepseek-chat",
-  REASONING: "deepseek-reasoner", // DeepSeek R1
+  CHAT: "deepseek-v4-flash",
+  FAST: "deepseek-v4-flash",
+  REASONING: "deepseek-v4-pro",
   // OpenRouter 模型
   OPENROUTER_CHAT: "anthropic/claude-3.5-sonnet",
   OPENROUTER_FAST: "anthropic/claude-3-haiku",
@@ -23,7 +25,7 @@ export const LLM_PROVIDERS = {
   deepseek: {
     name: "DeepSeek",
     baseURL: "https://api.deepseek.com",
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     envKey: "DEEPSEEK_API_KEY",
   },
   openrouter: {
@@ -43,6 +45,18 @@ export const LLM_PROVIDERS = {
     baseURL: "https://api.moonshot.cn/v1",
     models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
     envKey: "MOONSHOT_API_KEY",
+  },
+  kimi: {
+    name: "Kimi",
+    baseURL: "https://api.kimi.com/coding/v1",
+    models: ["kimi-for-coding"],
+    envKey: "KIMI_API_KEY",
+  },
+  google: {
+    name: "Google",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta",
+    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
+    envKey: "GOOGLE_API_KEY",
   },
 } as const;
 

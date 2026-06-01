@@ -519,6 +519,12 @@ export class TaskLoop {
     // 1. 按消息数截断
     if (this.contextLength > 0) {
       nonSystem = nonSystem.slice(-this.contextLength);
+      // 截断后可能从 tool/assistant(tool_calls) 消息开头，导致 API 400。
+      // 推进到第一条 user 消息作为安全起点。
+      const firstUserIdx = nonSystem.findIndex(m => m.role === "user");
+      if (firstUserIdx > 0) {
+        nonSystem = nonSystem.slice(firstUserIdx);
+      }
     }
 
     // 2. Token 感知截断：如果模型有 context 上限，按 token 估算继续截断
@@ -528,6 +534,11 @@ export class TaskLoop {
         const estimated = estimateTokens([...systemMessages, ...nonSystem]);
         if (estimated <= budget) break;
         nonSystem = nonSystem.slice(1);
+      }
+      // 同样确保不从 tool/assistant(tool_calls) 开头
+      const firstUserIdx = nonSystem.findIndex(m => m.role === "user");
+      if (firstUserIdx > 0) {
+        nonSystem = nonSystem.slice(firstUserIdx);
       }
     }
 
@@ -563,7 +574,7 @@ export class TaskLoop {
     );
 
     // 发起流式请求
-    const response = await fetch(`${baseURL}/chat/completions`, {
+    const response = await fetch(`${baseURL}${this.adapter.getEndpoint()}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -698,6 +709,14 @@ export class TaskLoop {
                   content_delta: parsed.content,
                   reasoning_delta: parsed.reasoning,
                 },
+              });
+            } else if (parsed.requiresApproval === true && parsed.id) {
+              // tool_approval_required 事件 — 后端正在等待用户授权
+              this.emit({
+                type: "approval_required",
+                id: parsed.id,
+                toolName: parsed.toolName ?? "bash",
+                command: parsed.command ?? "",
               });
             } else if (parsed.id && parsed.name && parsed.arguments !== undefined && parsed.result === undefined) {
               // tool_call 事件（有 id, name, arguments 但没有 result）

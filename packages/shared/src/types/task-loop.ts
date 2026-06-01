@@ -46,6 +46,7 @@ export type TaskLoopEvent =
   | TaskLoopUpdateEvent
   | TaskLoopToolCallEvent
   | TaskLoopToolResultEvent
+  | TaskLoopApprovalRequiredEvent
   | TaskLoopStatusEvent
   | TaskLoopErrorEvent
   | TaskLoopDoneEvent
@@ -71,6 +72,13 @@ export interface TaskLoopToolCallEvent {
   messageId: string;
   /** 工具调用前的累积内容（用于日志） */
   contentBeforeToolCall?: string;
+}
+
+export interface TaskLoopApprovalRequiredEvent {
+  type: "approval_required";
+  id: string;
+  toolName: string;
+  command: string;
 }
 
 export interface TaskLoopToolResultEvent {
@@ -137,6 +145,13 @@ export interface TaskLoopCheckpointEvent {
   reason: CheckpointReason;
 }
 
+export interface TaskLoopApprovalRequiredEvent {
+  type: "approval_required";
+  id: string;
+  toolName: string;
+  command: string;
+}
+
 /**
  * TaskLoop 构造选项
  */
@@ -198,6 +213,8 @@ export type LLMProvider =
   | "google"
   | "deepseek"
   | "moonshot"
+  | "kimi"
+  | "kimi-code"
   | "custom";
 
 /**
@@ -208,6 +225,11 @@ export interface ModelAdapter {
    * 获取 API 基础 URL
    */
   getBaseURL(config: LLMConfig): string;
+
+  /**
+   * 获取 API 端点路径
+   */
+  getEndpoint(): string;
 
   /**
    * 转换工具格式

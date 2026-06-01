@@ -13,7 +13,9 @@ import { processToolResultForUICommands, executeUICommand } from "../lib/ui-comm
 import type { CommandName } from "../lib/ui-commands";
 import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
+import { getServerBaseUrl } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
+import { patchIncompleteToolCalls } from "./context-repair";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
 // TaskLoop 懒加载，避免构建顺序问题
@@ -27,15 +29,16 @@ async function getTaskLoop() {
   return TaskLoopConstructor;
 }
 
-const BACKEND_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
-  "http://localhost:3001";
+const VITE_BACKEND_URL =
+  typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
 
 export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => ({
   isGenerating: false,
   cardStatus: "stable" as CardStatus,
   toolCallStates: {},
   activeTaskLoop: null,
+  pendingApprovals: [],
+  sessionAllowedTools: new Set<string>(),
 
   sendMessage: async (content, systemPrompt) => {
     if (get().isGenerating) {
@@ -60,7 +63,9 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const history = conv?.contextMessages || [];
     const contextSnapshot = [...history];
     const displaySnapshot = [...(conv?.displayMessages || [])];
-    const historyWithoutSystem = history.filter((m) => m.role !== "system");
+    const historyWithoutSystem = patchIncompleteToolCalls(
+      history.filter((m) => m.role !== "system")
+    );
 
     const providerConfig = LLM_PROVIDERS[currentProvider];
     const llmConfig: LLMConfig = {
@@ -83,7 +88,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       maxEpochs,
       parallelToolCalls: true,
       useBackendProxy: true,
-      backendURL: BACKEND_URL,
+      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
       systemPrompt,
       contextLength: contextLength > 0 ? contextLength : undefined,
       modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
@@ -150,6 +155,16 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     if (activeTaskLoop) {
       activeTaskLoop.abort();
     }
+  },
+
+  allowToolForSession: (id, toolName) => {
+    set((state) => ({
+      sessionAllowedTools: new Set([...state.sessionAllowedTools, toolName]),
+      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== id),
+    }));
+    import("../lib/api").then(({ chatApi }) => {
+      chatApi.approveToolCall(id, true).catch((e) => console.warn("[allowForSession]", e));
+    });
   },
 
   executeAction: (actionName, attributes) => {
@@ -257,6 +272,10 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       }
 
       case "toolresult": {
+        // Remove this tool's approval from the queue once result arrives
+        set((state) => ({
+          pendingApprovals: state.pendingApprovals.filter((a) => a.id !== event.toolCallId),
+        }));
         const rawResult =
           typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2);
         const endTime = Date.now();
@@ -284,11 +303,21 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
                     ...c,
                     displayMessages: c.displayMessages.map((msg) => ({
                       ...msg,
-                      contentItems: msg.contentItems.map((item) =>
-                        item.type === "tool-call" && (item.content as ToolCall).id === event.toolCallId
-                          ? { ...item, status: contentItemStatus }
-                          : item
-                      ),
+                      contentItems: msg.contentItems.map((item) => {
+                        if (item.type !== "tool-call") return item;
+                        const tc = item.content as ToolCall;
+                        if (tc.id !== event.toolCallId) return item;
+                        // Persist result into contentItem so it survives toolCallStates reset
+                        return {
+                          ...item,
+                          status: contentItemStatus,
+                          content: {
+                            ...tc,
+                            result: event.error ? undefined : rawResult,
+                            error: event.error,
+                          } as ToolCall,
+                        };
+                      }),
                     })),
                   }
             ),
@@ -315,35 +344,53 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
       }
 
+      case "approval_required":
+        if (get().sessionAllowedTools.has(event.toolName)) {
+          // Auto-approve — user already said "allow for session" for this tool
+          import("../lib/api").then(({ chatApi }) => {
+            chatApi.approveToolCall(event.id, true).catch((e) => console.warn("[sessionAllow]", e));
+          });
+        } else {
+          set((state) => ({
+            pendingApprovals: [
+              ...state.pendingApprovals,
+              { id: event.id, toolName: event.toolName, command: event.command },
+            ],
+          }));
+        }
+        break;
+
       case "error":
-        set({ cardStatus: "stable", isGenerating: false });
+        set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
         handleApiError(event.error.message, get().currentProvider);
         break;
 
       case "done": {
         if (event.internalMessages) {
+          const rawContextMessages = (event.internalMessages || []).map((msg: ChatMessage) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content || "",
+            tool_calls: msg.tool_calls,
+            tool_call_id: msg.tool_call_id,
+            timestamp: msg.timestamp,
+            metadata: msg.metadata,
+          }));
+          // Always sanitize before storing — guards against orphaned tool_calls
+          // from interrupted generations or edge cases in the backend loop.
+          const safeContextMessages = patchIncompleteToolCalls(rawContextMessages);
           set((state) => ({
             cardStatus: "stable",
             isGenerating: false,
+            pendingApprovals: [],
             conversations: state.conversations.map((c) =>
               c.id === chatId
-                ? {
-                    ...c,
-                    contextMessages: (event.internalMessages || []).map((msg: ChatMessage) => ({
-                      id: msg.id,
-                      role: msg.role,
-                      content: msg.content || "",
-                      tool_calls: msg.tool_calls,
-                      tool_call_id: msg.tool_call_id,
-                      timestamp: msg.timestamp,
-                      metadata: msg.metadata,
-                    })),
-                  }
+                ? { ...c, contextMessages: safeContextMessages }
                 : c
             ),
           }));
         } else {
-          set({ cardStatus: "stable", isGenerating: false });
+          set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
         }
         sendOSNotification("LeoChat", "AI 回复完成");
         break;

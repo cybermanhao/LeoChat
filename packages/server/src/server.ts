@@ -9,6 +9,7 @@ import { createRoutes } from "./routes/index.js";
 export interface ServerContext {
   sessionManager: ReturnType<typeof createSessionManager>;
   startTime: number;
+  pendingApprovals: Map<string, (approved: boolean) => void>;
 }
 
 export function createServer(externalSessionManager?: ReturnType<typeof createSessionManager>) {
@@ -27,6 +28,7 @@ export function createServer(externalSessionManager?: ReturnType<typeof createSe
   const context: ServerContext = {
     sessionManager,
     startTime: Date.now(),
+    pendingApprovals: new Map(),
   };
 
   // Middleware

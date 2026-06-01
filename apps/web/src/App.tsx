@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ChatLayout } from "./components/ChatLayout";
 import { useThemeStore } from "./stores/theme";
@@ -8,6 +8,9 @@ import { TooltipProvider } from "@ai-chatbox/ui";
 import { chatApi } from "./lib/api";
 import { initializeI18n } from "./i18n";
 import { migrateFromLocalStorage, getChatStorageAdapter } from "./lib/chat-persistence";
+import { LoadingScreen } from "./components/LoadingScreen";
+import { useOnboardingStore } from "./stores/onboarding";
+import { OnboardingWizard } from "./components/OnboardingWizard";
 
 // Electron production uses file:// protocol, which requires HashRouter
 const isFileProtocol = window.location.protocol === "file:";
@@ -29,6 +32,38 @@ import { MCPToolsPage } from "./pages/settings/MCPTools";
 import { MCPResourcesPage } from "./pages/settings/MCPResources";
 import { MCPPromptsPage } from "./pages/settings/MCPPrompts";
 import { MCPStatsPage } from "./pages/settings/MCPStats";
+
+function ThemeInit() {
+  const { currentTheme, applyTheme } = useThemeStore();
+  useEffect(() => { applyTheme(currentTheme); }, [currentTheme, applyTheme]);
+  return null;
+}
+
+/** Waits for the Electron main process to signal the server is ready. */
+function useServerReady(): boolean {
+  // In web/dev mode the server is always already running.
+  const [ready, setReady] = useState(!isFileProtocol);
+
+  useEffect(() => {
+    if (!isFileProtocol) return;
+    const electronAPI = (window as unknown as {
+      electronAPI?: { invoke?: (ch: string) => Promise<unknown> }
+    }).electronAPI;
+
+    if (!electronAPI?.invoke) {
+      setReady(true);
+      return;
+    }
+
+    // invoke("server:port") blocks in the main process until serverPortPromise
+    // resolves — no race condition: works whether server is already ready or not.
+    electronAPI.invoke("server:port")
+      .then(() => setReady(true))
+      .catch(() => setReady(true));
+  }, []);
+
+  return ready;
+}
 
 function AppInit({ children }: { children: React.ReactNode }) {
   const { currentTheme, applyTheme } = useThemeStore();
@@ -78,8 +113,6 @@ function AppInit({ children }: { children: React.ReactNode }) {
         initFromBackendConfig(config);
         console.log("[App] Backend LLM config loaded:", config);
       }
-      // 同步本地保存的 API keys 到后端（用户之前在 UI 设置的）
-      // 使用 getState() 读取最新值，避免依赖引用变化导致重复同步
       const keys = useChatStore.getState().providerKeys;
       Object.entries(keys).forEach(([provider, key]) => {
         if (key && key !== "backend") {
@@ -98,6 +131,26 @@ function AppInit({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  const serverReady = useServerReady();
+  const onboardingCompleted = useOnboardingStore((s) => s.onboardingCompleted);
+
+  if (!serverReady) {
+    return (
+      <div className="h-full animate-in fade-in duration-200">
+        <LoadingScreen />
+      </div>
+    );
+  }
+
+  if (!onboardingCompleted) {
+    return (
+      <TooltipProvider>
+        <ThemeInit />
+        <OnboardingWizard />
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider>
       <Router>

@@ -93,6 +93,10 @@ const en: TranslationDictionary = {
       "linkTextOpenAI": "Get from OpenAI",
       "descriptionMoonshot": "Moonshot Kimi, ultra-long context support up to 128K tokens",
       "linkTextMoonshot": "Get from Moonshot",
+      "descriptionKimiCode": "Kimi Code, optimized for programming with Anthropic API format",
+      "linkTextKimiCode": "Get from Kimi",
+      "descriptionGoogle": "Google Gemini, multimodal model with ultra-long context",
+      "linkTextGoogle": "Get from Google AI Studio",
       "getConfigured": "Configured",
       "saveSuccess": "Saved successfully",
       "save": "Save",
@@ -161,12 +165,17 @@ const en: TranslationDictionary = {
       "opus": { "description": "Most powerful Claude model" }
     },
     "google": {
-      "geminiPro": { "description": "Extra-long context window" }
+      "geminiPro": { "description": "Extra-long context window, up to 2M tokens" },
+      "geminiFlash": { "description": "Fast and efficient multimodal model" },
+      "geminiFlashThinking": { "description": "Experimental model with reasoning process" }
     },
     "moonshot": {
       "8k": { "description": "Suitable for short conversations, fast response" },
       "32k": { "description": "Handles long documents, balanced speed and capability" },
       "128k": { "description": "Ultra-long context, can process an entire book" }
+    },
+    "kimiCode": {
+      "description": "Kimi model optimized for programming scenarios"
     },
     "common": {
       "viaOpenRouter": "Access via OpenRouter"
@@ -363,6 +372,29 @@ const en: TranslationDictionary = {
       "subtitle": "Configure a new Model Context Protocol server",
       "infoTitle": "Add MCP Server",
       "infoDesc": "Fill in the information below to add a new MCP server. STDIO type is for local process communication, HTTP type is for remote server connections."
+    },
+    "jsonImport": {
+      "fromJson": "Import from JSON",
+      "tabForm": "Manual",
+      "tabJson": "JSON Import",
+      "infoTitle": "Import MCP Servers from JSON",
+      "infoDesc": "Paste your claude_desktop_config.json or mcp.json to bulk import server configurations.",
+      "pasteLabel": "Paste Configuration",
+      "placeholder": '{\n  "mcpServers": {\n    "memory": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-memory"]\n    }\n  }\n}',
+      "hint": "Supports Claude Desktop / OpenMCP standard format (mcpServers object). Direct server config objects are also accepted.",
+      "parse": "Parse Config",
+      "previewTitle": "Found {{count}} servers",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectedCount": "Selected {{count}} / {{total}}",
+      "import": "Import Selected",
+      "importSuccess": "Successfully imported {{count}} servers",
+      "importFailed": "Import failed, please check the configuration",
+      "errorEmpty": "Please enter JSON configuration",
+      "errorInvalidJson": "Invalid JSON format, please check syntax",
+      "errorNoServers": "No mcpServers configuration object found",
+      "errorNoValidServers": "No valid server configs found (STDIO requires command, HTTP requires url)",
+      "errorNoSelection": "Please select at least one server to import"
     },
     "sources": {
       "builtin": "Built-in Services",
