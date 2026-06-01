@@ -41,6 +41,17 @@ jobs:
           pnpm --filter @ai-chatbox/leochat-mcp run build
           pnpm --filter @leochat/law-kb-mcp run build
 
+      - name: Setup Go (for Excel MCP build)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Excel MCP server
+        run: |
+          cd mcp-servers/excel-mcp-server
+          go build -o dist/excel-mcp-server.exe ./cmd/excel-mcp-server/
+        shell: pwsh
+
       - name: Setup Python (for Word MCP PyInstaller build)
         uses: actions/setup-python@v5
         with:
@@ -55,6 +66,11 @@ jobs:
         env:
           NODE_MIRROR: https://npmmirror.com/mirrors/node
           UV_MIRROR: https://github.com/astral-sh/uv/releases/download
+
+      - name: Download bge-small-zh-v1.5 model
+        run: node scripts/download-model.mjs
+        env:
+          HF_ENDPOINT: https://hf-mirror.com
 
       - name: Ensure laws.db exists (static baseline if not committed)
         run: |
