@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: true
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: |
+          pnpm build:packages
+          pnpm --filter @ai-chatbox/server run build
+          pnpm --filter @ai-chatbox/leochat-mcp run build
+
+      - name: Download Excel MCP server
+        shell: pwsh
+        run: |
+          $url = "https://github.com/negokaz/excel-mcp-server/releases/download/v0.12.0/excel-mcp-server_Windows_x86_64.zip"
+          Invoke-WebRequest $url -OutFile excel-mcp-server.zip
+          Expand-Archive excel-mcp-server.zip -DestinationPath excel-mcp-server-bin
+          New-Item -ItemType Directory -Force -Path mcp-servers/excel-mcp-server/dist
+          Copy-Item excel-mcp-server-bin/excel-mcp-server.exe mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe
+
+      - name: Setup Python (for Word MCP PyInstaller build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download node.exe and uv.exe, bundle MCP servers, build Word MCP exe
+        run: |
+          node scripts/download-node-win.mjs
+          node scripts/download-uv-win.mjs
+          node scripts/bundle-mcp-servers.mjs
+          node scripts/build-word-mcp-win.mjs
+        env:
+          NODE_MIRROR: https://npmmirror.com/mirrors/node
+          UV_MIRROR: https://github.com/astral-sh/uv/releases/download
+
+      - name: Build Electron app
+        run: pnpm --filter @ai-chatbox/electron build
+
+      - name: Package (unsigned)
+        run: pnpm --filter @ai-chatbox/electron exec electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leochat-windows
+          path: apps/electron/release/LeoChat*.zip
+          if-no-files-found: error
+
+      - name: Determine release file path
+        id: installer
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem "apps/electron/release" -Filter "LeoChat*.zip" | Select-Object -First 1
+          echo "path=$($file.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($file.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Determine release tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            echo "value=${{ github.event.inputs.tag }}" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "value=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Get version from package.json
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content apps/electron/package.json | ConvertFrom-Json).version
+          echo "value=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          name: LeoChat v${{ steps.version.outputs.value }}
+          body: |
+            ## LeoChat v${{ steps.version.outputs.value }}
+
+            ### 安装
+
+            1. 下载 `${{ steps.installer.outputs.name }}`
+            2. 解压到任意目录
+            3. 运行 `LeoChat.exe`
+
+            > 首次运行可能弹出 Windows 安全提示，点击"更多信息" → "仍要运行"即可。
+            > Node.js、Word MCP、uv 均已内置，无需单独安装。
+          files: ${{ steps.installer.outputs.path }}
+          generate_release_notes: false
