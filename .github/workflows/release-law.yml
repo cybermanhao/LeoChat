@@ -41,16 +41,15 @@ jobs:
           pnpm --filter @ai-chatbox/leochat-mcp run build
           pnpm --filter @leochat/law-kb-mcp run build
 
-      - name: Setup Go (for Excel MCP build)
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-
-      - name: Build Excel MCP server
-        run: |
-          cd mcp-servers/excel-mcp-server
-          go build -o dist/excel-mcp-server.exe ./cmd/excel-mcp-server/
+      - name: Download Excel MCP server
         shell: pwsh
+        run: |
+          $ver = "0.12.0"
+          $url = "https://github.com/negokaz/excel-mcp-server/releases/download/v$ver/excel-mcp-server_${ver}_Windows_x86_64.zip"
+          Invoke-WebRequest $url -OutFile excel-mcp-server.zip
+          Expand-Archive excel-mcp-server.zip -DestinationPath excel-mcp-server-bin
+          New-Item -ItemType Directory -Force -Path mcp-servers/excel-mcp-server/dist
+          Copy-Item excel-mcp-server-bin/excel-mcp-server.exe mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe
 
       - name: Setup Python (for Word MCP PyInstaller build)
         uses: actions/setup-python@v5
