@@ -180,7 +180,7 @@ describe("getContextMessages() – contextLength truncation", () => {
       makeMsg("assistant", "thinking…"),
       makeMsg("user", "second user"),
       makeMsg("assistant", "", {
-        tool_calls: [{ id: "tc1", name: "someTool", arguments: {} }],
+        tool_calls: [{ id: "tc1", name: "someTool", arguments: {}, status: "pending" as const }],
       }),
       makeMsg("tool", "tool result", { tool_call_id: "tc1" }),
     ];

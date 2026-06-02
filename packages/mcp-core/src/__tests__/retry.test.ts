@@ -101,8 +101,8 @@ describe("withRetry", () => {
   it("AbortError 立即抛出，不重试", async () => {
     const abortError = new DOMException("Aborted", "AbortError");
     const op = vi.fn().mockRejectedValue(abortError);
-    const err = await withRetry(op).catch((e) => e);
-    expect(err.name).toBe("AbortError");
+    const err = await withRetry(op).catch((e: unknown) => e);
+    expect((err as Error).name).toBe("AbortError");
     expect(op).toHaveBeenCalledTimes(1);
   });
 
@@ -153,7 +153,7 @@ describe("withRetry", () => {
     controller.abort(); // 提前 abort
 
     const op = vi.fn().mockResolvedValue("ok");
-    const err = await withRetry(op, {}, undefined, undefined, controller.signal).catch((e) => e);
-    expect(err.name).toBe("AbortError");
+    const err = await withRetry(op, {}, undefined, undefined, controller.signal).catch((e: unknown) => e);
+    expect((err as Error).name).toBe("AbortError");
   });
 });

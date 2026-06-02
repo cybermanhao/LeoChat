@@ -21,11 +21,9 @@ vi.mock("../../lib/api", () => ({
 // the existing fetchMock stubs still drive the behaviour.
 vi.mock("@ai-chatbox/mcp-core", () => {
   class MockTaskLoop {
-    private chatId: string;
     private resumeTaskId?: string;
     private listeners: Set<(e: unknown) => void> = new Set();
     constructor(opts: { chatId: string; resumeTaskId?: string }) {
-      this.chatId = opts.chatId;
       this.resumeTaskId = opts.resumeTaskId;
     }
     subscribe(fn: (e: unknown) => void) {

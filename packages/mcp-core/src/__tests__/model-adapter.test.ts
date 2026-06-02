@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "@ai-chatbox/shared";
 import { createModelAdapter } from "../model-adapter.js";
 
@@ -30,11 +30,11 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     return body.messages as Array<Record<string, unknown>>;
   }
 
-  // ── Test 1: single tool message ──────────────────────────────────────────────
+  // 鈹€鈹€ Test 1: single tool message 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   it("single tool message becomes a user message with one tool_result item", () => {
     const messages: ChatMessage[] = [
       msg("user", "call the tool"),
-      msg("assistant", "", { tool_calls: [{ id: "tc1", name: "myTool", arguments: {} }] }),
+      msg("assistant", "", { tool_calls: [{ id: "tc1", name: "myTool", arguments: {}, status: "pending" as const }] }),
       msg("tool", "result", { tool_call_id: "tc1" }),
     ];
 
@@ -50,14 +50,14 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(content[0].content).toBe("result");
   });
 
-  // ── Test 2: two consecutive tool messages → merged into ONE user message ─────
+  // 鈹€鈹€ Test 2: two consecutive tool messages 鈫?merged into ONE user message 鈹€鈹€鈹€鈹€鈹€
   it("two consecutive tool messages are merged into a single user message", () => {
     const messages: ChatMessage[] = [
       msg("user", "do both"),
       msg("assistant", "", {
         tool_calls: [
-          { id: "tc1", name: "toolA", arguments: {} },
-          { id: "tc2", name: "toolB", arguments: {} },
+          { id: "tc1", name: "toolA", arguments: {}, status: "pending" as const },
+          { id: "tc2", name: "toolB", arguments: {}, status: "pending" as const },
         ],
       }),
       msg("tool", "result A", { tool_call_id: "tc1" }),
@@ -79,15 +79,15 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(userMessages).toHaveLength(2); // original user + merged tool results
   });
 
-  // ── Test 3: three consecutive tool messages → ONE user message with 3 items ──
+  // 鈹€鈹€ Test 3: three consecutive tool messages 鈫?ONE user message with 3 items 鈹€鈹€
   it("three consecutive tool messages are merged into a single user message with 3 items", () => {
     const messages: ChatMessage[] = [
       msg("user", "do three"),
       msg("assistant", "", {
         tool_calls: [
-          { id: "tc1", name: "toolA", arguments: {} },
-          { id: "tc2", name: "toolB", arguments: {} },
-          { id: "tc3", name: "toolC", arguments: {} },
+          { id: "tc1", name: "toolA", arguments: {}, status: "pending" as const },
+          { id: "tc2", name: "toolB", arguments: {}, status: "pending" as const },
+          { id: "tc3", name: "toolC", arguments: {}, status: "pending" as const },
         ],
       }),
       msg("tool", "res1", { tool_call_id: "tc1" }),
@@ -106,13 +106,13 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(content[2].tool_use_id).toBe("tc3");
   });
 
-  // ── Test 4: tool messages separated by assistant → two separate user messages ─
+  // 鈹€鈹€ Test 4: tool messages separated by assistant 鈫?two separate user messages 鈹€
   it("tool messages separated by an assistant message produce two separate user messages", () => {
     const messages: ChatMessage[] = [
       msg("user", "step one"),
-      msg("assistant", "", { tool_calls: [{ id: "tc1", name: "toolA", arguments: {} }] }),
+      msg("assistant", "", { tool_calls: [{ id: "tc1", name: "toolA", arguments: {}, status: "pending" as const }] }),
       msg("tool", "first result", { tool_call_id: "tc1" }),
-      msg("assistant", "got it, now step two", { tool_calls: [{ id: "tc2", name: "toolB", arguments: {} }] }),
+      msg("assistant", "got it, now step two", { tool_calls: [{ id: "tc2", name: "toolB", arguments: {}, status: "pending" as const }] }),
       msg("tool", "second result", { tool_call_id: "tc2" }),
     ];
 
@@ -131,7 +131,7 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(second[0].tool_use_id).toBe("tc2");
   });
 
-  // ── Test 5: no tool messages → pass-through ───────────────────────────────────
+  // 鈹€鈹€ Test 5: no tool messages 鈫?pass-through 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   it("messages without tool calls pass through as user/assistant without modification", () => {
     const messages: ChatMessage[] = [
       msg("user", "hello"),
@@ -148,7 +148,7 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(converted[3]).toMatchObject({ role: "assistant", content: "great, thanks" });
   });
 
-  // ── Test 6: system messages go into body.system, not messages array ───────────
+  // 鈹€鈹€ Test 6: system messages go into body.system, not messages array 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   it("system messages are extracted into body.system and not present in messages array", () => {
     const messages: ChatMessage[] = [
       msg("system", "You are a helpful assistant"),
@@ -166,13 +166,13 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(convertedMessages).toHaveLength(2);
   });
 
-  // ── Test 7: tool calls in assistant message → tool_use blocks ─────────────────
+  // 鈹€鈹€ Test 7: tool calls in assistant message 鈫?tool_use blocks 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   it("assistant message with tool_calls produces content array with tool_use blocks", () => {
     const messages: ChatMessage[] = [
       msg("user", "use the tool"),
       msg("assistant", "sure", {
         tool_calls: [
-          { id: "tc1", name: "search", arguments: { query: "test" } },
+          { id: "tc1", name: "search", arguments: { query: "test" }, status: "pending" as const },
         ],
       }),
     ];
@@ -196,12 +196,12 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(toolUseBlock?.input).toMatchObject({ query: "test" });
   });
 
-  // ── Test 8: assistant message with tool_calls but no text content ─────────────
+  // 鈹€鈹€ Test 8: assistant message with tool_calls but no text content 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   it("assistant message with tool_calls and no text produces only tool_use blocks", () => {
     const messages: ChatMessage[] = [
       msg("user", "call it"),
       msg("assistant", "", {
-        tool_calls: [{ id: "tc1", name: "myTool", arguments: { x: 1 } }],
+        tool_calls: [{ id: "tc1", name: "myTool", arguments: { x: 1 }, status: "pending" as const }],
       }),
     ];
 
@@ -216,3 +216,4 @@ describe("AnthropicAdapter.buildRequestBody / buildAnthropicMessages", () => {
     expect(toolUseBlocks).toHaveLength(1);
   });
 });
+

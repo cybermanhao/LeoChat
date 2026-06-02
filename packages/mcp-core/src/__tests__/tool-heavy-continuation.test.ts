@@ -43,7 +43,7 @@ function makeOAIStream(assistantContent = "好的，继续处理中..."): Readab
 
 function makeMockFetch() {
   let capturedBody: Record<string, unknown> | null = null;
-  const mockFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+  const mockFetch = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
     if (capturedBody === null && init?.body) {
       capturedBody = JSON.parse(init.body as string) as Record<string, unknown>;
     }
@@ -71,7 +71,7 @@ function buildHeavyToolHistory(rounds = 50): ChatMessage[] {
   for (let i = 1; i <= rounds; i++) {
     const toolCallId = `tc-${i}`;
     history.push(makeMsg("assistant", "", {
-      tool_calls: [{ id: toolCallId, name: "add_paragraph", arguments: { text: `第${i}条内容` } }],
+      tool_calls: [{ id: toolCallId, name: "add_paragraph", arguments: { text: `第${i}条内容` }, status: "pending" as const }],
     }));
     history.push(makeMsg("tool", `{"success":true,"paragraph":"第${i}条内容"}`, {
       tool_call_id: toolCallId,
