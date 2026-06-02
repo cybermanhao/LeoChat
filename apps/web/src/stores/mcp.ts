@@ -598,7 +598,12 @@ export const useMCPStore = create<MCPState>()(
             }
             if (s.id === "filesystem") {
               const persisted = currentBuiltinMap.get(s.id);
-              // Only keep args that look like filesystem paths (not package names like @scope/pkg)
+              // filesystem MCP server: args[0] is the script path (managed by builtin config),
+              // args[1+] are user-configured allowed directories.
+              // Filter to only real paths — old persisted data may contain package names
+              // (e.g. "@modelcontextprotocol/server-filesystem") that crept in from earlier
+              // versions where the UI showed the npm package name as a default arg.
+              // Passing a package name as an allowed dir causes the server to fail on startup.
               const allowedDirs = (persisted?.args?.slice(1) ?? []).filter(
                 a => a.startsWith('/') || /^[A-Za-z]:[\\\/]/.test(a) || a.startsWith('~')
               );
