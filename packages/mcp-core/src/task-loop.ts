@@ -396,35 +396,9 @@ export class TaskLoop {
 
           this.setStatus("tool_calling", "tool_calling");
 
-          // 检查工具是否已由后端执行
-          const allToolsCompleted = assistantMessage.tool_calls.every(
-            tc => tc.status === "completed" || tc.status === "error"
-          );
-
-          if (allToolsCompleted) {
-            // 后端已执行工具，直接添加工具结果消息到历史
-            for (const toolCall of assistantMessage.tool_calls) {
-              const resultContent = toolCall.result
-                ? (typeof toolCall.result === "string"
-                    ? toolCall.result
-                    : JSON.stringify(toolCall.result))
-                : "";
-              const toolResultMessage: ChatMessage = {
-                id: generateId(),
-                role: "tool",
-                content: truncateToolResult(resultContent),
-                tool_call_id: toolCall.id,
-                timestamp: Date.now(),
-              };
-              this.messages.push(toolResultMessage);
-              // 发射 add 事件，将 tool result 消息保存到 conversation 中
-              // UI 中 ChatMessage 组件会过滤掉 role="tool" 的消息，不会显示
-              this.emit({ type: "add", message: toolResultMessage });
-            }
-          } else {
-            // 需要前端执行工具调用
-            await this.executeToolCalls(assistantMessage.tool_calls);
-          }
+          // 前端执行工具调用（直连模式）
+          // 后端代理模式下 needToolCall 始终为 false，不会走到这里
+          await this.executeToolCalls(assistantMessage.tool_calls);
 
           // 自动检查点（每轮完成后）
           if (this.enableCheckpoints) {

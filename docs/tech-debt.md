@@ -64,7 +64,7 @@ GitHub 将在 **2026-06-16** 强制将 Node.js 20 actions 升级到 24。
 
 ---
 
-### TD-04: `allToolsCompleted` 死分支
+### ~~TD-04: `allToolsCompleted` 死分支~~ ✅
 **文件:** `packages/mcp-core/src/task-loop.ts` L396-419
 
 `processBackendSSEResponse` 返回的 `assistantMessage` 中工具状态始终为 `pending`，此分支永远不会执行。
