@@ -14,13 +14,6 @@ import { useNetworkStore } from "./network";
 // 内置服务预设 (使用官方 MCP 服务器包)
 const BUILTIN_SERVERS: MCPServerConfig[] = [
   {
-    id: "law-kb",
-    name: "法律知识库",
-    transport: "stdio",
-    command: "node",
-    args: ["--experimental-sqlite", "../../packages/law-kb-mcp/dist/index.js"],
-  },
-  {
     id: "leochat",
     name: "LeoChat",
     transport: "stdio",
@@ -174,7 +167,7 @@ export const useMCPStore = create<MCPState>()(
       serverVersions: {},
       searchText: "",
       disabledToolIds: new Set<string>([
-        // bash 在法律助手场景下默认关闭，避免误执行系统命令
+        // bash 默认关闭，防止 AI 意外执行危险命令
         "leochat:bash",
         ...(!(window as Window & { electronAPI?: unknown }).electronAPI
           ? ["leochat:resize_window"]
@@ -533,16 +526,6 @@ export const useMCPStore = create<MCPState>()(
             const uvIsUvx = uvCmd === "uvx"; // dev/non-Windows: uvx command already handles tool run
             builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
               switch (s.id) {
-                case "law-kb": {
-                  if (!res["law-kb"]) return s;
-                  const lawEnv = {
-                    ...s.env,
-                    ...mirrorEnv,
-                    ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
-                    ...(res.lawModelDir ? { LAW_MODEL_DIR: res.lawModelDir as string } : {}),
-                  };
-                  return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
-                }
                 case "leochat":
                   return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
                 case "filesystem":
@@ -591,7 +574,7 @@ export const useMCPStore = create<MCPState>()(
           );
           // IPC 解析路径的服务器每次都用新路径，不保留持久化的旧路径
           // 对于 filesystem，保留用户配置的目录（args[1+]）
-          const PATH_RESOLVED = new Set(["law-kb", "leochat", "filesystem", "everything", "memory", "fetch", "excel", "word"]);
+          const PATH_RESOLVED = new Set(["leochat", "filesystem", "everything", "memory", "fetch", "excel", "word"]);
           const mergedBuiltin = builtinServers.map((s) => {
             if (!PATH_RESOLVED.has(s.id)) {
               return currentBuiltinMap.get(s.id) || s;
@@ -635,7 +618,7 @@ export const useMCPStore = create<MCPState>()(
           );
 
           // Fresh install: apply defaults when user has never configured anything
-          const DEFAULT_ENABLED = ["leochat", "law-kb", "filesystem"];
+          const DEFAULT_ENABLED = ["leochat", "filesystem"];
           const isFreshInstall = validEnabledIds.length === 0 && validAutoConnectIds.length === 0;
           const finalEnabledIds = isFreshInstall
             ? DEFAULT_ENABLED.filter((id) => validServerIds.has(id))
