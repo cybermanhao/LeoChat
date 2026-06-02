@@ -157,6 +157,87 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     }
   },
 
+  resumeFromTask: async (chatId, taskId) => {
+    set({ isGenerating: true, cardStatus: "connecting" });
+
+    const clearPending = () => {
+      set((state) => ({
+        isGenerating: false,
+        cardStatus: "stable",
+        conversations: state.conversations.map((c) =>
+          c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+        ),
+      }));
+    };
+
+    try {
+      const baseUrl = VITE_BACKEND_URL || await getServerBaseUrl();
+      const response = await fetch(`${baseUrl}/api/chat/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+
+      if (!response.ok) {
+        console.error(`[resumeFromTask] ${response.status}: task ${taskId} not found or failed`);
+        clearPending();
+        return;
+      }
+
+      // Process SSE stream using existing event handler
+      const reader = response.body?.getReader();
+      if (!reader) { clearPending(); return; }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              const data = line.slice(6).trim();
+              if (!data) continue;
+              try {
+                const parsed = JSON.parse(data);
+                // Re-use the same SSE → TaskLoopEvent mapping as processBackendSSEResponse
+                if (parsed.taskId !== undefined && parsed.resumed !== undefined) {
+                  get()._handleTaskLoopEvent(chatId, { type: "task_started", taskId: parsed.taskId, resumed: parsed.resumed });
+                } else if (parsed.internalMessages !== undefined) {
+                  get()._handleTaskLoopEvent(chatId, { type: "done", epochCount: 1, internalMessages: parsed.internalMessages });
+                } else if ((parsed.content !== undefined || parsed.reasoning !== undefined) && parsed.index !== undefined) {
+                  // chunk — find the UI message id of the last assistant message
+                  const conv = get().conversations.find((c) => c.id === chatId);
+                  const lastMsg = conv?.displayMessages.findLast((m) => m.role === "assistant");
+                  if (lastMsg) {
+                    get()._handleTaskLoopEvent(chatId, { type: "update", messageId: lastMsg.id, delta: { content_delta: parsed.content, reasoning_delta: parsed.reasoning } });
+                  }
+                } else if (parsed.error) {
+                  get()._handleTaskLoopEvent(chatId, { type: "error", error: new Error(parsed.error) });
+                }
+              } catch { /* ignore parse errors */ }
+              currentEvent = "";
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error("[resumeFromTask]", error);
+    } finally {
+      clearPending();
+    }
+  },
+
   allowToolForSession: (id, toolName) => {
     set((state) => ({
       sessionAllowedTools: new Set([...state.sessionAllowedTools, toolName]),
@@ -344,6 +425,14 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
       }
 
+      case "task_started":
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === chatId ? { ...c, pendingTaskId: event.taskId } : c
+          ),
+        }));
+        break;
+
       case "approval_required":
         if (get().sessionAllowedTools.has(event.toolName)) {
           // Auto-approve — user already said "allow for session" for this tool
@@ -385,12 +474,19 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             pendingApprovals: [],
             conversations: state.conversations.map((c) =>
               c.id === chatId
-                ? { ...c, contextMessages: safeContextMessages }
+                ? { ...c, contextMessages: safeContextMessages, pendingTaskId: undefined }
                 : c
             ),
           }));
         } else {
-          set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
+          set((state) => ({
+            cardStatus: "stable",
+            isGenerating: false,
+            pendingApprovals: [],
+            conversations: state.conversations.map((c) =>
+              c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+            ),
+          }));
         }
         sendOSNotification("LeoChat", "AI 回复完成");
         break;

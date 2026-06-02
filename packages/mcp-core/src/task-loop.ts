@@ -675,6 +675,16 @@ export class TaskLoop {
           try {
             const parsed = JSON.parse(data);
 
+            // task_started 事件 — 后端已创建/恢复任务，携带 taskId
+            if (parsed.taskId !== undefined && parsed.resumed !== undefined) {
+              this.emit({
+                type: "task_started",
+                taskId: parsed.taskId,
+                resumed: parsed.resumed,
+              });
+              continue;
+            }
+
             // 处理 final 事件 - 后端完成完整的工具调用循环后发送
             if (parsed.internalMessages !== undefined) {
               // final 事件，包含完整的内部消息历史

@@ -52,7 +52,8 @@ export type TaskLoopEvent =
   | TaskLoopDoneEvent
   | TaskLoopRetryEvent
   | TaskLoopCircuitStateEvent
-  | TaskLoopCheckpointEvent;
+  | TaskLoopCheckpointEvent
+  | TaskLoopTaskStartedEvent;
 
 export interface TaskLoopAddEvent {
   type: "add";
@@ -150,6 +151,14 @@ export interface TaskLoopApprovalRequiredEvent {
   id: string;
   toolName: string;
   command: string;
+}
+
+export interface TaskLoopTaskStartedEvent {
+  type: "task_started";
+  /** Backend-assigned task ID for checkpoint tracking */
+  taskId: string;
+  /** true when resuming an interrupted task */
+  resumed: boolean;
 }
 
 /**
