@@ -19,6 +19,8 @@ export interface Conversation {
   internalMessages?: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  /** Backend task ID for an in-progress or interrupted generation — used for checkpoint resume */
+  pendingTaskId?: string;
 }
 
 export type ToolCallStatusType = "pending" | "running" | "success" | "error";
@@ -116,6 +118,10 @@ export interface GenerationSlice {
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
   /** Approve this call AND mark toolName as auto-approved for the rest of the session */
   allowToolForSession: (approvalId: string, toolName: string) => void;
+  /** Resume an interrupted task from its last backend checkpoint */
+  resumeFromTask: (chatId: string, taskId: string) => Promise<void>;
+  /** Discard a pending task — clears the resume prompt without resuming */
+  discardPendingTask: (chatId: string) => void;
   _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
 }
 

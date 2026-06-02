@@ -118,7 +118,11 @@
       "Read(//c/Users/32467/.claude/**)",
       "Read(//c/Users/32467/AppData/Roaming/Claude/**)",
       "Bash(bash *)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git rebase *)",
+      "Bash(GIT_EDITOR=true git rebase *)",
+      "Bash(del /f .weixin-sync-buf.json)",
+      "PowerShell(Remove-Item *)"
     ],
     "additionalDirectories": [
       "C:\\code\\ai\\openmcp-client",

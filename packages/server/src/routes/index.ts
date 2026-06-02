@@ -4,6 +4,7 @@ import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
+import { generateId } from "@ai-chatbox/shared";
 
 const MAX_TOOL_RESULT = 3000;
 
@@ -40,9 +41,9 @@ function truncateResult(s: string): string {
   return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
 }
 
-export function createRoutes(context: ServerContext) {
+export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<typeof LLMService>) {
   const app = new Hono();
-  const llmService = new LLMService();
+  const llmService = injectedLLM ?? new LLMService();
   const imageProxy = new ImageProxyService();
 
   // Chat endpoint with streaming - supports full tool loop
@@ -53,6 +54,8 @@ export function createRoutes(context: ServerContext) {
       provider?: LLMProvider;
       stream?: boolean;
       maxToolRounds?: number;
+      resumeTaskId?: string;
+      chatId?: string;
     };
     try {
       body = await c.req.json<typeof body>();
@@ -60,14 +63,31 @@ export function createRoutes(context: ServerContext) {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { messages: inputMessages, model, provider, stream = true, maxToolRounds } = body;
+    const { model, provider, stream = true, maxToolRounds, resumeTaskId, chatId: bodyChatId } = body;
 
-    // Validate messages array
-    if (!Array.isArray(inputMessages) || inputMessages.length === 0) {
-      return c.json({ error: "messages must be a non-empty array" }, 400);
-    }
-    if (inputMessages.length > 500) {
-      return c.json({ error: "messages array too large (max 500)" }, 400);
+    // Resume mode: load saved task instead of using request messages
+    let inputMessages: ChatMessage[];
+    let resumedTaskId: string | undefined;
+    let isResume = false;
+
+    if (resumeTaskId) {
+      const task = await context.taskStore.load(resumeTaskId);
+      if (!task) {
+        return c.json({ error: `Task not found: ${resumeTaskId}` }, 404);
+      }
+      inputMessages = task.internalMessages;
+      resumedTaskId = task.taskId;
+      isResume = true;
+    } else {
+      const { messages } = body;
+      // Validate messages array for normal (non-resume) requests
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return c.json({ error: "messages must be a non-empty array" }, 400);
+      }
+      if (messages.length > 500) {
+        return c.json({ error: "messages array too large (max 500)" }, 400);
+      }
+      inputMessages = messages;
     }
 
     // Get available tools from MCP
@@ -116,6 +136,19 @@ export function createRoutes(context: ServerContext) {
           aborted = true;
         }
       }
+
+      // Create task record for checkpoint tracking
+      // Resume mode reuses the original taskId; new requests generate a fresh one
+      const taskId = resumedTaskId ?? generateId();
+      const chatId = bodyChatId ?? "";
+      await context.taskStore.save({
+        taskId,
+        chatId,
+        status: "running",
+        toolRound: 0,
+        internalMessages: [...inputMessages],
+      });
+      await safeWrite("task_started", JSON.stringify({ taskId, resumed: isResume }));
 
       // Internal message history for tool loop
       let internalMessages = [...inputMessages];
@@ -254,13 +287,29 @@ export function createRoutes(context: ServerContext) {
           }
 
           toolRound++;
+
+          // Checkpoint: persist progress after each tool round
+          await context.taskStore.updateMessages(taskId, [], toolRound).catch(console.error);
+          // Full snapshot — replace rather than append to keep messages in sync
+          await context.taskStore.save({
+            taskId,
+            chatId,
+            status: "running",
+            toolRound,
+            internalMessages: [...internalMessages],
+          }).catch(console.error);
         }
 
         // Send final event with complete message history (only when tool calls happened)
         if (!aborted && toolRound > 0) {
           await safeWrite("final", JSON.stringify({ toolRounds: toolRound, internalMessages }));
         }
+
+        // Mark task complete
+        await context.taskStore.updateStatus(taskId, "completed").catch(console.error);
       } catch (error) {
+        // Mark interrupted so the client can resume later
+        await context.taskStore.updateStatus(taskId, "interrupted").catch(console.error);
         await safeWrite("error", JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
         }));

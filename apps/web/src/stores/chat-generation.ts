@@ -61,8 +61,6 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
 
     const conv = get().conversations.find((c) => c.id === convId);
     const history = conv?.contextMessages || [];
-    const contextSnapshot = [...history];
-    const displaySnapshot = [...(conv?.displayMessages || [])];
     const historyWithoutSystem = patchIncompleteToolCalls(
       history.filter((m) => m.role !== "system")
     );
@@ -127,17 +125,28 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       await taskLoop.start(content);
     } catch (error) {
       console.error("TaskLoop error:", error);
-      // abort/error 时回滚到本次生成前的快照，避免不完整消息污染下次上下文
+      const isAbort = (error as Error).name === "AbortError";
       set((state) => ({
+        toolCallStates: {},
         conversations: state.conversations.map((c) => {
           if (c.id !== convId) return c;
-          return {
-            ...c,
-            contextMessages: contextSnapshot,
-            displayMessages: displaySnapshot,
-          };
+          const msgs = c.displayMessages;
+          let lastAssistantIdx = -1;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === "assistant") { lastAssistantIdx = i; break; }
+          }
+          if (lastAssistantIdx < 0) return { ...c };
+          const lastMsg = msgs[lastAssistantIdx];
+          const hasContent = lastMsg.contentItems.some(
+            (item) =>
+              (item.type === "text" && (item.content as string).trim().length > 0) ||
+              item.type === "tool-call"
+          );
+          const patchedDisplay = hasContent
+            ? msgs.map((m, i) => i === lastAssistantIdx ? { ...m, interrupted: isAbort } : m)
+            : msgs.filter((_, i) => i !== lastAssistantIdx);
+          return { ...c, displayMessages: patchedDisplay };
         }),
-        toolCallStates: {},
       }));
     } finally {
       unsubscribe();
@@ -151,9 +160,94 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   },
 
   cancelGeneration: () => {
-    const { activeTaskLoop } = get();
+    const { activeTaskLoop, currentConversationId } = get();
     if (activeTaskLoop) {
       activeTaskLoop.abort();
+    }
+    // 主动取消不保留断点 — 用户明确停止，无需恢复提示
+    if (currentConversationId) {
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === currentConversationId ? { ...c, pendingTaskId: undefined } : c
+        ),
+      }));
+    }
+  },
+
+  discardPendingTask: (chatId) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+      ),
+    }));
+  },
+
+  resumeFromTask: async (chatId, taskId) => {
+    if (get().isGenerating) return;
+
+    const {
+      currentProvider,
+      currentModel,
+      providerKeys,
+      mcpTools,
+      maxEpochs,
+      contextLevel,
+      temperature,
+    } = get();
+
+    const providerConfig = LLM_PROVIDERS[currentProvider];
+    const llmConfig: LLMConfig = {
+      provider: currentProvider,
+      model: currentModel,
+      apiKey: providerKeys[currentProvider] || "",
+      baseURL: providerConfig?.baseURL,
+      temperature,
+    };
+
+    const contextLength = CONTEXT_LEVEL_MAP[contextLevel] ?? 30;
+    const modelContextLimit = getModelContextLimit(currentModel);
+
+    const TaskLoopClass = await getTaskLoop();
+    const taskLoop = new TaskLoopClass({
+      chatId,
+      history: [],          // 后端从 taskId 加载历史，前端 history 不会被发送
+      llmConfig,
+      mcpTools,
+      maxEpochs,
+      parallelToolCalls: true,
+      useBackendProxy: true,
+      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
+      resumeTaskId: taskId, // 触发后端 resume 路径
+      contextLength: contextLength > 0 ? contextLength : undefined,
+      modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
+      onToolCall: async (toolName: string) => {
+        throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
+      },
+    });
+
+    const unsubscribe = taskLoop.subscribe((event) => {
+      if (get().activeTaskLoop !== taskLoop) return;
+      get()._handleTaskLoopEvent(chatId, event);
+    });
+
+    set({ isGenerating: true, cardStatus: "connecting", activeTaskLoop: taskLoop });
+
+    try {
+      await taskLoop.start(""); // 空 input — resume 模式不添加 user 消息
+    } catch (error) {
+      console.error("[resumeFromTask]", error);
+    } finally {
+      unsubscribe();
+      if (get().activeTaskLoop === taskLoop) {
+        set((state) => ({
+          isGenerating: false,
+          activeTaskLoop: null,
+          // Ensure pendingTaskId is cleared regardless of how the task ended
+          conversations: state.conversations.map((c) =>
+            c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+          ),
+        }));
+      }
     }
   },
 
@@ -344,6 +438,14 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
       }
 
+      case "task_started":
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === chatId ? { ...c, pendingTaskId: event.taskId } : c
+          ),
+        }));
+        break;
+
       case "approval_required":
         if (get().sessionAllowedTools.has(event.toolName)) {
           // Auto-approve — user already said "allow for session" for this tool
@@ -385,12 +487,19 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             pendingApprovals: [],
             conversations: state.conversations.map((c) =>
               c.id === chatId
-                ? { ...c, contextMessages: safeContextMessages }
+                ? { ...c, contextMessages: safeContextMessages, pendingTaskId: undefined }
                 : c
             ),
           }));
         } else {
-          set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
+          set((state) => ({
+            cardStatus: "stable",
+            isGenerating: false,
+            pendingApprovals: [],
+            conversations: state.conversations.map((c) =>
+              c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+            ),
+          }));
         }
         sendOSNotification("LeoChat", "AI 回复完成");
         break;

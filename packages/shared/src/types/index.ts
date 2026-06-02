@@ -79,6 +79,8 @@ export interface DisplayMessage {
   timestamp: number;
   reasoning_content?: string;
   metadata?: MessageMetadata;
+  /** 生成被用户中断时标记，用于在气泡末尾显示提示 */
+  interrupted?: boolean;
 }
 
 // ============ 转换函数 ============

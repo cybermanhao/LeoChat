@@ -221,6 +221,13 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
                 <span className="inline-block w-2 h-4 bg-current/30 animate-pulse" />
               </div>
             )}
+
+            {/* 中断提示 */}
+            {message.interrupted && (
+              <div className="px-4 pb-2 pt-1 text-xs opacity-50 italic border-t border-current/10 mt-1">
+                您打断了这次回答
+              </div>
+            )}
           </div>
 
           {/* Token 信息 - 在气泡外部 */}

@@ -90,10 +90,6 @@ interface MCPState {
   connectingServerIds: Set<string>;
   setConnecting: (serverId: string, connecting: boolean) => void;
 
-  // 新增：服务器版本信息
-  serverVersions: Record<string, string | null>;
-  fetchServerVersion: (serverId: string) => Promise<void>;
-
   // 新增：搜索和过滤
   searchText: string;
   setSearchText: (text: string) => void;
@@ -171,7 +167,6 @@ export const useMCPStore = create<MCPState>()(
 
       // 新增状态
       connectingServerIds: new Set<string>(),
-      serverVersions: {},
       searchText: "",
       disabledToolIds: new Set<string>([
         // bash 在法律助手场景下默认关闭，避免误执行系统命令
@@ -192,31 +187,6 @@ export const useMCPStore = create<MCPState>()(
           }
           return { connectingServerIds: newSet };
         });
-      },
-
-      // 新增方法：获取服务器版本
-      fetchServerVersion: async (serverId) => {
-        try {
-          // 调用后端 API 获取版本（需要后端支持）
-          // 目前先使用占位逻辑
-          const serverInfo = await mcpApi.getServerDetails(serverId);
-          const version = (serverInfo as any).version || null;
-
-          set((state) => ({
-            serverVersions: {
-              ...state.serverVersions,
-              [serverId]: version,
-            },
-          }));
-        } catch (error) {
-          console.error("Failed to fetch server version:", error);
-          set((state) => ({
-            serverVersions: {
-              ...state.serverVersions,
-              [serverId]: null,
-            },
-          }));
-        }
       },
 
       // 新增方法：设置搜索文本
@@ -368,7 +338,7 @@ export const useMCPStore = create<MCPState>()(
       },
 
       connectServer: async (serverId) => {
-        const { sources, setConnecting, fetchServerVersion, enabledServerIds, connectingServerIds } = get();
+        const { sources, setConnecting, enabledServerIds, connectingServerIds } = get();
         if (enabledServerIds.includes(serverId) || connectingServerIds.has(serverId)) {
           return;
         }
@@ -411,9 +381,7 @@ export const useMCPStore = create<MCPState>()(
             },
           }));
 
-          // 获取详细信息和版本
           await get().fetchServerDetails(serverId);
-          await fetchServerVersion(serverId);
         } catch (error) {
           console.error("Failed to connect server:", error);
           set((state) => ({

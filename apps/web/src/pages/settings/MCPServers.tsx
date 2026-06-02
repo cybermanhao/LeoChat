@@ -13,7 +13,6 @@ export function MCPServersPage() {
   const sources = useMCPStore((s) => s.sources);
   const serverStates = useMCPStore((s) => s.serverStates);
   const connectingServerIds = useMCPStore((s) => s.connectingServerIds);
-  const serverVersions = useMCPStore((s) => s.serverVersions);
   const enabledServerIds = useMCPStore((s) => s.enabledServerIds);
   const autoConnectServerIds = useMCPStore((s) => s.autoConnectServerIds);
   const toggleServer = useMCPStore((s) => s.toggleServer);
@@ -86,7 +85,6 @@ export function MCPServersPage() {
               const isConnected = enabledServerIds.includes(server.id);
               const isLoading = connectingServerIds.has(server.id);
               const isReconnecting = state?.session?.status === "reconnecting";
-              const version = serverVersions[server.id];
               const isAutoConnect = autoConnectServerIds.includes(server.id);
 
               return (
@@ -100,7 +98,6 @@ export function MCPServersPage() {
                 >
                   <ServerCard
                     server={server}
-                    version={version}
                     isLoading={isLoading}
                     isConnected={isConnected}
                     isReconnecting={isReconnecting}

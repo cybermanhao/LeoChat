@@ -167,6 +167,13 @@ export function MessageContent({ message, isStreaming = false, enableMarkdown = 
     <div className="space-y-2">
       {message.contentItems.map((item) => renderItem(item))}
 
+      {/* 中断提示 */}
+      {message.interrupted && (
+        <div className="mt-1 text-xs text-muted-foreground italic border-t border-border/40 pt-1.5">
+          您打断了这次回答
+        </div>
+      )}
+
       {/* 渲染 reasoning_content（如果存在） */}
       {message.reasoning_content && (
         <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
