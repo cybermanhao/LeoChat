@@ -1,4 +1,4 @@
-import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
+import { readFile, writeFile, unlink, readdir, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChatMessage } from "@ai-chatbox/shared";
 
@@ -30,6 +30,7 @@ export class TaskStore {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
+    await mkdir(this.dir, { recursive: true });
     await writeFile(this.filePath(task.taskId), JSON.stringify(record, null, 2), "utf-8");
     return record;
   }

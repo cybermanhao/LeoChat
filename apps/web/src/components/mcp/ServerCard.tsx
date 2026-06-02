@@ -15,7 +15,6 @@ import { useT } from "../../i18n";
 
 interface ServerCardProps {
   server: MCPServerConfigValidated;
-  version?: string | null;
   isLoading?: boolean;
   isConnected?: boolean;
   isReconnecting?: boolean;
@@ -81,7 +80,6 @@ function StatusBadge({
 
 export function ServerCard({
   server,
-  version,
   isLoading = false,
   isConnected = false,
   isReconnecting = false,
@@ -189,13 +187,8 @@ export function ServerCard({
         )}
       </div>
 
-      {/* Footer: Version, Transport, Tags */}
+      {/* Footer: Transport, Tags */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-        {version && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
-            {version}
-          </span>
-        )}
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted">
           <TransportIcon className="h-3 w-3" />
           {server.transport === "stdio" ? "STDIO" : "HTTP"}

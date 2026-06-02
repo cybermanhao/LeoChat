@@ -61,8 +61,6 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
 
     const conv = get().conversations.find((c) => c.id === convId);
     const history = conv?.contextMessages || [];
-    const contextSnapshot = [...history];
-    const displaySnapshot = [...(conv?.displayMessages || [])];
     const historyWithoutSystem = patchIncompleteToolCalls(
       history.filter((m) => m.role !== "system")
     );
@@ -127,17 +125,28 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       await taskLoop.start(content);
     } catch (error) {
       console.error("TaskLoop error:", error);
-      // abort/error 时回滚到本次生成前的快照，避免不完整消息污染下次上下文
+      const isAbort = (error as Error).name === "AbortError";
       set((state) => ({
+        toolCallStates: {},
         conversations: state.conversations.map((c) => {
           if (c.id !== convId) return c;
-          return {
-            ...c,
-            contextMessages: contextSnapshot,
-            displayMessages: displaySnapshot,
-          };
+          const msgs = c.displayMessages;
+          let lastAssistantIdx = -1;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === "assistant") { lastAssistantIdx = i; break; }
+          }
+          if (lastAssistantIdx < 0) return { ...c };
+          const lastMsg = msgs[lastAssistantIdx];
+          const hasContent = lastMsg.contentItems.some(
+            (item) =>
+              (item.type === "text" && (item.content as string).trim().length > 0) ||
+              item.type === "tool-call"
+          );
+          const patchedDisplay = hasContent
+            ? msgs.map((m, i) => i === lastAssistantIdx ? { ...m, interrupted: isAbort } : m)
+            : msgs.filter((_, i) => i !== lastAssistantIdx);
+          return { ...c, displayMessages: patchedDisplay };
         }),
-        toolCallStates: {},
       }));
     } finally {
       unsubscribe();

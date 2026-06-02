@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Plug,
   Unplug,
+  RotateCcw,
   Terminal,
   Globe,
   X,
@@ -307,6 +308,7 @@ export function MCPServersTab() {
   const serverStates = useMCPStore((s) => s.serverStates);
   const isConnecting = useMCPStore((s) => s.isConnecting);
   const toggleServer = useMCPStore((s) => s.toggleServer);
+  const refreshServer = useMCPStore((s) => s.refreshServer);
   const addServer = useMCPStore((s) => s.addServer);
   const removeServer = useMCPStore((s) => s.removeServer);
   const autoConnectServerIds = useMCPStore((s) => s.autoConnectServerIds);
@@ -428,6 +430,16 @@ export function MCPServersTab() {
                             title={confirmDelete === server.id ? t("mcp.confirmDeleteClick") : t("common.delete")}
                           >
                             <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                        {connected && (
+                          <button
+                            className="p-1 rounded hover:bg-muted"
+                            onClick={() => refreshServer(server.id)}
+                            disabled={connecting}
+                            title="重启"
+                          >
+                            <RotateCcw className="h-3 w-3 text-muted-foreground" />
                           </button>
                         )}
                         <button
