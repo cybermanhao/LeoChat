@@ -7,7 +7,7 @@
 
 ## 🔴 高优先级
 
-### TD-01: law-kb 污染 master 分支
+### ~~TD-01: law-kb 污染 master 分支~~ ✅ bb2081a
 **文件:** `apps/web/src/stores/mcp.ts`
 
 | 位置 | 问题 |
@@ -38,7 +38,7 @@ GitHub 将在 **2026-06-16** 强制将 Node.js 20 actions 升级到 24。
 
 ## 🟡 中优先级
 
-### TD-03: Checkpoint 系统设计前提失效（需重设计）
+### ~~TD-03: Checkpoint 系统设计前提失效~~ ✅ 后端 TaskStore + Route A 方案已实现
 **文件:** `packages/mcp-core/src/task-loop.ts` (末尾 ~80 行) + `packages/mcp-core/src/checkpoint-storage.ts` (307 行)
 
 **背景:** 现有实现假设"前端直连、多轮 epoch 循环"，但生产路径是"后端代理、单次请求"，导致：
