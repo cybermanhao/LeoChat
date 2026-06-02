@@ -120,6 +120,8 @@ export interface GenerationSlice {
   allowToolForSession: (approvalId: string, toolName: string) => void;
   /** Resume an interrupted task from its last backend checkpoint */
   resumeFromTask: (chatId: string, taskId: string) => Promise<void>;
+  /** Discard a pending task — clears the resume prompt without resuming */
+  discardPendingTask: (chatId: string) => void;
   _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
 }
 

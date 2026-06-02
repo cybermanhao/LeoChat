@@ -52,6 +52,8 @@ export function ChatArea() {
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const toolCallStates = useChatStore((s) => s.toolCallStates);
   const pendingApprovals = useChatStore((s) => s.pendingApprovals);
+  const resumeFromTask = useChatStore((s) => s.resumeFromTask);
+  const discardPendingTask = useChatStore((s) => s.discardPendingTask);
   const executeAction = useChatStore((s) => s.executeAction);
   const uiMode = useChatStore((s) => s.uiMode);
   const temperature = useChatStore((s) => s.temperature);
@@ -680,6 +682,14 @@ export function ChatArea() {
         </div>
       </div>
 
+      {/* Resume banner — shown when a previous task was interrupted */}
+      {currentConversation?.pendingTaskId && !isGenerating && (
+        <ResumeTaskBanner
+          onResume={() => resumeFromTask(currentConversationId!, currentConversation.pendingTaskId!)}
+          onDiscard={() => discardPendingTask(currentConversationId!)}
+        />
+      )}
+
       {/* Bash Approval Queue — one banner per pending command */}
       {pendingApprovals.map((approval) => (
         <BashApprovalBanner key={approval.id} approval={approval} />
@@ -698,6 +708,55 @@ export function ChatArea() {
         currentProvider={currentProvider}
         onSelect={handleModelSelect}
       />
+    </div>
+  );
+}
+
+// ── Resume Task Banner ────────────────────────────────────────────────────────
+
+function ResumeTaskBanner({ onResume, onDiscard }: { onResume: () => void; onDiscard: () => void }) {
+  const [loading, setLoading] = useState<"resume" | "discard" | null>(null);
+
+  const handleResume = () => {
+    if (loading) return;
+    setLoading("resume");
+    onResume();
+  };
+
+  const handleDiscard = () => {
+    if (loading) return;
+    setLoading("discard");
+    onDiscard();
+  };
+
+  return (
+    <div className="flex-shrink-0 border-t border-primary/20 bg-primary/5 px-4 py-3">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">上次任务未完成</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              检测到一个中断的任务，可以从断点继续，也可以放弃。
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              disabled={loading !== null}
+              onClick={handleDiscard}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === "discard" ? "..." : "放弃"}
+            </button>
+            <button
+              disabled={loading !== null}
+              onClick={handleResume}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading === "resume" ? "..." : "从断点继续"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

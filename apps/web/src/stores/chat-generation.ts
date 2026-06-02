@@ -165,6 +165,14 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     }
   },
 
+  discardPendingTask: (chatId) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+      ),
+    }));
+  },
+
   resumeFromTask: async (chatId, taskId) => {
     if (get().isGenerating) return;
 
