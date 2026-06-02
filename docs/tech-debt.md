@@ -22,7 +22,7 @@
 
 ---
 
-### TD-02: CI Actions Node.js 20 即将强制升级
+### ~~TD-02: CI Actions Node.js 20 即将强制升级~~ ✅ 164211f
 **文件:** `.github/workflows/release.yml`
 
 GitHub 将在 **2026-06-16** 强制将 Node.js 20 actions 升级到 24。
