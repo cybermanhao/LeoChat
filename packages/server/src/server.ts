@@ -5,14 +5,19 @@ import { serve } from "@hono/node-server";
 import { createSessionManager } from "@ai-chatbox/mcp-core";
 import type { ServerStatus } from "@ai-chatbox/shared";
 import { createRoutes } from "./routes/index.js";
+import { TaskStore } from "./task-store.js";
 
 export interface ServerContext {
   sessionManager: ReturnType<typeof createSessionManager>;
   startTime: number;
   pendingApprovals: Map<string, (approved: boolean) => void>;
+  taskStore: TaskStore;
 }
 
-export function createServer(externalSessionManager?: ReturnType<typeof createSessionManager>) {
+export function createServer(
+  externalSessionManager?: ReturnType<typeof createSessionManager>,
+  taskStoreDir?: string,
+) {
   const app = new Hono();
 
   // Use external session manager if provided (e.g. from Electron), otherwise create one
@@ -29,6 +34,7 @@ export function createServer(externalSessionManager?: ReturnType<typeof createSe
     sessionManager,
     startTime: Date.now(),
     pendingApprovals: new Map(),
+    taskStore: new TaskStore(taskStoreDir ?? "./tasks"),
   };
 
   // Middleware

@@ -4,6 +4,7 @@ import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
+import { generateId } from "@ai-chatbox/shared";
 
 const MAX_TOOL_RESULT = 3000;
 
@@ -40,9 +41,9 @@ function truncateResult(s: string): string {
   return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
 }
 
-export function createRoutes(context: ServerContext) {
+export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<typeof LLMService>) {
   const app = new Hono();
-  const llmService = new LLMService();
+  const llmService = injectedLLM ?? new LLMService();
   const imageProxy = new ImageProxyService();
 
   // Chat endpoint with streaming - supports full tool loop
@@ -116,6 +117,18 @@ export function createRoutes(context: ServerContext) {
           aborted = true;
         }
       }
+
+      // Create task record for checkpoint tracking
+      const taskId = generateId();
+      const chatId = (body as { chatId?: string }).chatId ?? "";
+      await context.taskStore.save({
+        taskId,
+        chatId,
+        status: "running",
+        toolRound: 0,
+        internalMessages: [...inputMessages],
+      });
+      await safeWrite("task_started", JSON.stringify({ taskId }));
 
       // Internal message history for tool loop
       let internalMessages = [...inputMessages];
@@ -254,13 +267,160 @@ export function createRoutes(context: ServerContext) {
           }
 
           toolRound++;
+
+          // Checkpoint: persist progress after each tool round
+          await context.taskStore.updateMessages(taskId, [], toolRound).catch(console.error);
+          // Full snapshot — replace rather than append to keep messages in sync
+          await context.taskStore.save({
+            taskId,
+            chatId,
+            status: "running",
+            toolRound,
+            internalMessages: [...internalMessages],
+          }).catch(console.error);
         }
 
         // Send final event with complete message history (only when tool calls happened)
         if (!aborted && toolRound > 0) {
           await safeWrite("final", JSON.stringify({ toolRounds: toolRound, internalMessages }));
         }
+
+        // Mark task complete
+        await context.taskStore.updateStatus(taskId, "completed").catch(console.error);
       } catch (error) {
+        // Mark interrupted so the client can resume later
+        await context.taskStore.updateStatus(taskId, "interrupted").catch(console.error);
+        await safeWrite("error", JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+    });
+  });
+
+  // Resume an interrupted task from its last checkpoint
+  app.post("/chat/resume", async (c) => {
+    let body: { taskId?: string };
+    try {
+      body = await c.req.json<typeof body>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    if (!body.taskId) {
+      return c.json({ error: "taskId is required" }, 400);
+    }
+
+    const record = await context.taskStore.load(body.taskId);
+    if (!record) {
+      return c.json({ error: `Task not found: ${body.taskId}` }, 404);
+    }
+
+    const tools = context.sessionManager.getToolsForLLM();
+    const MAX_TOOL_ROUNDS = 50;
+
+    return streamSSE(c, async (stream) => {
+      const abortController = new AbortController();
+      let aborted = false;
+      stream.onAbort(() => { aborted = true; abortController.abort(); });
+
+      async function safeWrite(event: string, data: string): Promise<void> {
+        if (aborted) return;
+        try { await stream.writeSSE({ event, data }); } catch { aborted = true; }
+      }
+
+      // Announce resume with the same taskId
+      await safeWrite("task_started", JSON.stringify({ taskId: record.taskId, resumed: true }));
+
+      let internalMessages = [...record.internalMessages];
+      let toolRound = record.toolRound;
+
+      try {
+        while (toolRound < MAX_TOOL_ROUNDS && !aborted) {
+          let currentToolCalls: ToolCall[] = [];
+          let hasToolCalls = false;
+          let completedMessage: ChatMessage | null = null;
+
+          await llmService.streamChat(
+            { messages: internalMessages, tools: tools.length > 0 ? tools : undefined },
+            {
+              onChunk: async (chunk) => {
+                await safeWrite("chunk", JSON.stringify({ ...chunk, index: Date.now() }));
+              },
+              onToolCall: async (toolCall) => {
+                if (aborted) return;
+                hasToolCalls = true;
+                currentToolCalls.push(toolCall);
+                await safeWrite("tool_call", JSON.stringify(toolCall));
+                try {
+                  const rawResult = await context.sessionManager.callTool(
+                    toolCall.name, toolCall.arguments as Record<string, unknown>
+                  );
+                  const truncated = truncateResult(
+                    typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult)
+                  );
+                  await safeWrite("tool_result", JSON.stringify({ id: toolCall.id, result: truncated }));
+                  toolCall.status = "completed";
+                  toolCall.result = truncated;
+                } catch (error) {
+                  console.error("[Tool Error]", error);
+                  await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: "Tool execution failed" }));
+                  toolCall.status = "error";
+                  toolCall.result = { error: "Tool execution failed" };
+                }
+              },
+              onComplete: async (message) => {
+                completedMessage = message;
+                if (!hasToolCalls) await safeWrite("complete", JSON.stringify(message));
+              },
+              onError: async (error) => {
+                await safeWrite("error", JSON.stringify({ error: error.message }));
+              },
+            },
+            { signal: abortController.signal }
+          );
+
+          if (!hasToolCalls || aborted) break;
+
+          const completedMsg = completedMessage as ChatMessage | null;
+          internalMessages.push({
+            id: `assistant-resume-${Date.now()}-${toolRound}`,
+            role: "assistant",
+            content: completedMsg?.content || "",
+            tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
+              id, name, arguments: args, status: "completed" as const,
+            })),
+            timestamp: Date.now(),
+          });
+
+          for (const toolCall of currentToolCalls) {
+            const rawContent = typeof toolCall.result === "string"
+              ? toolCall.result : JSON.stringify(toolCall.result);
+            internalMessages.push({
+              id: `tool-resume-${toolCall.id}`,
+              role: "tool",
+              content: truncateResult(rawContent),
+              tool_call_id: toolCall.id,
+              timestamp: Date.now(),
+            });
+          }
+
+          toolRound++;
+          await context.taskStore.save({
+            taskId: record.taskId,
+            chatId: record.chatId,
+            status: "running",
+            toolRound,
+            internalMessages: [...internalMessages],
+          }).catch(console.error);
+        }
+
+        if (!aborted && toolRound > record.toolRound) {
+          await safeWrite("final", JSON.stringify({ toolRounds: toolRound, internalMessages }));
+        }
+
+        await context.taskStore.updateStatus(record.taskId, "completed").catch(console.error);
+      } catch (error) {
+        await context.taskStore.updateStatus(record.taskId, "interrupted").catch(console.error);
         await safeWrite("error", JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
         }));
