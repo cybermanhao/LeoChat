@@ -190,6 +190,7 @@ export interface TaskLoopOptions {
   // 后端代理模式配置
   useBackendProxy?: boolean;           // 是否使用后端代理（API 密钥在服务端）
   backendURL?: string;                 // 后端 URL，默认 http://localhost:3001
+  resumeTaskId?: string;               // 若设置，后端从该 taskId 的检查点继续，不添加新 user 消息
 
   // 上下文与容错
   contextLength?: number;              // 发送给 LLM 的最大消息数（0=不限制）

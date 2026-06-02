@@ -8,6 +8,11 @@
  * - POST /chat: 客户端断开后标记 status = interrupted
  * - POST /chat/resume: 从已有 taskId 恢复，继续 LLM 循环
  * - POST /chat/resume: taskId 不存在返回 404
+ *
+ * Route A — resumeTaskId 合并进 /chat:
+ * - POST /chat { resumeTaskId }: 加载已保存消息，沿用原 taskId，resumed: true
+ * - POST /chat { resumeTaskId } 未知 ID: 返回 404
+ * - POST /chat { resumeTaskId }: 使用 task.internalMessages 而非请求 messages
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -315,6 +320,114 @@ describe("POST /api/chat/resume", () => {
     await collectSSE(res);
 
     const record = await taskStore.load("task-resume-complete");
+    expect(record!.status).toBe("completed");
+  });
+});
+
+// ── Route A: resumeTaskId merged into POST /chat ──────────────────────────────
+
+describe("POST /api/chat — resumeTaskId (Route A)", () => {
+  it("returns 404 when resumeTaskId does not exist", async () => {
+    await buildApp(async (_req, cbs) => {
+      await cbs.onComplete({ id: "a1", role: "assistant", content: "hi", timestamp: Date.now() });
+    });
+
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [], resumeTaskId: "ghost", stream: true }),
+    });
+
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/not found/i);
+  });
+
+  it("uses saved internalMessages instead of request messages", async () => {
+    const savedMsgs: ChatMessage[] = [
+      makeUserMsg("saved question"),
+      { id: "a0", role: "assistant", content: "partial", timestamp: Date.now() },
+    ];
+    await taskStore.save({
+      taskId: "task-route-a",
+      chatId: "chat-ra",
+      status: "interrupted",
+      toolRound: 0,
+      internalMessages: savedMsgs,
+    });
+
+    let receivedMessages: ChatMessage[] = [];
+    await buildApp(async (req, cbs) => {
+      receivedMessages = (req as { messages: ChatMessage[] }).messages;
+      await cbs.onComplete({ id: "a1", role: "assistant", content: "resumed", timestamp: Date.now() });
+    });
+
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [makeUserMsg("this should be ignored")],
+        resumeTaskId: "task-route-a",
+        stream: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await collectSSE(res);
+
+    // LLM receives saved messages, not the request messages
+    expect(receivedMessages[0].content).toBe("saved question");
+    expect(receivedMessages.some((m) => m.content === "this should be ignored")).toBe(false);
+  });
+
+  it("emits task_started with original taskId and resumed: true", async () => {
+    await taskStore.save({
+      taskId: "task-route-a2",
+      chatId: "chat-ra2",
+      status: "interrupted",
+      toolRound: 0,
+      internalMessages: [makeUserMsg("hi")],
+    });
+
+    await buildApp(async (_req, cbs) => {
+      await cbs.onComplete({ id: "a1", role: "assistant", content: "done", timestamp: Date.now() });
+    });
+
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [], resumeTaskId: "task-route-a2", stream: true }),
+    });
+
+    const events = await collectSSE(res);
+    const started = events.find((e) => e.event === "task_started");
+    expect(started).toBeDefined();
+    expect((started!.data as { taskId: string; resumed: boolean }).taskId).toBe("task-route-a2");
+    expect((started!.data as { taskId: string; resumed: boolean }).resumed).toBe(true);
+  });
+
+  it("marks task as completed after successful resume", async () => {
+    await taskStore.save({
+      taskId: "task-route-a3",
+      chatId: "chat-ra3",
+      status: "interrupted",
+      toolRound: 0,
+      internalMessages: [makeUserMsg("continue")],
+    });
+
+    await buildApp(async (_req, cbs) => {
+      await cbs.onComplete({ id: "a1", role: "assistant", content: "done", timestamp: Date.now() });
+    });
+
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [], resumeTaskId: "task-route-a3", stream: true }),
+    });
+
+    await collectSSE(res);
+
+    const record = await taskStore.load("task-route-a3");
     expect(record!.status).toBe("completed");
   });
 });

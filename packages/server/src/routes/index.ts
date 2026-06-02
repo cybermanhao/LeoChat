@@ -54,6 +54,8 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       provider?: LLMProvider;
       stream?: boolean;
       maxToolRounds?: number;
+      resumeTaskId?: string;
+      chatId?: string;
     };
     try {
       body = await c.req.json<typeof body>();
@@ -61,14 +63,31 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       return c.json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { messages: inputMessages, model, provider, stream = true, maxToolRounds } = body;
+    const { model, provider, stream = true, maxToolRounds, resumeTaskId, chatId: bodyChatId } = body;
 
-    // Validate messages array
-    if (!Array.isArray(inputMessages) || inputMessages.length === 0) {
-      return c.json({ error: "messages must be a non-empty array" }, 400);
-    }
-    if (inputMessages.length > 500) {
-      return c.json({ error: "messages array too large (max 500)" }, 400);
+    // Resume mode: load saved task instead of using request messages
+    let inputMessages: ChatMessage[];
+    let resumedTaskId: string | undefined;
+    let isResume = false;
+
+    if (resumeTaskId) {
+      const task = await context.taskStore.load(resumeTaskId);
+      if (!task) {
+        return c.json({ error: `Task not found: ${resumeTaskId}` }, 404);
+      }
+      inputMessages = task.internalMessages;
+      resumedTaskId = task.taskId;
+      isResume = true;
+    } else {
+      const { messages } = body;
+      // Validate messages array for normal (non-resume) requests
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return c.json({ error: "messages must be a non-empty array" }, 400);
+      }
+      if (messages.length > 500) {
+        return c.json({ error: "messages array too large (max 500)" }, 400);
+      }
+      inputMessages = messages;
     }
 
     // Get available tools from MCP
@@ -119,8 +138,9 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       }
 
       // Create task record for checkpoint tracking
-      const taskId = generateId();
-      const chatId = (body as { chatId?: string }).chatId ?? "";
+      // Resume mode reuses the original taskId; new requests generate a fresh one
+      const taskId = resumedTaskId ?? generateId();
+      const chatId = bodyChatId ?? "";
       await context.taskStore.save({
         taskId,
         chatId,
@@ -128,7 +148,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
         toolRound: 0,
         internalMessages: [...inputMessages],
       });
-      await safeWrite("task_started", JSON.stringify({ taskId }));
+      await safeWrite("task_started", JSON.stringify({ taskId, resumed: isResume }));
 
       // Internal message history for tool loop
       let internalMessages = [...inputMessages];

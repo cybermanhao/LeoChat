@@ -151,90 +151,86 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   },
 
   cancelGeneration: () => {
-    const { activeTaskLoop } = get();
+    const { activeTaskLoop, currentConversationId } = get();
     if (activeTaskLoop) {
       activeTaskLoop.abort();
+    }
+    // 主动取消不保留断点 — 用户明确停止，无需恢复提示
+    if (currentConversationId) {
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === currentConversationId ? { ...c, pendingTaskId: undefined } : c
+        ),
+      }));
     }
   },
 
   resumeFromTask: async (chatId, taskId) => {
-    set({ isGenerating: true, cardStatus: "connecting" });
+    if (get().isGenerating) return;
 
-    const clearPending = () => {
-      set((state) => ({
-        isGenerating: false,
-        cardStatus: "stable",
-        conversations: state.conversations.map((c) =>
-          c.id === chatId ? { ...c, pendingTaskId: undefined } : c
-        ),
-      }));
+    const {
+      currentProvider,
+      currentModel,
+      providerKeys,
+      mcpTools,
+      maxEpochs,
+      contextLevel,
+      temperature,
+    } = get();
+
+    const providerConfig = LLM_PROVIDERS[currentProvider];
+    const llmConfig: LLMConfig = {
+      provider: currentProvider,
+      model: currentModel,
+      apiKey: providerKeys[currentProvider] || "",
+      baseURL: providerConfig?.baseURL,
+      temperature,
     };
 
+    const contextLength = CONTEXT_LEVEL_MAP[contextLevel] ?? 30;
+    const modelContextLimit = getModelContextLimit(currentModel);
+
+    const TaskLoopClass = await getTaskLoop();
+    const taskLoop = new TaskLoopClass({
+      chatId,
+      history: [],          // 后端从 taskId 加载历史，前端 history 不会被发送
+      llmConfig,
+      mcpTools,
+      maxEpochs,
+      parallelToolCalls: true,
+      useBackendProxy: true,
+      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
+      resumeTaskId: taskId, // 触发后端 resume 路径
+      contextLength: contextLength > 0 ? contextLength : undefined,
+      modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
+      onToolCall: async (toolName: string) => {
+        throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
+      },
+    });
+
+    const unsubscribe = taskLoop.subscribe((event) => {
+      if (get().activeTaskLoop !== taskLoop) return;
+      get()._handleTaskLoopEvent(chatId, event);
+    });
+
+    set({ isGenerating: true, cardStatus: "connecting", activeTaskLoop: taskLoop });
+
     try {
-      const baseUrl = VITE_BACKEND_URL || await getServerBaseUrl();
-      const response = await fetch(`${baseUrl}/api/chat/resume`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId }),
-      });
-
-      if (!response.ok) {
-        console.error(`[resumeFromTask] ${response.status}: task ${taskId} not found or failed`);
-        clearPending();
-        return;
-      }
-
-      // Process SSE stream using existing event handler
-      const reader = response.body?.getReader();
-      if (!reader) { clearPending(); return; }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let currentEvent = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              const data = line.slice(6).trim();
-              if (!data) continue;
-              try {
-                const parsed = JSON.parse(data);
-                // Re-use the same SSE → TaskLoopEvent mapping as processBackendSSEResponse
-                if (parsed.taskId !== undefined && parsed.resumed !== undefined) {
-                  get()._handleTaskLoopEvent(chatId, { type: "task_started", taskId: parsed.taskId, resumed: parsed.resumed });
-                } else if (parsed.internalMessages !== undefined) {
-                  get()._handleTaskLoopEvent(chatId, { type: "done", epochCount: 1, internalMessages: parsed.internalMessages });
-                } else if ((parsed.content !== undefined || parsed.reasoning !== undefined) && parsed.index !== undefined) {
-                  // chunk — find the UI message id of the last assistant message
-                  const conv = get().conversations.find((c) => c.id === chatId);
-                  const lastMsg = conv?.displayMessages.findLast((m) => m.role === "assistant");
-                  if (lastMsg) {
-                    get()._handleTaskLoopEvent(chatId, { type: "update", messageId: lastMsg.id, delta: { content_delta: parsed.content, reasoning_delta: parsed.reasoning } });
-                  }
-                } else if (parsed.error) {
-                  get()._handleTaskLoopEvent(chatId, { type: "error", error: new Error(parsed.error) });
-                }
-              } catch { /* ignore parse errors */ }
-              currentEvent = "";
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
+      await taskLoop.start(""); // 空 input — resume 模式不添加 user 消息
     } catch (error) {
       console.error("[resumeFromTask]", error);
     } finally {
-      clearPending();
+      unsubscribe();
+      if (get().activeTaskLoop === taskLoop) {
+        set((state) => ({
+          isGenerating: false,
+          activeTaskLoop: null,
+          // Ensure pendingTaskId is cleared regardless of how the task ended
+          conversations: state.conversations.map((c) =>
+            c.id === chatId ? { ...c, pendingTaskId: undefined } : c
+          ),
+        }));
+      }
     }
   },
 

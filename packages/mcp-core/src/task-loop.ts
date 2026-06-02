@@ -103,6 +103,7 @@ export class TaskLoop {
   // 后端代理模式
   private useBackendProxy: boolean;
   private backendURL: string;
+  private resumeTaskId: string | undefined;
 
   // 上下文与容错
   private contextLength: number;
@@ -163,6 +164,7 @@ export class TaskLoop {
     // 后端代理模式
     this.useBackendProxy = opts.useBackendProxy ?? false;
     this.backendURL = opts.backendURL ?? DEFAULT_BACKEND_URL;
+    this.resumeTaskId = opts.resumeTaskId;
 
     // 上下文与容错
     this.contextLength = opts.contextLength ?? 0;
@@ -273,15 +275,17 @@ export class TaskLoop {
     this.abortController = new AbortController();
 
     try {
-      // 1. 添加用户消息
-      const userMessage: ChatMessage = {
-        id: generateId(),
-        role: "user",
-        content: input,
-        timestamp: Date.now(),
-      };
-      this.messages.push(userMessage);
-      this.emit({ type: "add", message: userMessage });
+      // 1. 添加用户消息（resume 模式跳过 — 后端已有完整历史）
+      if (!this.resumeTaskId) {
+        const userMessage: ChatMessage = {
+          id: generateId(),
+          role: "user",
+          content: input,
+          timestamp: Date.now(),
+        };
+        this.messages.push(userMessage);
+        this.emit({ type: "add", message: userMessage });
+      }
 
       // 2. 多轮循环 - 使用同一个 UI 消息 ID，所有内容合并显示
       let epochCount = 0;
@@ -614,6 +618,7 @@ export class TaskLoop {
         provider: this.llmConfig.provider,
         stream: true,
         maxToolRounds: this.maxEpochs,
+        ...(this.resumeTaskId ? { resumeTaskId: this.resumeTaskId } : {}),
       }),
       signal,
     });
