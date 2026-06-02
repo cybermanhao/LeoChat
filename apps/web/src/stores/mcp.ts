@@ -598,7 +598,10 @@ export const useMCPStore = create<MCPState>()(
             }
             if (s.id === "filesystem") {
               const persisted = currentBuiltinMap.get(s.id);
-              const allowedDirs = persisted?.args?.slice(1) ?? [];
+              // Only keep args that look like filesystem paths (not package names like @scope/pkg)
+              const allowedDirs = (persisted?.args?.slice(1) ?? []).filter(
+                a => a.startsWith('/') || /^[A-Za-z]:[\\\/]/.test(a) || a.startsWith('~')
+              );
               return allowedDirs.length > 0
                 ? { ...s, args: [s.args![0], ...allowedDirs] }
                 : s;
