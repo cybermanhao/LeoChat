@@ -340,8 +340,14 @@ export class MCPClient {
       return [];
     }
 
-    const result = await this.client.listResources();
-    return result.resources;
+    try {
+      const result = await this.client.listResources();
+      return result.resources;
+    } catch (error) {
+      // Some servers advertise capability but don't implement the method (-32601)
+      if ((error as { code?: number }).code === -32601) return [];
+      throw error;
+    }
   }
 
   async readResource(uri: string): Promise<unknown> {
@@ -362,8 +368,14 @@ export class MCPClient {
       return [];
     }
 
-    const result = await this.client.listPrompts();
-    return result.prompts;
+    try {
+      const result = await this.client.listPrompts();
+      return result.prompts;
+    } catch (error) {
+      // Some servers advertise capability but don't implement the method (-32601)
+      if ((error as { code?: number }).code === -32601) return [];
+      throw error;
+    }
   }
 
   async getPrompt(

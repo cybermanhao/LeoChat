@@ -543,8 +543,12 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
   app.post("/mcp/servers/:id/connect", async (c) => {
     const serverId = c.req.param("id");
+    const config = context.sessionManager.getConfig(serverId);
+    // uvx-based servers may need to download the tool on first run — allow 60s
+    const isUvxBased = config?.command === "uvx" || config?.command?.endsWith("uvx.exe");
+    const timeoutMs = config?.timeout ?? (isUvxBased ? 60000 : 15000);
     const timeout = new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error(`MCP connect timeout for ${serverId}`)), 15000)
+      setTimeout(() => rej(new Error(`MCP connect timeout for ${serverId}`)), timeoutMs)
     );
     try {
       const session = await Promise.race([
