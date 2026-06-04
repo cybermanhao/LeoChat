@@ -216,7 +216,7 @@ class AnthropicAdapter implements ModelAdapterInstance {
 
     const body: Record<string, unknown> = {
       model: config.model,
-      messages: otherMessages.map(m => this.convertMessage(m)),
+      messages: this.buildAnthropicMessages(otherMessages),
       max_tokens: config.maxTokens || 4096,
     };
 
@@ -235,8 +235,34 @@ class AnthropicAdapter implements ModelAdapterInstance {
     return body;
   }
 
+  // Anthropic requires consecutive tool results to be batched into a single
+  // user message with a content array — separate user messages cause a 400.
+  private buildAnthropicMessages(messages: ChatMessage[]): Record<string, unknown>[] {
+    const result: Record<string, unknown>[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      if (messages[i].role === "tool") {
+        const toolResults: Array<{ type: string; tool_use_id: string; content: string }> = [];
+        while (i < messages.length && messages[i].role === "tool") {
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: messages[i].tool_call_id || "",
+            content: messages[i].content,
+          });
+          i++;
+        }
+        result.push({ role: "user", content: toolResults });
+      } else {
+        result.push(this.convertMessage(messages[i]));
+        i++;
+      }
+    }
+    return result;
+  }
+
   private convertMessage(msg: ChatMessage): Record<string, unknown> {
     if (msg.role === "tool") {
+      // Single tool result (fallback — normally handled by buildAnthropicMessages)
       return {
         role: "user",
         content: [

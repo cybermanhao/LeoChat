@@ -45,5 +45,16 @@ export function patchIncompleteToolCalls(
     }
   }
 
+  // Trim a trailing user message with no subsequent assistant response.
+  // Happens when generation is aborted before the LLM emits any reply:
+  // _addMessage has already appended the user ContextMessage, but the done
+  // event never fires to replace contextMessages with internalMessages.
+  // Without this trim, the next sendMessage appends another user turn,
+  // creating two consecutive user messages that most LLM APIs reject (400).
+  if (result[result.length - 1]?.role === "user") {
+    if (result === messages) result = [...messages];
+    result.pop();
+  }
+
   return result;
 }

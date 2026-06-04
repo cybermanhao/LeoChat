@@ -50,6 +50,8 @@ export function ChatArea() {
   const setEnableMarkdown = useChatStore((s) => s.setEnableMarkdown);
   const maxEpochs = useChatStore((s) => s.maxEpochs);
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
+  const unlimitedEpochs = useChatStore((s) => s.unlimitedEpochs);
+  const setUnlimitedEpochs = useChatStore((s) => s.setUnlimitedEpochs);
   const toolCallStates = useChatStore((s) => s.toolCallStates);
   const pendingApprovals = useChatStore((s) => s.pendingApprovals);
   const resumeFromTask = useChatStore((s) => s.resumeFromTask);
@@ -489,7 +491,7 @@ export function ChatArea() {
                   onClick={() => setEpochsPopoverOpen(!epochsPopoverOpen)}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">{maxEpochs}</span>
+                  <span className="hidden sm:inline">{unlimitedEpochs ? "∞" : maxEpochs}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
@@ -497,10 +499,12 @@ export function ChatArea() {
               </TooltipContent>
             </Tooltip>
             {epochsPopoverOpen && (
-              <div className="bg-card border border-border rounded-lg shadow-lg p-3 absolute bottom-full mb-1 z-50 w-48">
+              <div className="bg-card border border-border rounded-lg shadow-lg p-3 absolute bottom-full mb-1 z-50 w-52">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-foreground font-medium">{t("chat.maxEpochs")}</span>
-                  <span className="text-xs text-muted-foreground">{maxEpochs}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {unlimitedEpochs ? "∞" : maxEpochs}
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -508,13 +512,27 @@ export function ChatArea() {
                   max={50}
                   step={1}
                   value={maxEpochs}
+                  disabled={unlimitedEpochs}
                   onChange={(e) => setMaxEpochs(Number(e.target.value))}
-                  className="w-full accent-primary"
+                  className="w-full accent-primary disabled:opacity-40"
                 />
-                <div className="flex justify-between mt-1">
+                <div className="flex justify-between mt-1 mb-3">
                   <span className="text-[10px] text-muted-foreground">1</span>
                   <span className="text-[10px] text-muted-foreground">50</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setUnlimitedEpochs(!unlimitedEpochs)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs transition-colors",
+                    unlimitedEpochs
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted text-muted-foreground"
+                  )}
+                >
+                  <span>无限制</span>
+                  <span className="font-mono text-sm">∞</span>
+                </button>
               </div>
             )}
           </div>

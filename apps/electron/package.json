@@ -1,6 +1,6 @@
 {
   "name": "@ai-chatbox/electron",
-  "version": "0.2.1-law",
+  "version": "0.2.2-law",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
@@ -16,7 +16,8 @@
   "dependencies": {
     "@ai-chatbox/mcp-core": "workspace:*",
     "@ai-chatbox/server": "workspace:*",
-    "@ai-chatbox/shared": "workspace:*"
+    "@ai-chatbox/shared": "workspace:*",
+    "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

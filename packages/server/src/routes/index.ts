@@ -1,10 +1,30 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
 import { generateId } from "@ai-chatbox/shared";
+
+// Repo root: routes/ -> src/ -> server/ -> packages/ -> root (4 levels up)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(__dirname, "../../../..");
+
+function resolveExe(cmd: string): string | null {
+  try {
+    const result = execSync(
+      process.platform === "win32" ? `where ${cmd}` : `which ${cmd}`,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim().split(/\r?\n/)[0].trim();
+    return result || null;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_TOOL_RESULT = 3000;
 
@@ -288,9 +308,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
           toolRound++;
 
-          // Checkpoint: persist progress after each tool round
-          await context.taskStore.updateMessages(taskId, [], toolRound).catch(console.error);
-          // Full snapshot — replace rather than append to keep messages in sync
+          // Checkpoint: persist full snapshot after each tool round
           await context.taskStore.save({
             taskId,
             chatId,
@@ -308,8 +326,15 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
         // Mark task complete
         await context.taskStore.updateStatus(taskId, "completed").catch(console.error);
       } catch (error) {
-        // Mark interrupted so the client can resume later
-        await context.taskStore.updateStatus(taskId, "interrupted").catch(console.error);
+        // Checkpoint with actual toolRound/internalMessages at time of failure,
+        // so resume logic has accurate progress (updateStatus would keep stale toolRound).
+        await context.taskStore.save({
+          taskId,
+          chatId,
+          status: "interrupted",
+          toolRound,
+          internalMessages: [...internalMessages],
+        }).catch(console.error);
         await safeWrite("error", JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
         }));
@@ -518,8 +543,24 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
   app.post("/mcp/servers/:id/connect", async (c) => {
     const serverId = c.req.param("id");
-    const session = await context.sessionManager.connect(serverId);
-    return c.json(session);
+    const config = context.sessionManager.getConfig(serverId);
+    // uvx-based servers may need to download the tool on first run — allow 60s
+    const isUvxBased = config?.command === "uvx" || config?.command?.endsWith("uvx.exe");
+    const timeoutMs = config?.timeout ?? (isUvxBased ? 60000 : 15000);
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error(`MCP connect timeout for ${serverId}`)), timeoutMs)
+    );
+    try {
+      const session = await Promise.race([
+        context.sessionManager.connect(serverId),
+        timeout,
+      ]);
+      return c.json(session);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[MCP] connect failed for ${serverId}:`, msg);
+      return c.json({ error: msg }, 503);
+    }
   });
 
   app.post("/mcp/servers/:id/disconnect", async (c) => {
@@ -704,6 +745,24 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       console.error("[Image Proxy Error]", error);
       return c.json({ error: "Failed to fetch image" }, 502);
     }
+  });
+
+  // System tool path resolution — mirrors Electron's builtin:server-resources IPC.
+  // Web dev mode uses this instead of IPC so both modes use absolute, consistent paths.
+  app.get("/system/tools", (c) => {
+    const excelExe = join(REPO_ROOT, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe");
+    return c.json({
+      node: process.execPath,
+      uv: resolveExe("uv"),
+      uvx: resolveExe("uvx"),
+      leochat:    join(REPO_ROOT, "packages/leochat-mcp/dist/index.js"),
+      "law-kb":   join(REPO_ROOT, "packages/law-kb-mcp/dist/index.js"),
+      filesystem: join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
+      everything: join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
+      memory:     join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-memory/dist/index.js"),
+      fetch:      join(REPO_ROOT, "node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"),
+      excel: process.platform === "win32" && existsSync(excelExe) ? excelExe : null,
+    });
   });
 
   // --- Knowledge base management (leochat-for-law) ---

@@ -53,8 +53,10 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       providerKeys,
       mcpTools,
       maxEpochs,
+      unlimitedEpochs,
       contextLevel,
       temperature,
+      uiMode,
     } = get();
 
     const convId = currentConversationId || get().createConversation();
@@ -74,7 +76,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       temperature,
     };
 
-    const contextLength = CONTEXT_LEVEL_MAP[contextLevel] ?? 30;
+    // 简单模式强制无限上下文，专业模式按用户设置
+    const contextLength = uiMode === "simple" ? 0 : (CONTEXT_LEVEL_MAP[contextLevel] ?? 30);
     const modelContextLimit = getModelContextLimit(currentModel);
 
     const TaskLoopClass = await getTaskLoop();
@@ -83,7 +86,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       history: historyWithoutSystem,
       llmConfig,
       mcpTools,
-      maxEpochs,
+      maxEpochs: unlimitedEpochs ? 1000 : maxEpochs,
       parallelToolCalls: true,
       useBackendProxy: true,
       backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),

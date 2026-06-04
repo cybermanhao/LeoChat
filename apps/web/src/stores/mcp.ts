@@ -481,71 +481,77 @@ export const useMCPStore = create<MCPState>()(
 
       // 初始化
       initBuiltinServers: async () => {
-        // In Electron, resolve all built-in server paths via IPC so they work in
-        // both dev (monorepo paths) and packaged app (extraResource paths).
+        // Resolve built-in server paths — mirrors Electron's builtin:server-resources IPC.
+        // Electron: uses IPC (dev = monorepo paths, prod = extraResource paths).
+        // Web dev:  calls /api/system/tools on the backend (same logic, absolute paths).
         let builtinServers = BUILTIN_SERVERS;
-        const electronAPI = (window as unknown as { electronAPI?: { invoke?: (ch: string) => Promise<unknown> } }).electronAPI;
-        if (electronAPI?.invoke) {
-          try {
-            const res = await electronAPI.invoke("builtin:server-resources") as Record<string, string | null>;
-            // Use the resolved node binary path (bundled node.exe on Windows prod, system node elsewhere)
-            const nodeCmd = res.node ?? "node";
-            // Mirror env vars from network settings
-            const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
-            const mirrorEnv: Record<string, string> = useChinaMirrors
-              ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
-              : {};
-            // uv: bundled uv.exe on Windows prod, system uvx elsewhere
-            // For word (office-word-mcp-server via uvx): use `uv tool run` with bundled uv
-            const uvCmd = res.uv ?? "uvx";
-            const uvIsUvx = uvCmd === "uvx"; // dev/non-Windows: uvx command already handles tool run
-            builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
-              switch (s.id) {
-                case "law-kb": {
-                  if (!res["law-kb"]) return s;
-                  const lawEnv = {
-                    ...s.env,
-                    ...mirrorEnv,
-                    ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
-                    ...(res.lawModelDir ? { LAW_MODEL_DIR: res.lawModelDir as string } : {}),
-                  };
-                  return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
-                }
-                case "leochat":
-                  return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
-                case "filesystem":
-                  return res.filesystem ? { ...s, command: nodeCmd, args: [res.filesystem] } : s;
-                case "everything":
-                  return res.everything ? { ...s, command: nodeCmd, args: [res.everything] } : s;
-                case "memory":
-                  return res.memory ? { ...s, command: nodeCmd, args: [res.memory] } : s;
-                case "fetch":
-                  return res.fetch ? { ...s, command: nodeCmd, args: [res.fetch] } : s;
-                case "excel":
-                  return res.excel
-                    ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
-                    : { ...s, env: { ...s.env, ...mirrorEnv } };
-                case "word": {
-                  // Prefer bundled exe (packaged app); fall back to uv/uvx for dev
-                  if (res.word) {
-                    return { ...s, command: res.word, args: [], env: { ...s.env, ...mirrorEnv } };
-                  }
-                  const uvDataDir = res.uvDataDir as string | undefined;
-                  const uvEnv = {
-                    ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),
-                    ...mirrorEnv,
-                  };
-                  return uvIsUvx
-                    ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
-                    : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
-                }
-                default:
-                  return s;
-              }
-            });
-          } catch {
-            // fall through with default paths
+
+        const resolveResources = async (): Promise<Record<string, string | null>> => {
+          const electronAPI = (window as unknown as { electronAPI?: { invoke?: (ch: string) => Promise<unknown> } }).electronAPI;
+          if (electronAPI?.invoke) {
+            return electronAPI.invoke("builtin:server-resources") as Promise<Record<string, string | null>>;
           }
+          // Web mode: ask the backend server for resolved paths
+          const base = await import("../lib/api").then(m => m.getServerBaseUrl());
+          const r = await fetch(`${base}/api/system/tools`);
+          if (!r.ok) throw new Error("system/tools failed");
+          return r.json();
+        };
+
+        try {
+          const res = await resolveResources();
+          const nodeCmd = res.node ?? "node";
+          const { useChinaMirrors, pypiMirror, hfMirror } = useNetworkStore.getState();
+          const mirrorEnv: Record<string, string> = useChinaMirrors
+            ? { UV_INDEX_URL: pypiMirror, HF_ENDPOINT: hfMirror }
+            : {};
+          const uvCmd = res.uv ?? res.uvx ?? "uvx";
+          const uvIsUvx = !res.uv; // if no bundled uv, use uvx (already handles "tool run")
+          builtinServers = BUILTIN_SERVERS.map((s): typeof s => {
+            switch (s.id) {
+              case "law-kb": {
+                if (!res["law-kb"]) return s;
+                const lawEnv = {
+                  ...s.env,
+                  ...mirrorEnv,
+                  ...(res.lawsDb ? { LAW_PREBUILT_DB: res.lawsDb as string } : {}),
+                  ...(res.lawModelDir ? { LAW_MODEL_DIR: res.lawModelDir as string } : {}),
+                };
+                return { ...s, command: nodeCmd, args: ["--experimental-sqlite", res["law-kb"]], env: lawEnv };
+              }
+              case "leochat":
+                return res.leochat ? { ...s, command: nodeCmd, args: [res.leochat] } : s;
+              case "filesystem":
+                return res.filesystem ? { ...s, command: nodeCmd, args: [res.filesystem] } : s;
+              case "everything":
+                return res.everything ? { ...s, command: nodeCmd, args: [res.everything] } : s;
+              case "memory":
+                return res.memory ? { ...s, command: nodeCmd, args: [res.memory] } : s;
+              case "fetch":
+                return res.fetch ? { ...s, command: nodeCmd, args: [res.fetch] } : s;
+              case "excel":
+                return res.excel
+                  ? { ...s, command: res.excel, args: ["stdio"], env: { ...s.env, ...mirrorEnv } }
+                  : { ...s, command: uvCmd, args: ["excel-mcp-server", "stdio"], env: { ...s.env, ...mirrorEnv } };
+              case "word": {
+                if (res.word) {
+                  return { ...s, command: res.word, args: [], env: { ...s.env, ...mirrorEnv } };
+                }
+                const uvDataDir = res.uvDataDir as string | undefined;
+                const uvEnv = {
+                  ...(uvDataDir ? { UV_TOOL_DIR: `${uvDataDir}/tools`, UV_CACHE_DIR: `${uvDataDir}/cache` } : {}),
+                  ...mirrorEnv,
+                };
+                return uvIsUvx
+                  ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
+                  : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
+              }
+              default:
+                return s;
+            }
+          });
+        } catch {
+          // fall through with default relative paths
         }
 
         // 同步内置服务列表：新增/删除跟随 BUILTIN_SERVERS，保留用户对已有服务器的修改

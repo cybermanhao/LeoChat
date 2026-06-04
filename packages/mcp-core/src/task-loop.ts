@@ -494,15 +494,29 @@ export class TaskLoop {
     const systemMessages = this.messages.filter(m => m.role === "system");
     let nonSystem = this.messages.filter(m => m.role !== "system");
 
-    // 1. 按消息数截断
+    // Always preserve the first user message (the original task description) so
+    // the AI remembers what it was doing even after heavy tool-call truncation.
+    const firstUserMsg = nonSystem.find(m => m.role === "user");
+
+    // 1. 按用户轮数截断（每条 user 消息及其后续 assistant/tool 消息算一轮）。
+    // 这样 50 轮工具调用的会话（只有 1 条 user 消息）不会被截掉大量 tool 历史。
     if (this.contextLength > 0) {
-      nonSystem = nonSystem.slice(-this.contextLength);
-      // 截断后可能从 tool/assistant(tool_calls) 消息开头，导致 API 400。
-      // 推进到第一条 user 消息作为安全起点。
-      const firstUserIdx = nonSystem.findIndex(m => m.role === "user");
-      if (firstUserIdx > 0) {
-        nonSystem = nonSystem.slice(firstUserIdx);
+      let roundsFound = 0;
+      let startIdx = nonSystem.length; // default: keep nothing if no user messages
+      for (let i = nonSystem.length - 1; i >= 0; i--) {
+        if (nonSystem[i].role === "user") {
+          roundsFound++;
+          if (roundsFound >= this.contextLength) {
+            startIdx = i;
+            break;
+          }
+        }
       }
+      // If there are fewer user turns than contextLength, keep everything
+      if (roundsFound < this.contextLength) {
+        startIdx = 0;
+      }
+      nonSystem = nonSystem.slice(startIdx);
     }
 
     // 2. Token 感知截断：如果模型有 context 上限，按 token 估算继续截断
@@ -518,6 +532,11 @@ export class TaskLoop {
       if (firstUserIdx > 0) {
         nonSystem = nonSystem.slice(firstUserIdx);
       }
+    }
+
+    // Re-prepend the original user message if it was truncated away.
+    if (firstUserMsg && (nonSystem.length === 0 || nonSystem[0].id !== firstUserMsg.id)) {
+      nonSystem = [firstUserMsg, ...nonSystem];
     }
 
     return [...systemMessages, ...nonSystem];
