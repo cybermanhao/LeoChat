@@ -3,7 +3,6 @@
  *
  * 测试覆盖：
  * - 基础 CRUD：save / load / delete
- * - 消息追加：updateMessages（每轮工具完成后调用）
  * - 状态变更：updateStatus
  * - 查询：listPending（列出未完成任务）
  * - 边界：任务不存在、文件损坏、并发写入
@@ -82,6 +81,24 @@ describe("save & load", () => {
     expect(loaded!.toolRound).toBe(3);
   });
 
+  it("preserves original createdAt across re-saves (in-memory cache)", async () => {
+    const r1 = await store.save(makeTask());
+    await new Promise((r) => setTimeout(r, 5));
+    const r2 = await store.save(makeTask({ toolRound: 1 }));
+    expect(r2.createdAt).toBe(r1.createdAt);
+  });
+
+  it("preserves original createdAt after a simulated server restart (cache cold, load from disk)", async () => {
+    const r1 = await store.save(makeTask());
+    // Simulate restart: new TaskStore instance with empty cache but same directory
+    const freshStore = new TaskStore(tmpDir);
+    await new Promise((r) => setTimeout(r, 5));
+    // load() should warm the cache
+    await freshStore.load("task-001");
+    const r2 = await freshStore.save(makeTask({ toolRound: 2 }));
+    expect(r2.createdAt).toBe(r1.createdAt);
+  });
+
   it("returns null for non-existent task", async () => {
     const result = await store.load("does-not-exist");
     expect(result).toBeNull();
@@ -99,42 +116,6 @@ describe("delete", () => {
 
   it("does not throw when deleting non-existent task", async () => {
     await expect(store.delete("ghost-task")).resolves.not.toThrow();
-  });
-});
-
-// ── 消息追加 ──────────────────────────────────────────────────────────────────
-
-describe("updateMessages", () => {
-  it("appends messages and increments toolRound", async () => {
-    await store.save(makeTask());
-
-    const newMsgs: ChatMessage[] = [
-      makeMsg("assistant", "calling tool"),
-      makeMsg("tool", "result"),
-    ];
-    await store.updateMessages("task-001", newMsgs, 1);
-
-    const loaded = await store.load("task-001");
-    expect(loaded!.internalMessages).toHaveLength(3); // 1 original + 2 new
-    expect(loaded!.toolRound).toBe(1);
-    expect(loaded!.updatedAt).toBeGreaterThan(loaded!.createdAt);
-  });
-
-  it("updates updatedAt on each call", async () => {
-    await store.save(makeTask());
-    const first = await store.load("task-001");
-
-    await new Promise((r) => setTimeout(r, 5));
-    await store.updateMessages("task-001", [makeMsg("assistant", "round 2")], 1);
-
-    const second = await store.load("task-001");
-    expect(second!.updatedAt).toBeGreaterThan(first!.updatedAt);
-  });
-
-  it("throws when task does not exist", async () => {
-    await expect(
-      store.updateMessages("missing", [makeMsg("assistant", "hi")], 1)
-    ).rejects.toThrow("Task not found: missing");
   });
 });
 

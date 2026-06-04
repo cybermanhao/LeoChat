@@ -15,7 +15,8 @@
   "dependencies": {
     "@ai-chatbox/mcp-core": "workspace:*",
     "@ai-chatbox/server": "workspace:*",
-    "@ai-chatbox/shared": "workspace:*"
+    "@ai-chatbox/shared": "workspace:*",
+    "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

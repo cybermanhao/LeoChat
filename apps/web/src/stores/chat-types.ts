@@ -53,6 +53,7 @@ export interface SettingsSlice {
   currentModel: string;
   enableMarkdown: boolean;
   maxEpochs: number;
+  unlimitedEpochs: boolean;
   contextLevel: number;
   uiMode: "simple" | "professional";
   temperature: number;
@@ -64,6 +65,7 @@ export interface SettingsSlice {
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;
   setMaxEpochs: (n: number) => void;
+  setUnlimitedEpochs: (v: boolean) => void;
   setContextLevel: (level: number) => void;
   setUiMode: (mode: "simple" | "professional") => void;
   setTemperature: (t: number) => void;

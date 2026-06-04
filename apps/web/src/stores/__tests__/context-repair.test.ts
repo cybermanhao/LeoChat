@@ -126,7 +126,9 @@ describe("patchIncompleteToolCalls", () => {
 
   // ── 关键回归：补丁必须插入 assistant 消息紧后方，而非 append 末尾 ──────────
 
-  it("孤立 tool_call 后有 user 消息 → 补丁插到 assistant 紧后，不跑到 user 后面", () => {
+  it("孤立 tool_call 后有孤立 user 消息 → 补丁插到 assistant 紧后，孤立 user 被裁剪", () => {
+    // 末尾的 user("继续") 是上次中断时遗留的孤立用户消息，没有 LLM 响应跟随，
+    // 应被裁剪；否则下次 sendMessage 会产生两条连续 user 消息导致 400。
     const msgs: ContextMessage[] = [
       userMsg("first"),
       assistantMsg("calling...", ["tc-1"]),
@@ -135,12 +137,10 @@ describe("patchIncompleteToolCalls", () => {
     ];
     const result = patchIncompleteToolCalls(msgs);
 
-    expect(result).toHaveLength(4);
-    // 补丁应在 index 2（assistant 紧后），user "继续" 应在 index 3
+    expect(result).toHaveLength(3);
+    // 补丁在 index 2（assistant 紧后），孤立 user 已被裁剪
     expect(result[2].role).toBe("tool");
     expect(result[2].tool_call_id).toBe("tc-1");
-    expect(result[3].role).toBe("user");
-    expect(result[3].content).toBe("继续");
   });
 
   it("多轮：中间某轮孤立，后续有完整轮 → 孤立轮就地修补，后续轮不受影响", () => {
@@ -165,19 +165,36 @@ describe("patchIncompleteToolCalls", () => {
     expect(result[5].tool_call_id).toBe("tc-2");
   });
 
-  it("多个孤立 tool_call 在同一 assistant → 所有补丁都插到该 assistant 紧后", () => {
+  it("多个孤立 tool_call 在同一 assistant → 所有补丁都插到该 assistant 紧后，末尾孤立 user 被裁剪", () => {
     const msgs: ContextMessage[] = [
       userMsg("go"),
       assistantMsg("multi-tool", ["tc-a", "tc-b"]),
-      // 两个都缺
+      // 两个都缺，末尾孤立 user
       { id: "u2", role: "user", content: "继续", timestamp: 0 },
     ];
     const result = patchIncompleteToolCalls(msgs);
 
-    expect(result).toHaveLength(5); // 3 + 2 patches
+    expect(result).toHaveLength(4); // 2 original (without trailing user) + 2 patches
     expect(result[2].tool_call_id).toBe("tc-a");
     expect(result[3].tool_call_id).toBe("tc-b");
-    expect(result[4].role).toBe("user");
-    expect(result[4].content).toBe("继续");
+  });
+
+  it("末尾孤立 user 消息（无任何 LLM 响应）→ 直接裁剪", () => {
+    // 生成被中止，LLM 尚未响应，contextMessages 末尾只有用户消息
+    const msgs: ContextMessage[] = [
+      userMsg("hello"),
+    ];
+    const result = patchIncompleteToolCalls(msgs);
+    expect(result).toHaveLength(0);
+  });
+
+  it("末尾是 tool result（非 user）→ 不裁剪", () => {
+    const msgs: ContextMessage[] = [
+      userMsg("go"),
+      assistantMsg("calling", ["tc-1"]),
+      { id: "tr1", role: "tool", content: "ok", tool_call_id: "tc-1", timestamp: 0 },
+    ];
+    const result = patchIncompleteToolCalls(msgs);
+    expect(result).toBe(msgs); // no-op, same reference
   });
 });

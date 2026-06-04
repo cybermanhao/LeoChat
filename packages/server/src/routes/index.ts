@@ -1,10 +1,30 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
 import { generateId } from "@ai-chatbox/shared";
+
+// Repo root: routes/ -> src/ -> server/ -> packages/ -> root (4 levels up)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(__dirname, "../../../..");
+
+function resolveExe(cmd: string): string | null {
+  try {
+    const result = execSync(
+      process.platform === "win32" ? `where ${cmd}` : `which ${cmd}`,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim().split(/\r?\n/)[0].trim();
+    return result || null;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_TOOL_RESULT = 3000;
 
@@ -721,6 +741,24 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       console.error("[Image Proxy Error]", error);
       return c.json({ error: "Failed to fetch image" }, 502);
     }
+  });
+
+  // System tool path resolution — mirrors Electron's builtin:server-resources IPC.
+  // Web dev mode uses this instead of IPC so both modes use absolute, consistent paths.
+  app.get("/system/tools", (c) => {
+    const excelExe = join(REPO_ROOT, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe");
+    return c.json({
+      node: process.execPath,
+      uv: resolveExe("uv"),
+      uvx: resolveExe("uvx"),
+      leochat:    join(REPO_ROOT, "packages/leochat-mcp/dist/index.js"),
+      filesystem: join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
+      everything: join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-everything/dist/index.js"),
+      memory:     join(REPO_ROOT, "node_modules/@modelcontextprotocol/server-memory/dist/index.js"),
+      fetch:      join(REPO_ROOT, "node_modules/@tokenizin/mcp-npx-fetch/dist/index.js"),
+      // Excel: use bundled exe on Windows (same as Electron), uvx elsewhere
+      excel: process.platform === "win32" && existsSync(excelExe) ? excelExe : null,
+    });
   });
 
   return app;

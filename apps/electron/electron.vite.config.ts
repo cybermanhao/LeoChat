@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ["@ai-chatbox/server", "@ai-chatbox/mcp-core", "@ai-chatbox/shared"] })],
+    plugins: [externalizeDepsPlugin({ exclude: ["@ai-chatbox/server", "@ai-chatbox/mcp-core", "@ai-chatbox/shared", "@leochat/law-kb-mcp"] })],
     build: {
       rollupOptions: {
         input: {

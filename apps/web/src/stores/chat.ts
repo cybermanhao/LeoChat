@@ -28,6 +28,7 @@ export const useChatStore = create<ChatState>()(
         currentModel: state.currentModel,
         enableMarkdown: state.enableMarkdown,
         maxEpochs: state.maxEpochs,
+        unlimitedEpochs: state.unlimitedEpochs,
         contextLevel: state.contextLevel,
         uiMode: state.uiMode,
         temperature: state.temperature,

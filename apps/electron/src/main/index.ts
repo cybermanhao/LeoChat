@@ -19,6 +19,12 @@ const serverPortPromise = new Promise<number>((resolve) => {
   _serverPortResolve = resolve;
 });
 
+// Set env vars for the embedded backend server (law KB paths)
+if (!is.dev) {
+  process.env.LAW_PREBUILT_DB = join(process.resourcesPath, "mcp-servers/laws.db");
+  process.env.LAW_MODEL_DIR = join(process.resourcesPath, "mcp-servers/model");
+}
+
 // Create session manager for MCP connections
 const sessionManager = createSessionManager({
   onSessionChange: (sessions) => {
