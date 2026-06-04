@@ -134,7 +134,10 @@ export class MCPClient {
 
     this.transport = transportResult.transport;
 
-    // Create MCP client with listChanged support
+    // Create MCP client
+    // Note: do NOT pass listChanged.tools.autoRefresh — in SDK >=1.x it triggers
+    // an internal listTools() call during connect() which races with our own
+    // refreshTools() call below, causing the connect to hang indefinitely.
     this.client = new Client(
       {
         name: "leochat",
@@ -142,23 +145,6 @@ export class MCPClient {
       },
       {
         capabilities: {},
-        listChanged: {
-          tools: {
-            autoRefresh: true,
-            debounceMs: 500,
-            onChanged: (_error: Error | null, tools: MCPTool[] | null) => {
-              if (tools) {
-                console.log(`[MCP] Tools list changed for ${this.config.name}: ${tools.length} tools`);
-                this.tools = tools.map((tool: any) => ({
-                  name: tool.name,
-                  description: tool.description,
-                  inputSchema: tool.inputSchema as Record<string, unknown>,
-                }));
-                this.onToolsUpdate?.(this.tools);
-              }
-            },
-          },
-        },
       }
     );
 

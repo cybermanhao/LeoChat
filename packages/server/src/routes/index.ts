@@ -288,9 +288,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
           toolRound++;
 
-          // Checkpoint: persist progress after each tool round
-          await context.taskStore.updateMessages(taskId, [], toolRound).catch(console.error);
-          // Full snapshot — replace rather than append to keep messages in sync
+          // Checkpoint: persist full snapshot after each tool round
           await context.taskStore.save({
             taskId,
             chatId,
@@ -308,8 +306,15 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
         // Mark task complete
         await context.taskStore.updateStatus(taskId, "completed").catch(console.error);
       } catch (error) {
-        // Mark interrupted so the client can resume later
-        await context.taskStore.updateStatus(taskId, "interrupted").catch(console.error);
+        // Checkpoint with actual toolRound/internalMessages at time of failure,
+        // so resume logic has accurate progress (updateStatus would keep stale toolRound).
+        await context.taskStore.save({
+          taskId,
+          chatId,
+          status: "interrupted",
+          toolRound,
+          internalMessages: [...internalMessages],
+        }).catch(console.error);
         await safeWrite("error", JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
         }));
@@ -518,8 +523,20 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
   app.post("/mcp/servers/:id/connect", async (c) => {
     const serverId = c.req.param("id");
-    const session = await context.sessionManager.connect(serverId);
-    return c.json(session);
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error(`MCP connect timeout for ${serverId}`)), 15000)
+    );
+    try {
+      const session = await Promise.race([
+        context.sessionManager.connect(serverId),
+        timeout,
+      ]);
+      return c.json(session);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[MCP] connect failed for ${serverId}:`, msg);
+      return c.json({ error: msg }, 503);
+    }
   });
 
   app.post("/mcp/servers/:id/disconnect", async (c) => {
