@@ -770,7 +770,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
   app.get('/kb/status', async (c) => {
     try {
       const { listKnowledgeBases } = await import('@leochat/law-kb-mcp/indexer');
-      return c.json(listKnowledgeBases());
+      return c.json(await listKnowledgeBases());
     } catch (error) {
       console.error('[KB status]', error);
       return c.json({ error: 'Failed to get KB status' }, 500);
