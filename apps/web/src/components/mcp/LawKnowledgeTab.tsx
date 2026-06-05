@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen, FileText, RefreshCw, Loader2,
-  CheckCircle2, AlertCircle, Upload,
+  CheckCircle2, AlertCircle, Upload, Scale,
 } from 'lucide-react';
 import { cn, Button } from '@ai-chatbox/ui';
 import { kbApi, type KbStatus } from '../../lib/kbApi';
@@ -133,6 +133,11 @@ export function LawKnowledgeTab() {
               label="法律法规"
               count={status?.law_count ?? 0}
               action={{ label: '同步', loading: syncState === 'syncing', onClick: handleSyncFlk }}
+            />
+            <StatRow
+              icon={<Scale className="h-4 w-4 text-amber-500" />}
+              label="判例"
+              count={status?.case_count ?? 0}
             />
             <StatRow
               icon={<FileText className="h-4 w-4 text-green-500" />}

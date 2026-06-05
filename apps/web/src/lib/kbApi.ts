@@ -7,6 +7,7 @@ async function base(): Promise<string> {
 export interface KbStatus {
   law_count: number;
   user_doc_count: number;
+  case_count?: number;
   law_chunks_count?: number;
   user_doc_chunks_count?: number;
   model_ready?: boolean;
