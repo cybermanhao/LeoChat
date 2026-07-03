@@ -35,11 +35,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages
+        shell: pwsh
+        # law-kb-mcp must build before server: server imports @leochat/law-kb-mcp/* types from its dist.
+        # Each command checks its own exit code — pwsh multi-line run only propagates the LAST one,
+        # which silently swallowed the server build failure in earlier releases.
         run: |
-          pnpm build:packages
-          pnpm --filter @ai-chatbox/server run build
-          pnpm --filter @ai-chatbox/leochat-mcp run build
-          pnpm --filter @leochat/law-kb-mcp run build
+          pnpm build:packages; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @leochat/law-kb-mcp run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @ai-chatbox/leochat-mcp run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @ai-chatbox/server run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download Excel MCP server
         shell: pwsh
