@@ -65,6 +65,7 @@ jobs:
           node scripts/download-uv-win.mjs
           node scripts/bundle-mcp-servers.mjs
           node scripts/build-word-mcp-win.mjs
+          node scripts/rebuild-native-electron.mjs
         env:
           NODE_MIRROR: https://npmmirror.com/mirrors/node
           UV_MIRROR: https://github.com/astral-sh/uv/releases/download

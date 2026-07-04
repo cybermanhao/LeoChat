@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist out",
     "pack": "electron-builder --dir",
-    "predist": "node ../../scripts/download-node-win.mjs && node ../../scripts/download-uv-win.mjs && node ../../scripts/bundle-mcp-servers.mjs && node ../../scripts/build-word-mcp-win.mjs",
+    "predist": "node ../../scripts/download-node-win.mjs && node ../../scripts/download-uv-win.mjs && node ../../scripts/bundle-mcp-servers.mjs && node ../../scripts/build-word-mcp-win.mjs && node ../../scripts/rebuild-native-electron.mjs",
     "dist": "electron-builder"
   },
   "dependencies": {
