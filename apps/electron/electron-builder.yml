@@ -49,6 +49,11 @@ win:
       to: "node_modules/onnxruntime-node/bin/napi-v3/win32/x64"
     - from: "../../node_modules/onnxruntime-node/package.json"
       to: "node_modules/onnxruntime-node/package.json"
+    # onnxruntime-node's dist/index.js does require("onnxruntime-common") at load
+    # time; without shipping it as a sibling package, packaged apps outside any
+    # node_modules ancestor tree crash with MODULE_NOT_FOUND on first search_law call.
+    - from: "../../node_modules/onnxruntime-common"
+      to: "node_modules/onnxruntime-common"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
