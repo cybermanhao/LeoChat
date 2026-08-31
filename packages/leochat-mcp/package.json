@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@ai-chatbox/shared": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/server": "^2.0.0"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
