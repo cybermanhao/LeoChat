@@ -1,4 +1,4 @@
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { Transport } from "@modelcontextprotocol/client";
 import type { MCPServerConfig, HostMode } from "@ai-chatbox/shared";
 
 export type MCPTransport = Transport;
@@ -102,7 +102,7 @@ async function createStdioTransportAsync(
 
   // 动态导入 STDIO 传输（懒加载）
   // 使用字符串拼接防止 Vite 静态分析
-  const modulePath = "@modelcontextprotocol/sdk/client/" + "stdio.js";
+  const modulePath = "@modelcontextprotocol/client/" + "stdio";
   const { StdioClientTransport } = await import(/* @vite-ignore */ modulePath);
 
   // 创建传输层（异步，不阻塞主线程）
@@ -187,8 +187,9 @@ async function createStreamableHTTPTransportAsync(
   }
 
   // 动态导入 Streamable HTTP 传输
+  // v2 SDK 里 StreamableHTTPClientTransport 从主包导出（不再是独立子路径）
   // 使用字符串拼接防止 Vite 静态分析
-  const streamableHttpModulePath = "@modelcontextprotocol/sdk/client/" + "streamableHttp.js";
+  const streamableHttpModulePath = "@modelcontextprotocol/" + "client";
   const { StreamableHTTPClientTransport } = await import(/* @vite-ignore */ streamableHttpModulePath);
 
   const transport = new StreamableHTTPClientTransport(new URL(config.url));

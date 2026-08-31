@@ -1,4 +1,4 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Client } from "@modelcontextprotocol/client";
 import type {
   MCPServerConfig,
   MCPSession,
