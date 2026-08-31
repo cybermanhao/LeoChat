@@ -64,6 +64,14 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     command: "uvx",
     args: ["--from", "office-word-mcp-server", "word_mcp_server"],
   },
+  {
+    id: "playwright",
+    name: "Playwright",
+    transport: "stdio",
+    command: "npx",
+    args: ["-y", "@playwright/mcp@latest"],
+    // 浏览器自动化：navigate/click/type/screenshot 等，无需 API key
+  },
 ];
 
 interface MCPState {
