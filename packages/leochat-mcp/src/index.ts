@@ -1,11 +1,6 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { z } from "zod";
 import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
 import { exec } from "child_process";
 
@@ -160,46 +155,33 @@ function runBash(command: string, timeoutMs: number): Promise<{ stdout: string; 
 // ============================================================================
 // MCP 服务器配置
 // ============================================================================
+//
+// 注意：构造 + 全部工具/prompt 注册都包在 createServer() 工厂函数里，而不是
+// 模块级单例——serveStdio() 需要一个工厂，为每次连接的开场交换（legacy/modern
+// 握手协商）产出一个全新实例，避免连接之间状态串味。
 
-const server = new Server(
-  {
+function createServer(): McpServer {
+  const server = new McpServer({
     name: "leochat-mcp",
     version: "0.1.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-      prompts: {},
-    },
-  }
-);
+  });
 
 // ============================================================================
 // Prompts
 // ============================================================================
 
-server.setRequestHandler(ListPromptsRequestSchema, async () => {
-  return {
-    prompts: [
+server.registerPrompt(
+  "leochat_tool_guide",
+  {
+    description: "LeoChat UI 工具使用指南 - 描述主题、通知、面板等 UI 控制工具的用法模板",
+  },
+  () => ({
+    messages: [
       {
-        name: "leochat_tool_guide",
-        description: "LeoChat UI 工具使用指南 - 描述主题、通知、面板等 UI 控制工具的用法模板",
-      },
-    ],
-  };
-});
-
-server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  const { name } = request.params;
-
-  if (name === "leochat_tool_guide") {
-    return {
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text: `你是 LeoChat 的 UI 控制助手，具有以下能力：
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: `你是 LeoChat 的 UI 控制助手，具有以下能力：
 
 ## 主题控制
 可用主题:
@@ -230,501 +212,383 @@ ${getThemeDescriptions()}
 1. 当用户请求 UI 操作时，必须调用对应工具，不要只是口头回复
 2. 操作成功后会自动显示视觉反馈
 3. 可以组合多个工具完成复杂操作`,
-          },
         },
-      ],
-    };
-  }
+      },
+    ],
+  })
+);
 
-  throw new Error(`Unknown prompt: ${name}`);
+// ============================================================================
+// 工具处理辅助函数
+// ============================================================================
+
+const makeResponse = (command: UICommand) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(command) }],
+});
+
+const makeError = (message: string) => ({
+  content: [{ type: "text" as const, text: message }],
 });
 
 // ============================================================================
 // 工具定义
 // ============================================================================
+// 注意：tools/list 由 registerTool 自动生成，不再需要手写 ListToolsRequestSchema
+// handler。themeList 在每次调用时读取，保持和旧版一致的"实时主题列表"行为。
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const themeList = getThemeListString();
-
-  return {
-    tools: [
-      {
-        name: "update_theme",
-        description: `更新界面主题。可用: ${themeList}`,
-        inputSchema: {
-          type: "object",
-          properties: {
-            theme: {
-              type: "string",
-              description: `主题 ID: ${themeList}`,
-            },
-            mode: {
-              type: "string",
-              enum: ["light", "dark"],
-              description: "切换明暗模式（保持当前色系）",
-            },
-          },
-        },
-      },
-      {
-        name: "show_notification",
-        description: "显示通知消息",
-        inputSchema: {
-          type: "object",
-          properties: {
-            message: { type: "string", description: "通知内容" },
-            type: {
-              type: "string",
-              enum: ["info", "success", "warning", "error"],
-              description: "通知类型",
-            },
-            duration: { type: "number", description: "显示时长(ms)，默认 3000" },
-          },
-          required: ["message"],
-        },
-      },
-      {
-        name: "show_confirm",
-        description: "显示确认对话框",
-        inputSchema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "标题" },
-            message: { type: "string", description: "确认消息" },
-            confirmText: { type: "string", description: "确认按钮文字" },
-            cancelText: { type: "string", description: "取消按钮文字" },
-          },
-          required: ["title", "message"],
-        },
-      },
-      {
-        name: "open_panel",
-        description: "打开 UI 面板",
-        inputSchema: {
-          type: "object",
-          properties: {
-            panel: {
-              type: "string",
-              enum: ["mcp", "settings", "history"],
-              description: "面板类型",
-            },
-            tab: { type: "string", description: "要激活的标签页" },
-          },
-          required: ["panel"],
-        },
-      },
-      {
-        name: "close_panel",
-        description: "关闭 UI 面板",
-        inputSchema: {
-          type: "object",
-          properties: {
-            panel: {
-              type: "string",
-              enum: ["mcp", "settings", "history", "all"],
-              description: "面板类型，或 'all' 关闭全部",
-            },
-          },
-          required: ["panel"],
-        },
-      },
-      {
-        name: "copy_to_clipboard",
-        description: "复制文本到剪贴板",
-        inputSchema: {
-          type: "object",
-          properties: {
-            text: { type: "string", description: "要复制的文本" },
-            showNotification: { type: "boolean", description: "是否显示成功通知" },
-          },
-          required: ["text"],
-        },
-      },
-      {
-        name: "open_url",
-        description: "在浏览器中打开链接",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "URL 地址" },
-            newTab: { type: "boolean", description: "是否在新标签页打开" },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "set_input",
-        description: "设置聊天输入框内容",
-        inputSchema: {
-          type: "object",
-          properties: {
-            text: { type: "string", description: "要设置的文本" },
-            append: { type: "boolean", description: "是否追加而非替换" },
-          },
-          required: ["text"],
-        },
-      },
-      {
-        name: "scroll_to_message",
-        description: "滚动到指定消息或位置",
-        inputSchema: {
-          type: "object",
-          properties: {
-            messageId: { type: "string", description: "消息 ID" },
-            position: {
-              type: "string",
-              enum: ["top", "bottom"],
-              description: "滚动到顶部或底部",
-            },
-          },
-        },
-      },
-      {
-        name: "resize_window",
-        description: "调整应用窗口大小。支持预设尺寸或自定义宽高（仅 Electron 桌面端有效）",
-        inputSchema: {
-          type: "object",
-          properties: {
-            preset: {
-              type: "string",
-              enum: ["small", "medium", "large", "fullscreen"],
-              description: "预设尺寸: small(800×600), medium(1200×800), large(1600×1000), fullscreen(最大化)",
-            },
-            width: { type: "number", description: "自定义宽度（px），需同时提供 height" },
-            height: { type: "number", description: "自定义高度（px），需同时提供 width" },
-          },
-        },
-      },
-      /**
-       * @deprecated 此工具已废弃，将在未来版本中移除。
-       */
-      {
-        name: "test_tool_call",
-        description: "【已废弃】测试工具调用 UI 渲染。用于测试工具调用的读条动画效果。当用户说'测试tool调用'时使用此工具。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            duration: {
-              type: "number",
-              description: "模拟执行时间（秒），默认 3",
-            },
-            shouldFail: {
-              type: "boolean",
-              description: "是否模拟失败，默认 false",
-            },
-            message: {
-              type: "string",
-              description: "自定义返回消息",
-            },
-          },
-        },
-      },
-      // -----------------------------------------------------------------------
-      // render_cards — PERMANENTLY REMOVED. DO NOT RESTORE.
-      //
-      // Cards are now structured message content (see card-spec.md), not UI
-      // commands.  The command-based render_cards approach is superseded by
-      // first-class card content items in the message schema.  Any future
-      // card rendering must go through the structured content path, not
-      // through this MCP tool.
-      // -----------------------------------------------------------------------
-      {
-        name: "bash",
-        description: `在 shell 中执行命令并返回输出。禁止命令: ${BASH_BANNED_COMMANDS.join(", ")}`,
-        inputSchema: {
-          type: "object",
-          properties: {
-            command: { type: "string", description: "要执行的 shell 命令" },
-            timeout: { type: "number", description: "超时时间(ms)，默认 30000，最大 600000" },
-          },
-          required: ["command"],
-        },
-      },
-      {
-        name: "generate_waifu",
-        description: "生成随机二次元图片（waifu/头像等），以 LeoCard 卡片形式返回。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            category: {
-              type: "string",
-              enum: ["waifu", "neko", "shinobu", "megumin", "awoo", "smile", "happy", "wink", "blush", "smug", "dance"],
-              description: "图片类型。waifu=随机美少女, neko=猫娘, 其他为特定角色/表情",
-            },
-            count: {
-              type: "number",
-              description: "生成数量(1-5)，默认1",
-            },
-          },
-        },
-      },
-    ],
-  };
-});
-
-// ============================================================================
-// 工具处理
-// ============================================================================
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  const makeResponse = (command: UICommand) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(command) }],
-  });
-
-  const makeError = (message: string) => ({
-    content: [{ type: "text" as const, text: message }],
-  });
-
-  switch (name) {
-    case "update_theme": {
-      const { theme, mode } = args as { theme?: string; mode?: "light" | "dark" };
-
-      if (theme) {
-        const resolvedTheme = resolveThemeId(theme);
-        if (resolvedTheme) {
-          return makeResponse(createUICommand("update_theme", { themeId: resolvedTheme }));
-        }
-        return makeError(`未知主题: ${theme}。可用: ${getThemeListString()}`);
+server.registerTool(
+  "update_theme",
+  {
+    description: `更新界面主题。可用: ${getThemeListString()}`,
+    inputSchema: z.object({
+      theme: z.string().describe(`主题 ID: ${getThemeListString()}`).optional(),
+      mode: z.enum(["light", "dark"]).describe("切换明暗模式（保持当前色系）").optional(),
+    }),
+  },
+  async ({ theme, mode }) => {
+    if (theme) {
+      const resolvedTheme = resolveThemeId(theme);
+      if (resolvedTheme) {
+        return makeResponse(createUICommand("update_theme", { themeId: resolvedTheme }));
       }
-
-      if (mode) {
-        return makeResponse(createUICommand("update_theme", { mode }));
-      }
-
-      return makeError("请指定 theme 或 mode 参数");
+      return makeError(`未知主题: ${theme}。可用: ${getThemeListString()}`);
     }
 
-    case "show_notification": {
-      const { message, type = "info", duration = 3000 } = args as {
-        message: string;
-        type?: string;
-        duration?: number;
-      };
-      return makeResponse(createUICommand("show_notification", { message, type, duration }));
+    if (mode) {
+      return makeResponse(createUICommand("update_theme", { mode }));
     }
 
-    case "show_confirm": {
-      const { title, message, confirmText, cancelText } = args as {
-        title: string;
-        message: string;
-        confirmText?: string;
-        cancelText?: string;
-      };
-      return makeResponse(createUICommand("show_confirm", { title, message, confirmText, cancelText }));
-    }
-
-    case "open_panel": {
-      const { panel, tab } = args as { panel: string; tab?: string };
-      return makeResponse(createUICommand("open_panel", { panel, tab }));
-    }
-
-    case "close_panel": {
-      const { panel } = args as { panel: string };
-      return makeResponse(createUICommand("close_panel", { panel }));
-    }
-
-    case "copy_to_clipboard": {
-      const { text, showNotification = true } = args as { text: string; showNotification?: boolean };
-      return makeResponse(createUICommand("copy_to_clipboard", { text, showNotification }));
-    }
-
-    case "open_url": {
-      const { url, newTab = true } = args as { url: string; newTab?: boolean };
-      return makeResponse(createUICommand("open_url", { url, newTab }));
-    }
-
-    case "set_input": {
-      const { text, append = false } = args as { text: string; append?: boolean };
-      return makeResponse(createUICommand("set_input", { text, append }));
-    }
-
-    case "scroll_to_message": {
-      const { messageId, position } = args as { messageId?: string; position?: "top" | "bottom" };
-      return makeResponse(createUICommand("scroll_to_message", { messageId, position }));
-    }
-
-    case "resize_window": {
-      const { width, height, preset } = args as {
-        width?: number;
-        height?: number;
-        preset?: "small" | "medium" | "large" | "fullscreen";
-      };
-      return makeResponse(createUICommand("resize_window", { width, height, preset }));
-    }
-
-    case "bash": {
-      const { command, timeout: timeoutMs = 30000 } = args as { command: string; timeout?: number };
-
-      const baseCmd = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-      if (BASH_BANNED_COMMANDS.includes(baseCmd)) {
-        return makeError(`命令 '${baseCmd}' 因安全原因被禁止`);
-      }
-
-      const clampedTimeout = Math.min(Math.max(timeoutMs, 1000), 600000);
-      const result = await runBash(command, clampedTimeout);
-
-      const { content: stdoutContent, totalLines: stdoutLines } = truncateBashOutput(result.stdout.trim());
-      const { content: stderrContent } = truncateBashOutput(result.stderr.trim());
-
-      const parts: string[] = [];
-      if (stdoutContent) parts.push(stdoutContent);
-      if (stderrContent) parts.push(`[stderr]\n${stderrContent}`);
-      if (result.code !== 0 && result.code !== null) parts.push(`[exit code: ${result.code}]`);
-      if (parts.length === 0) parts.push("(no output)");
-
-      const summary = stdoutLines > 50 ? ` (共 ${stdoutLines} 行)` : "";
-      return {
-        content: [{ type: "text" as const, text: parts.join("\n") + summary }],
-      };
-    }
-
-    case "test_tool_call": {
-      const { duration = 3, shouldFail = false, message } = args as {
-        duration?: number;
-        shouldFail?: boolean;
-        message?: string;
-      };
-
-      // 模拟延迟
-      await new Promise((resolve) => setTimeout(resolve, duration * 1000));
-
-      if (shouldFail) {
-        // 抛出错误让 MCP 协议返回错误状态
-        throw new Error(message || `测试工具调用失败（模拟）`);
-      }
-
-      // 返回一个示例 leo-card 结构化卡片 payload，用于验证卡片渲染管线
-      const cardPayload = {
-        type: "leochat-card",
-        card: {
-          id: `test_card_${Date.now()}`,
-          kind: "summary",
-          title: "工具调用测试完成",
-          subtitle: `用时 ${duration} 秒`,
-          tone: "success",
-          body: [
-            {
-              type: "fields",
-              fields: [
-                { label: "状态", value: "成功" },
-                { label: "耗时", value: `${duration}s` },
-                { label: "消息", value: message || "默认测试" },
-              ],
-            },
-            {
-              type: "text",
-              text: "这是一张由 test_tool_call 生成的示例卡片，用于验证 LeoChat 卡片系统。",
-            },
-          ],
-          actions: [
-            {
-              id: "action_notify",
-              label: "发送通知",
-              kind: "primary",
-              action: {
-                type: "ui-command",
-                command: "show_notification",
-                payload: { message: "卡片动作测试成功！", type: "success" },
-              },
-            },
-            {
-              id: "action_link",
-              label: "打开文档",
-              kind: "secondary",
-              action: {
-                type: "link",
-                url: "https://github.com",
-              },
-            },
-          ],
-        },
-      };
-
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(cardPayload) }],
-      };
-    }
-
-    // render_cards — PERMANENTLY REMOVED. DO NOT RESTORE.
-    // Cards are now structured content, not UI commands. See card-spec.md.
-
-    case "generate_waifu": {
-      const { category = "waifu", count = 1 } = args as {
-        category?: string;
-        count?: number;
-      };
-
-      const validCategories = ["waifu", "neko", "shinobu", "megumin", "awoo", "smile", "happy", "wink", "blush", "smug", "dance"];
-      const cat = validCategories.includes(category) ? category : "waifu";
-      const num = Math.min(Math.max(count, 1), 5);
-
-      const categoryNames: Record<string, string> = {
-        waifu: "Waifu",
-        neko: "猫娘",
-        shinobu: "忍野忍",
-        megumin: "惠惠",
-        awoo: "Awoo",
-        smile: "微笑",
-        happy: "开心",
-        wink: "眨眼",
-        blush: "害羞",
-        smug: "得意",
-        dance: "跳舞",
-      };
-
-      // 并发请求 waifu.pics API
-      const results = await Promise.allSettled(
-        Array.from({ length: num }, () =>
-          fetch(`https://api.waifu.pics/sfw/${cat}`)
-            .then(r => r.ok ? r.json() as Promise<{ url: string }> : null)
-        )
-      );
-      const urls = results
-        .filter((r): r is PromiseFulfilledResult<{ url: string }> => r.status === "fulfilled" && r.value !== null)
-        .map(r => r.value.url);
-
-      if (urls.length === 0) {
-        return makeError("获取图片失败，请稍后重试");
-      }
-
-      // 构建 LeoCard
-      const card = {
-        id: `waifu_${Date.now()}`,
-        kind: "media",
-        title: `${categoryNames[cat] || cat}`,
-        subtitle: urls.length > 1 ? `${urls.length} 张图片` : undefined,
-        tone: "default",
-        body: urls.length === 1
-          ? [{ type: "image", image: { url: urls[0], alt: categoryNames[cat] || cat } }]
-          : [{ type: "images", images: urls.map((url, i) => ({ url, alt: `${categoryNames[cat] || cat} #${i + 1}` })) }],
-        actions: urls.map((url, i) => ({
-          id: `view_${i}`,
-          label: urls.length === 1 ? "查看原图" : `原图 #${i + 1}`,
-          kind: "secondary",
-          action: { type: "link", url },
-        })),
-      };
-
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(card) }],
-      };
-    }
-
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+    return makeError("请指定 theme 或 mode 参数");
   }
-});
+);
+
+server.registerTool(
+  "show_notification",
+  {
+    description: "显示通知消息",
+    inputSchema: z.object({
+      message: z.string().describe("通知内容"),
+      type: z.enum(["info", "success", "warning", "error"]).describe("通知类型").optional(),
+      duration: z.number().describe("显示时长(ms)，默认 3000").optional(),
+    }),
+  },
+  async ({ message, type = "info", duration = 3000 }) => {
+    return makeResponse(createUICommand("show_notification", { message, type, duration }));
+  }
+);
+
+server.registerTool(
+  "show_confirm",
+  {
+    description: "显示确认对话框",
+    inputSchema: z.object({
+      title: z.string().describe("标题"),
+      message: z.string().describe("确认消息"),
+      confirmText: z.string().describe("确认按钮文字").optional(),
+      cancelText: z.string().describe("取消按钮文字").optional(),
+    }),
+  },
+  async ({ title, message, confirmText, cancelText }) => {
+    return makeResponse(createUICommand("show_confirm", { title, message, confirmText, cancelText }));
+  }
+);
+
+server.registerTool(
+  "open_panel",
+  {
+    description: "打开 UI 面板",
+    inputSchema: z.object({
+      panel: z.enum(["mcp", "settings", "history"]).describe("面板类型"),
+      tab: z.string().describe("要激活的标签页").optional(),
+    }),
+  },
+  async ({ panel, tab }) => {
+    return makeResponse(createUICommand("open_panel", { panel, tab }));
+  }
+);
+
+server.registerTool(
+  "close_panel",
+  {
+    description: "关闭 UI 面板",
+    inputSchema: z.object({
+      panel: z.enum(["mcp", "settings", "history", "all"]).describe("面板类型，或 'all' 关闭全部"),
+    }),
+  },
+  async ({ panel }) => {
+    return makeResponse(createUICommand("close_panel", { panel }));
+  }
+);
+
+server.registerTool(
+  "copy_to_clipboard",
+  {
+    description: "复制文本到剪贴板",
+    inputSchema: z.object({
+      text: z.string().describe("要复制的文本"),
+      showNotification: z.boolean().describe("是否显示成功通知").optional(),
+    }),
+  },
+  async ({ text, showNotification = true }) => {
+    return makeResponse(createUICommand("copy_to_clipboard", { text, showNotification }));
+  }
+);
+
+server.registerTool(
+  "open_url",
+  {
+    description: "在浏览器中打开链接",
+    inputSchema: z.object({
+      url: z.string().describe("URL 地址"),
+      newTab: z.boolean().describe("是否在新标签页打开").optional(),
+    }),
+  },
+  async ({ url, newTab = true }) => {
+    return makeResponse(createUICommand("open_url", { url, newTab }));
+  }
+);
+
+server.registerTool(
+  "set_input",
+  {
+    description: "设置聊天输入框内容",
+    inputSchema: z.object({
+      text: z.string().describe("要设置的文本"),
+      append: z.boolean().describe("是否追加而非替换").optional(),
+    }),
+  },
+  async ({ text, append = false }) => {
+    return makeResponse(createUICommand("set_input", { text, append }));
+  }
+);
+
+server.registerTool(
+  "scroll_to_message",
+  {
+    description: "滚动到指定消息或位置",
+    inputSchema: z.object({
+      messageId: z.string().describe("消息 ID").optional(),
+      position: z.enum(["top", "bottom"]).describe("滚动到顶部或底部").optional(),
+    }),
+  },
+  async ({ messageId, position }) => {
+    return makeResponse(createUICommand("scroll_to_message", { messageId, position }));
+  }
+);
+
+server.registerTool(
+  "resize_window",
+  {
+    description: "调整应用窗口大小。支持预设尺寸或自定义宽高（仅 Electron 桌面端有效）",
+    inputSchema: z.object({
+      preset: z
+        .enum(["small", "medium", "large", "fullscreen"])
+        .describe("预设尺寸: small(800×600), medium(1200×800), large(1600×1000), fullscreen(最大化)")
+        .optional(),
+      width: z.number().describe("自定义宽度（px），需同时提供 height").optional(),
+      height: z.number().describe("自定义高度（px），需同时提供 width").optional(),
+    }),
+  },
+  async ({ width, height, preset }) => {
+    return makeResponse(createUICommand("resize_window", { width, height, preset }));
+  }
+);
+
+/**
+ * @deprecated 此工具已废弃，将在未来版本中移除。
+ */
+server.registerTool(
+  "test_tool_call",
+  {
+    description: "【已废弃】测试工具调用 UI 渲染。用于测试工具调用的读条动画效果。当用户说'测试tool调用'时使用此工具。",
+    inputSchema: z.object({
+      duration: z.number().describe("模拟执行时间（秒），默认 3").optional(),
+      shouldFail: z.boolean().describe("是否模拟失败，默认 false").optional(),
+      message: z.string().describe("自定义返回消息").optional(),
+    }),
+  },
+  async ({ duration = 3, shouldFail = false, message }) => {
+    // 模拟延迟
+    await new Promise((resolve) => setTimeout(resolve, duration * 1000));
+
+    if (shouldFail) {
+      // 抛出错误让 MCP 协议返回错误状态
+      throw new Error(message || `测试工具调用失败（模拟）`);
+    }
+
+    // 返回一个示例 leo-card 结构化卡片 payload，用于验证卡片渲染管线
+    const cardPayload = {
+      type: "leochat-card",
+      card: {
+        id: `test_card_${Date.now()}`,
+        kind: "summary",
+        title: "工具调用测试完成",
+        subtitle: `用时 ${duration} 秒`,
+        tone: "success",
+        body: [
+          {
+            type: "fields",
+            fields: [
+              { label: "状态", value: "成功" },
+              { label: "耗时", value: `${duration}s` },
+              { label: "消息", value: message || "默认测试" },
+            ],
+          },
+          {
+            type: "text",
+            text: "这是一张由 test_tool_call 生成的示例卡片，用于验证 LeoChat 卡片系统。",
+          },
+        ],
+        actions: [
+          {
+            id: "action_notify",
+            label: "发送通知",
+            kind: "primary",
+            action: {
+              type: "ui-command",
+              command: "show_notification",
+              payload: { message: "卡片动作测试成功！", type: "success" },
+            },
+          },
+          {
+            id: "action_link",
+            label: "打开文档",
+            kind: "secondary",
+            action: {
+              type: "link",
+              url: "https://github.com",
+            },
+          },
+        ],
+      },
+    };
+
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(cardPayload) }],
+    };
+  }
+);
+
+// render_cards — PERMANENTLY REMOVED. DO NOT RESTORE.
+//
+// Cards are now structured message content (see card-spec.md), not UI
+// commands.  The command-based render_cards approach is superseded by
+// first-class card content items in the message schema.  Any future
+// card rendering must go through the structured content path, not
+// through this MCP tool.
+
+server.registerTool(
+  "bash",
+  {
+    description: `在 shell 中执行命令并返回输出。禁止命令: ${BASH_BANNED_COMMANDS.join(", ")}`,
+    inputSchema: z.object({
+      command: z.string().describe("要执行的 shell 命令"),
+      timeout: z.number().describe("超时时间(ms)，默认 30000，最大 600000").optional(),
+    }),
+  },
+  async ({ command, timeout: timeoutMs = 30000 }) => {
+    const baseCmd = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (BASH_BANNED_COMMANDS.includes(baseCmd)) {
+      return makeError(`命令 '${baseCmd}' 因安全原因被禁止`);
+    }
+
+    const clampedTimeout = Math.min(Math.max(timeoutMs, 1000), 600000);
+    const result = await runBash(command, clampedTimeout);
+
+    const { content: stdoutContent, totalLines: stdoutLines } = truncateBashOutput(result.stdout.trim());
+    const { content: stderrContent } = truncateBashOutput(result.stderr.trim());
+
+    const parts: string[] = [];
+    if (stdoutContent) parts.push(stdoutContent);
+    if (stderrContent) parts.push(`[stderr]\n${stderrContent}`);
+    if (result.code !== 0 && result.code !== null) parts.push(`[exit code: ${result.code}]`);
+    if (parts.length === 0) parts.push("(no output)");
+
+    const summary = stdoutLines > 50 ? ` (共 ${stdoutLines} 行)` : "";
+    return {
+      content: [{ type: "text" as const, text: parts.join("\n") + summary }],
+    };
+  }
+);
+
+server.registerTool(
+  "generate_waifu",
+  {
+    description: "生成随机二次元图片（waifu/头像等），以 LeoCard 卡片形式返回。",
+    inputSchema: z.object({
+      category: z
+        .enum(["waifu", "neko", "shinobu", "megumin", "awoo", "smile", "happy", "wink", "blush", "smug", "dance"])
+        .describe("图片类型。waifu=随机美少女, neko=猫娘, 其他为特定角色/表情")
+        .optional(),
+      count: z.number().describe("生成数量(1-5)，默认1").optional(),
+    }),
+  },
+  async ({ category = "waifu", count = 1 }) => {
+    const num = Math.min(Math.max(count, 1), 5);
+
+    const categoryNames: Record<string, string> = {
+      waifu: "Waifu",
+      neko: "猫娘",
+      shinobu: "忍野忍",
+      megumin: "惠惠",
+      awoo: "Awoo",
+      smile: "微笑",
+      happy: "开心",
+      wink: "眨眼",
+      blush: "害羞",
+      smug: "得意",
+      dance: "跳舞",
+    };
+
+    // 并发请求 waifu.pics API
+    const results = await Promise.allSettled(
+      Array.from({ length: num }, () =>
+        fetch(`https://api.waifu.pics/sfw/${category}`)
+          .then(r => r.ok ? r.json() as Promise<{ url: string }> : null)
+      )
+    );
+    const urls = results
+      .filter((r): r is PromiseFulfilledResult<{ url: string }> => r.status === "fulfilled" && r.value !== null)
+      .map(r => r.value.url);
+
+    if (urls.length === 0) {
+      return makeError("获取图片失败，请稍后重试");
+    }
+
+    // 构建 LeoCard
+    const card = {
+      id: `waifu_${Date.now()}`,
+      kind: "media",
+      title: `${categoryNames[category] || category}`,
+      subtitle: urls.length > 1 ? `${urls.length} 张图片` : undefined,
+      tone: "default",
+      body: urls.length === 1
+        ? [{ type: "image", image: { url: urls[0], alt: categoryNames[category] || category } }]
+        : [{ type: "images", images: urls.map((url, i) => ({ url, alt: `${categoryNames[category] || category} #${i + 1}` })) }],
+      actions: urls.map((url, i) => ({
+        id: `view_${i}`,
+        label: urls.length === 1 ? "查看原图" : `原图 #${i + 1}`,
+        kind: "secondary",
+        action: { type: "link", url },
+      })),
+    };
+
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(card) }],
+    };
+  }
+  );
+
+  return server;
+}
 
 // ============================================================================
 // 启动服务器
 // ============================================================================
+//
+// serveStdio 内部默认用 StdioServerTransport 接管当前进程的 stdin/stdout，
+// 并负责开场交换的时代协商（legacy 'serve' 默认值：老客户端按 2025 握手正常
+// 服务，新客户端可协商 2026-07-28 modern era）。同步启动，不需要 await。
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("LeoChat MCP Server running on stdio");
-}
-
-main().catch(console.error);
+serveStdio(createServer);
+console.error("LeoChat MCP Server running on stdio");

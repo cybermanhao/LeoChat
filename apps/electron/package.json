@@ -1,6 +1,6 @@
 {
   "name": "@ai-chatbox/electron",
-  "version": "0.2.4-law",
+  "version": "0.2.5-law",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {

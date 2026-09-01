@@ -1,4 +1,4 @@
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { Transport } from "@modelcontextprotocol/client";
 import type { MCPServerConfig, HostMode } from "@ai-chatbox/shared";
 
 export type MCPTransport = Transport;
@@ -27,6 +27,11 @@ export interface TransportFactoryOptions {
 }
 
 const DEFAULT_STDIO_TIMEOUT = 8000;
+// v2 SDK's own default is 10MB (v1 had no cap). Raise the floor so tools that
+// return large payloads (screenshots, big file reads) don't silently start
+// failing after the SDK migration. Per-server override via
+// MCPServerConfig.maxBufferSize still wins over this.
+const DEFAULT_STDIO_MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB
 const DEFAULT_HTTP_TIMEOUT = 15000;
 
 /**
@@ -34,7 +39,7 @@ const DEFAULT_HTTP_TIMEOUT = 15000;
  *
  * @description
  * - STDIO: 懒加载，异步启动进程，仅 Electron 环境支持
- * - HTTP: 直接创建 SSE 连接
+ * - HTTP: 直接创建 Streamable HTTP 连接
  */
 export async function createTransportAsync(
   config: MCPServerConfig,
@@ -54,7 +59,7 @@ export async function createTransportAsync(
         });
 
       case "streamable-http":
-        return await createSSETransportAsync(config, {
+        return await createStreamableHTTPTransportAsync(config, {
           timeout: connectionTimeout ?? DEFAULT_HTTP_TIMEOUT,
           onStatusChange,
         });
@@ -102,7 +107,7 @@ async function createStdioTransportAsync(
 
   // 动态导入 STDIO 传输（懒加载）
   // 使用字符串拼接防止 Vite 静态分析
-  const modulePath = "@modelcontextprotocol/sdk/client/" + "stdio.js";
+  const modulePath = "@modelcontextprotocol/client/" + "stdio";
   const { StdioClientTransport } = await import(/* @vite-ignore */ modulePath);
 
   // 创建传输层（异步，不阻塞主线程）
@@ -122,6 +127,7 @@ async function createStdioTransportAsync(
     command: config.command,
     args: config.args,
     env,
+    maxBufferSize: config.maxBufferSize ?? DEFAULT_STDIO_MAX_BUFFER_SIZE,
     ...(config.cwd ? { cwd: config.cwd } : {}),
   });
 
@@ -164,9 +170,14 @@ async function createStdioTransportAsync(
 }
 
 /**
- * 异步创建 SSE 传输
+ * 异步创建 Streamable HTTP 传输
+ *
+ * @description
+ * 注意：不要用 SSEClientTransport ——HTTP+SSE transport 自 MCP 2025-03-26 起已被
+ * 标记为 deprecated，2026-07-28 规范里正式列入 Deprecated 特性注册表。
+ * "streamable-http" 配置类型对应的是 StreamableHTTPClientTransport。
  */
-async function createSSETransportAsync(
+async function createStreamableHTTPTransportAsync(
   config: MCPServerConfig,
   options: {
     timeout: number;
@@ -177,18 +188,19 @@ async function createSSETransportAsync(
     return {
       transport: null,
       status: "error",
-      error: "SSE transport requires URL",
+      error: "Streamable HTTP transport requires URL",
     };
   }
 
-  // 动态导入 SSE 传输
+  // 动态导入 Streamable HTTP 传输
+  // v2 SDK 里 StreamableHTTPClientTransport 从主包导出（不再是独立子路径）
   // 使用字符串拼接防止 Vite 静态分析
-  const sseModulePath = "@modelcontextprotocol/sdk/client/" + "sse.js";
-  const { SSEClientTransport } = await import(/* @vite-ignore */ sseModulePath);
+  const streamableHttpModulePath = "@modelcontextprotocol/" + "client";
+  const { StreamableHTTPClientTransport } = await import(/* @vite-ignore */ streamableHttpModulePath);
 
-  const transport = new SSEClientTransport(new URL(config.url));
+  const transport = new StreamableHTTPClientTransport(new URL(config.url));
 
-  // SSEClientTransport establishes the actual TCP connection only when
+  // StreamableHTTPClientTransport establishes the actual connection only when
   // client.connect(transport) is called by the caller. We cannot validate
   // the connection here, so we just surface the transport and let the
   // MCP client's connect() call handle timeouts via its own AbortSignal.
@@ -209,7 +221,7 @@ export function createTransport(config: MCPServerConfig): MCPTransport {
     case "stdio":
       return createStdioTransportSync(config);
     case "streamable-http":
-      return createSSETransportSync(config);
+      return createStreamableHTTPTransportSync(config);
     default:
       throw new Error(`Unsupported transport type: ${config.transport}`);
   }
@@ -224,11 +236,11 @@ function createStdioTransportSync(_config: MCPServerConfig): MCPTransport {
   );
 }
 
-function createSSETransportSync(_config: MCPServerConfig): MCPTransport {
-  // SSE transport 不支持同步创建（会引入 Node.js 依赖）
+function createStreamableHTTPTransportSync(_config: MCPServerConfig): MCPTransport {
+  // Streamable HTTP transport 不支持同步创建（会引入 Node.js 依赖）
   // 请使用 createTransportAsync
   throw new Error(
-    "SSE transport sync creation is not supported in browser environment. " +
+    "Streamable HTTP transport sync creation is not supported in browser environment. " +
     "Use createTransportAsync instead."
   );
 }

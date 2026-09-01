@@ -1,4 +1,4 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Client } from "@modelcontextprotocol/client";
 import type {
   MCPServerConfig,
   MCPSession,
@@ -138,6 +138,12 @@ export class MCPClient {
     // Note: do NOT pass listChanged.tools.autoRefresh — in SDK >=1.x it triggers
     // an internal listTools() call during connect() which races with our own
     // refreshTools() call below, causing the connect to hang indefinitely.
+    //
+    // versionNegotiation: 'auto' opts into probing every server for MCP
+    // 2026-07-28 (modern era) support via server/discover. Servers that don't
+    // implement it (the vast majority right now — this is brand new) fall
+    // back to the plain legacy handshake automatically; on stdio a fallback
+    // costs one extra short-lived sibling-process spawn per connect.
     this.client = new Client(
       {
         name: "leochat",
@@ -145,6 +151,7 @@ export class MCPClient {
       },
       {
         capabilities: {},
+        versionNegotiation: { mode: "auto" },
       }
     );
 

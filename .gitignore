@@ -69,3 +69,15 @@ packages/law-kb-mcp/data/_tmp_*.docx
 packages/law-kb-mcp/data/_tmp_seed_law.docx
 # laws.db is tracked (pre-built by developer, packaged into Electron)
 # Add to git with: git add -f packages/law-kb-mcp/data/laws.db
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Server runtime task data
+packages/server/tasks/
+
+# Local test scratch files
+test-files/
+test-results/
+.playwright-mcp/
+packages/server/.playwright-mcp/

@@ -229,6 +229,13 @@ export interface MCPServerConfig {
   url?: string;
   env?: Record<string, string>;
   timeout?: number;
+  /**
+   * Max size (bytes) of a single stdio JSON-RPC message. The v2 MCP SDK
+   * enforces a 10MB default (v1 had no cap) — exceeding it closes the
+   * connection. Bump this for servers that can return large payloads
+   * (screenshots, large file reads). Only applies to "stdio" transport.
+   */
+  maxBufferSize?: number;
 }
 
 export interface MCPSession {
