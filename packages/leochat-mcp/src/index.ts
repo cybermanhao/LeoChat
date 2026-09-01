@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
 import { exec } from "child_process";
@@ -155,11 +155,16 @@ function runBash(command: string, timeoutMs: number): Promise<{ stdout: string; 
 // ============================================================================
 // MCP 服务器配置
 // ============================================================================
+//
+// 注意：构造 + 全部工具/prompt 注册都包在 createServer() 工厂函数里，而不是
+// 模块级单例——serveStdio() 需要一个工厂，为每次连接的开场交换（legacy/modern
+// 握手协商）产出一个全新实例，避免连接之间状态串味。
 
-const server = new McpServer({
-  name: "leochat-mcp",
-  version: "0.1.0",
-});
+function createServer(): McpServer {
+  const server = new McpServer({
+    name: "leochat-mcp",
+    version: "0.1.0",
+  });
 
 // ============================================================================
 // Prompts
@@ -572,16 +577,18 @@ server.registerTool(
       content: [{ type: "text" as const, text: JSON.stringify(card) }],
     };
   }
-);
+  );
+
+  return server;
+}
 
 // ============================================================================
 // 启动服务器
 // ============================================================================
+//
+// serveStdio 内部默认用 StdioServerTransport 接管当前进程的 stdin/stdout，
+// 并负责开场交换的时代协商（legacy 'serve' 默认值：老客户端按 2025 握手正常
+// 服务，新客户端可协商 2026-07-28 modern era）。同步启动，不需要 await。
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("LeoChat MCP Server running on stdio");
-}
-
-main().catch(console.error);
+serveStdio(createServer);
+console.error("LeoChat MCP Server running on stdio");
