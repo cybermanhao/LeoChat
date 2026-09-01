@@ -155,6 +155,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ^2.0.0
         version: 2.0.0
+      zod:
+        specifier: ^4.2.0
+        version: 4.3.6
     devDependencies:
       tsup:
         specifier: ^8.0.0
