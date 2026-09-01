@@ -71,6 +71,8 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     command: "npx",
     args: ["-y", "@playwright/mcp@latest"],
     // 浏览器自动化：navigate/click/type/screenshot 等，无需 API key
+    // 全页截图 base64 编码后容易超过 v2 SDK 默认的 10MB stdio 消息上限，单独调高
+    maxBufferSize: 100 * 1024 * 1024,
   },
 ];
 

@@ -27,6 +27,11 @@ export interface TransportFactoryOptions {
 }
 
 const DEFAULT_STDIO_TIMEOUT = 8000;
+// v2 SDK's own default is 10MB (v1 had no cap). Raise the floor so tools that
+// return large payloads (screenshots, big file reads) don't silently start
+// failing after the SDK migration. Per-server override via
+// MCPServerConfig.maxBufferSize still wins over this.
+const DEFAULT_STDIO_MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB
 const DEFAULT_HTTP_TIMEOUT = 15000;
 
 /**
@@ -122,6 +127,7 @@ async function createStdioTransportAsync(
     command: config.command,
     args: config.args,
     env,
+    maxBufferSize: config.maxBufferSize ?? DEFAULT_STDIO_MAX_BUFFER_SIZE,
     ...(config.cwd ? { cwd: config.cwd } : {}),
   });
 
