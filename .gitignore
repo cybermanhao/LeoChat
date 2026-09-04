@@ -79,5 +79,7 @@ packages/server/tasks/
 # Local test scratch files
 test-files/
 test-results/
+playwright-report/
+blob-report/
 .playwright-mcp/
 packages/server/.playwright-mcp/
