@@ -7,6 +7,8 @@ dist/
 build/
 out/
 *.tsbuildinfo
+# ...but keep the "build" project skill (the bare build/ rule above would hide it)
+!.claude/skills/build/
 
 # IDE
 .idea/
@@ -72,6 +74,9 @@ packages/law-kb-mcp/data/_tmp_seed_law.docx
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Auto-generated mirror of .claude/skills for non-Claude agent runtimes
+.agents/
 
 # Server runtime task data
 packages/server/tasks/
