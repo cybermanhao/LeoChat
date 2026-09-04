@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
   MOONSHOT: "https://api.moonshot.cn/v1",
   KIMI: "https://api.kimi.com/coding/v1",
   GOOGLE: "https://generativelanguage.googleapis.com/v1beta",
+  // Gemini 的 OpenAI 兼容层 —— 供 OpenAI SDK 直接调用
+  GOOGLE_OPENAI: "https://generativelanguage.googleapis.com/v1beta/openai",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
 
