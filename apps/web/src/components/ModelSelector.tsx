@@ -90,9 +90,9 @@ export function ModelSelector({
             />
             <button
               onClick={catalog.refresh}
-              disabled={catalog.loading}
-              title="刷新模型列表"
-              className="flex items-center gap-1 rounded-md border border-primary/30 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+              disabled={catalog.loading || !catalog.canRefresh}
+              title={catalog.canRefresh ? "刷新模型列表" : "请先在设置中配置该 provider 的 API Key"}
+              className="flex items-center gap-1 rounded-md border border-primary/30 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw className={catalog.loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
             </button>

@@ -106,6 +106,28 @@ test.describe("LLM settings — OpenRouter", () => {
     await expect(page.getByText("保存成功")).toHaveCount(0);
   });
 
+  test("switching provider does not leak the previous provider's live list", async ({ page }) => {
+    await stubBackend(page, {
+      config: { status: 200, body: { success: true, availableProviders: ["openrouter"], defaultProvider: "openrouter" } },
+      models: OPENROUTER_MODELS,
+    });
+    await openLlmSettings(page);
+    await selectOpenRouter(page);
+    await page.locator('input[type="password"]').fill("sk-or-v1-e2e-test-key");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByText(new RegExp(`实时 · ${VISIBLE_COUNT}`))).toBeVisible();
+
+    // switch to DeepSeek (no key, no dynamic fetch)
+    await page.locator("button", { hasText: "DeepSeek" }).first().click();
+    await expect(page.getByRole("heading", { name: "DeepSeek API Key" })).toBeVisible();
+
+    // OpenRouter slugs and the live badge must be gone immediately; curated DeepSeek list shows
+    await expect(page.getByText(/实时 · \d+/)).toHaveCount(0);
+    await expect(page.getByText("x-ai/grok-4.20")).toHaveCount(0);
+    await expect(page.getByText("deepseek/deepseek-chat")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /DeepSeek V4 Flash/ })).toBeVisible();
+  });
+
   test("curated fallback list shows when no key is set", async ({ page }) => {
     await stubBackend(page, {
       config: { status: 200, body: { success: true, availableProviders: [], defaultProvider: "" } },

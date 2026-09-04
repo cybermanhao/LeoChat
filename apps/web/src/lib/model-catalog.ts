@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getServerBaseUrl } from "./api";
 import type { LLMProvider } from "../stores/chat";
 import type { TranslationKey } from "../i18n";
@@ -110,8 +110,15 @@ export interface ModelCatalog {
   error: string | null;
   /** "api" 表示当前展示的是从 provider 拉取的实时列表。 */
   source: "api" | "curated";
+  /** 是否具备刷新条件（当前 provider 有有效 key）。 */
+  canRefresh: boolean;
   /** 强制忽略缓存重新拉取。 */
   refresh: () => void;
+}
+
+interface Fetched {
+  provider: LLMProvider;
+  ids: string[];
 }
 
 /**
@@ -121,57 +128,74 @@ export interface ModelCatalog {
  */
 export function useModelCatalog(provider: LLMProvider, apiKey: string, t: TFn): ModelCatalog {
   const curated = useMemo(() => getCuratedModels(t)[provider] ?? [], [provider, t]);
-  const [apiIds, setApiIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // 所有异步结果都带上它所属的 provider；渲染时只认当前 provider 的那份，
+  // 切换 provider 时旧 slug 立即失效（同步，不留残帧），飞行中的旧请求返回也会被丢弃。
+  const [fetched, setFetched] = useState<Fetched | null>(null);
+  const [loadingFor, setLoadingFor] = useState<LLMProvider | null>(null);
+  const [errorFor, setErrorFor] = useState<{ provider: LLMProvider; message: string } | null>(null);
+
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
 
   const keyValid = !!apiKey && apiKey !== "backend";
+
+  const apiIds = useMemo(
+    () => (fetched?.provider === provider ? fetched.ids : []),
+    [fetched, provider]
+  );
+  const loading = loadingFor === provider;
+  const error = errorFor?.provider === provider ? errorFor.message : null;
 
   const doFetch = useCallback(
     async (force: boolean) => {
       if (!keyValid) return;
+      const target = provider;
       if (!force) {
-        const cached = readCache(provider);
+        const cached = readCache(target);
         if (cached && cached.ids.length && Date.now() - cached.ts < CACHE_TTL) {
-          setApiIds(cached.ids);
+          setFetched({ provider: target, ids: cached.ids });
           return;
         }
       }
-      setLoading(true);
-      setError(null);
+      setLoadingFor(target);
+      setErrorFor(null);
       try {
         const base = await getServerBaseUrl();
         const res = await fetch(`${base}/api/llm/models`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider, apiKey }),
+          body: JSON.stringify({ provider: target, apiKey }),
         });
+        if (providerRef.current !== target) return; // provider 已切走，丢弃这次结果
         if (!res.ok) {
           const e = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(e.error || `HTTP ${res.status}`);
         }
         const data = (await res.json()) as { models?: string[] };
+        if (providerRef.current !== target) return;
         const ids = filterModelIds(data.models ?? []);
         if (ids.length === 0) throw new Error("provider 未返回可用模型");
-        setApiIds(ids);
+        setFetched({ provider: target, ids });
         try {
-          localStorage.setItem(cacheKey(provider), JSON.stringify({ ids, ts: Date.now() } satisfies Cache));
+          localStorage.setItem(cacheKey(target), JSON.stringify({ ids, ts: Date.now() } satisfies Cache));
         } catch {
           /* localStorage 不可用时静默降级 */
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "fetch failed");
+        if (providerRef.current !== target) return;
+        setErrorFor({ provider: target, message: err instanceof Error ? err.message : "fetch failed" });
       } finally {
-        setLoading(false);
+        setLoadingFor((p) => (p === target ? null : p));
       }
     },
     [provider, apiKey, keyValid]
   );
 
-  // provider 切换：先用缓存回填
+  // provider 切换：命中缓存则即时回填（未命中时保留旧 fetched，渲染层已按 provider 过滤）
   useEffect(() => {
-    setError(null);
-    setApiIds(readCache(provider)?.ids ?? []);
+    const cached = readCache(provider);
+    if (cached && cached.ids.length) setFetched({ provider, ids: cached.ids });
   }, [provider]);
 
   // OpenRouter：有 key 就自动拉取（缓存新鲜时不发请求）
@@ -190,6 +214,7 @@ export function useModelCatalog(provider: LLMProvider, apiKey: string, t: TFn): 
     loading,
     error,
     source: apiIds.length ? "api" : "curated",
+    canRefresh: keyValid,
     refresh: () => void doFetch(true),
   };
 }

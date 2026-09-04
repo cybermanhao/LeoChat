@@ -110,8 +110,8 @@ export function LLMSettings() {
     setSaveError(null);
     setSaved(false);
     setSyncing(true);
-    // 本地持久化（store 也会 fire-and-forget 同步一次）
-    setProviderKey(currentProvider, key);
+    // 本地持久化；同步交给下面这次 await（sync:false 避免 store 再发一次 POST）
+    setProviderKey(currentProvider, key, { sync: false });
     try {
       // 显式等待后端确认拿到 key —— 失败时给出可见反馈，否则聊天会以笼统的 502 失败
       await chatApi.setLLMConfig(currentProvider, key);
@@ -127,7 +127,6 @@ export function LLMSettings() {
 
   const currentProviderInfo = PROVIDERS.find((p) => p.id === currentProvider)!;
   const hasKey = !!(localKey.trim() || (providerKeys[currentProvider] && providerKeys[currentProvider] !== ""));
-  const keySaved = !!(providerKeys[currentProvider] && providerKeys[currentProvider] !== "" && providerKeys[currentProvider] !== "backend");
 
   const visibleModels = catalog.models.filter(
     (m) =>
@@ -274,11 +273,11 @@ export function LLMSettings() {
           </h3>
           <button
             onClick={catalog.refresh}
-            disabled={catalog.loading || !keySaved}
-            title={!keySaved ? t("settings.api.configureKeyFirst", { provider: currentProviderInfo.name }) : "刷新模型列表"}
+            disabled={catalog.loading || !catalog.canRefresh}
+            title={!catalog.canRefresh ? t("settings.api.configureKeyFirst", { provider: currentProviderInfo.name }) : "刷新模型列表"}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-              keySaved
+              catalog.canRefresh
                 ? "text-primary hover:bg-primary/10 border border-primary/30"
                 : "text-muted-foreground border border-border cursor-not-allowed opacity-50"
             )}

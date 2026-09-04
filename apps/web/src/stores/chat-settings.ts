@@ -24,11 +24,13 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   setLLMConfig: (config) => set({ llmConfig: config }),
   setMCPTools: (tools) => set({ mcpTools: tools }),
 
-  setProviderKey: (provider, key) => {
+  setProviderKey: (provider, key, opts) => {
     set((state) => ({
       providerKeys: { ...state.providerKeys, [provider]: key },
     }));
-    if (key && key !== "backend") {
+    // 默认 fire-and-forget 同步到后端；调用方若自己 await 同步（并处理错误），
+    // 传 { sync: false } 避免重复 POST /llm/config。
+    if ((opts?.sync ?? true) && key && key !== "backend") {
       import("../lib/api").then(({ chatApi }) => {
         chatApi.setLLMConfig(provider, key).catch((err) => {
           console.warn("[Chat] Failed to sync API key to backend:", err);
