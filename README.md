@@ -4,9 +4,9 @@ AI Chat Application with Model Context Protocol (MCP) support.
 ![演示功能](./theme-change.gif)
 ## Features
 
-- **Multi-Provider LLM**: DeepSeek, OpenRouter, OpenAI — configurable via UI or environment variables
+- **Multi-Provider LLM**: DeepSeek, OpenRouter, OpenAI, Moonshot, Kimi (Coding), Google (Gemini) — configurable via UI or environment variables
 - **MCP Integration**: Connect to multiple MCP servers via Stdio and Streamable HTTP transports
-- **Built-in MCP Servers**: LeoChat (UI control), Filesystem, Memory, Fetch, Excel, Everything
+- **Built-in MCP Servers**: LeoChat (UI control), Filesystem, Memory, Fetch, Excel, Word, Playwright, Everything
 - **Dual-Mode**: Web app + Electron desktop application
 - **Streaming UI**: Real-time streaming responses with tool call status tracking
 - **Dynamic Themes**: 6 theme presets (3 light + 3 dark) with CSS variable system
@@ -34,7 +34,9 @@ LeoChat/
 │   ├── ui/                 # Shared component library
 │   ├── mcp-core/           # MCP Client & tool dispatcher
 │   ├── shared/             # Types & utilities
-│   └── leochat-mcp/        # Built-in MCP server (UI control)
+│   ├── leochat-mcp/        # Built-in MCP server (UI control)
+│   ├── leochat-sdk/        # @leochat/sdk — TaskLoop wrapper / agent API
+│   └── leochat-cli/        # @leochat/cli — scripting & automation CLI
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -65,6 +67,13 @@ cp .env.example .env
 DEEPSEEK_API_KEY=sk-...
 OPENROUTER_API_KEY=sk-or-...
 OPENAI_API_KEY=sk-...
+MOONSHOT_API_KEY=sk-...
+KIMI_API_KEY=sk-...
+GOOGLE_API_KEY=...
+
+# App URL (OpenRouter referer header) and server port
+APP_URL=http://localhost:3000
+PORT=3001
 ```
 
 ### Development
@@ -91,6 +100,12 @@ pnpm --filter @ai-chatbox/electron run pack
 pnpm --filter @ai-chatbox/electron run dist
 ```
 
+### Test
+
+```bash
+pnpm test   # sdk, cli, mcp-core, web
+```
+
 ## Theme Presets
 
 | Light | Dark |
@@ -105,12 +120,14 @@ Built-in servers auto-connect on startup. Custom servers can be added via the MC
 
 | Server | Package | Description |
 |--------|---------|-------------|
-| LeoChat | built-in | UI control (theme, notifications, panels) |
+| LeoChat | built-in (`packages/leochat-mcp`) | UI control (theme, notifications, panels) |
 | Everything | `@modelcontextprotocol/server-everything` | Reference/test server |
 | Filesystem | `@modelcontextprotocol/server-filesystem` | File operations |
 | Memory | `@modelcontextprotocol/server-memory` | Knowledge graph memory |
 | Fetch | `@tokenizin/mcp-npx-fetch` | Web content fetching |
-| Excel | `@negokaz/excel-mcp-server` | Excel read/write |
+| Excel | `excel-mcp-server` (via `uvx`) | Excel read/write |
+| Word | `office-word-mcp-server` (via `uvx`) | Word document read/write |
+| Playwright | `@playwright/mcp` (via `npx`) | Browser automation |
 
 ## License
 
