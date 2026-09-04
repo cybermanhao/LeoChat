@@ -61,6 +61,22 @@ function truncateResult(s: string): string {
   return s.slice(0, Math.floor(MAX_TOOL_RESULT * 0.85)) + `\n\n[内容已截断 - 原长度: ${s.length}]`;
 }
 
+/**
+ * Turn an upstream LLM error into a client-safe message: full detail goes to the
+ * server log, the client only sees a generic string plus a coarse cause tag
+ * (an HTTP status code / "connection error" leaks no internal URL, model name,
+ * or rate-limit detail, but still lets the client show the right hint).
+ */
+function sanitizeLLMError(error: unknown): string {
+  console.error("[LLM Error]", error);
+  const status = (error as { status?: number })?.status;
+  if (typeof status === "number") return `LLM request failed (${status})`;
+  const name = (error as { name?: string })?.name ?? "";
+  if (name === "APIConnectionTimeoutError") return "LLM request failed (connection timeout)";
+  if (name === "APIConnectionError") return "LLM request failed (connection error)";
+  return "LLM request failed";
+}
+
 export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<typeof LLMService>) {
   const app = new Hono();
   const llmService = injectedLLM ?? new LLMService();
@@ -260,7 +276,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
                 }
               },
               onError: async (error) => {
-                await safeWrite("error", JSON.stringify({ error: error.message }));
+                await safeWrite("error", JSON.stringify({ error: sanitizeLLMError(error) }));
               },
             },
             { signal: abortController.signal }
@@ -335,9 +351,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
           toolRound,
           internalMessages: [...internalMessages],
         }).catch(console.error);
-        await safeWrite("error", JSON.stringify({
-          error: error instanceof Error ? error.message : String(error),
-        }));
+        await safeWrite("error", JSON.stringify({ error: sanitizeLLMError(error) }));
       }
     });
   });
@@ -370,7 +384,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       return c.json({ error: "Invalid JSON body" }, 400);
     }
     const { provider, apiKey } = body;
-    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi"];
+    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"];
     if (!provider || !validProviders.includes(provider)) {
       return c.json({ error: "provider must be one of: " + validProviders.join(", ") }, 400);
     }
@@ -391,7 +405,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
   // List models from provider's /v1/models endpoint
   app.get("/llm/models", async (c) => {
     const provider = c.req.query("provider") as LLMProvider;
-    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi"];
+    const validProviders: LLMProvider[] = ["deepseek", "openrouter", "openai", "moonshot", "kimi", "google"];
     if (!provider || !validProviders.includes(provider)) {
       return c.json({ error: "Invalid provider" }, 400);
     }

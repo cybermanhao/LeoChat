@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatMessage, ToolCall } from "@ai-chatbox/shared";
 import { generateId, API_ENDPOINTS, DEFAULT_MODELS } from "@ai-chatbox/shared";
 
-export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi";
+export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
 export interface ChatRequest {
   messages: ChatMessage[];
@@ -101,6 +101,16 @@ export class LLMService {
       console.log("[LLM] Kimi client initialized");
     }
 
+    // Google Gemini — via its OpenAI compatibility layer
+    const googleKey = process.env.GOOGLE_API_KEY;
+    if (googleKey) {
+      this.clients.set("google", new OpenAI({
+        apiKey: googleKey,
+        baseURL: API_ENDPOINTS.GOOGLE_OPENAI,
+      }));
+      console.log("[LLM] Google client initialized");
+    }
+
     // 确定默认提供商
     if (this.clients.has("deepseek")) {
       this.defaultProvider = "deepseek";
@@ -129,6 +139,7 @@ export class LLMService {
       openai: API_ENDPOINTS.OPENAI,
       moonshot: API_ENDPOINTS.MOONSHOT,
       kimi: API_ENDPOINTS.KIMI,
+      google: API_ENDPOINTS.GOOGLE_OPENAI,
     };
 
     const options: ConstructorParameters<typeof OpenAI>[0] = {
@@ -203,6 +214,9 @@ export class LLMService {
     }
     if (model.startsWith("kimi-") || model === "kimi-for-coding" || model === "kimi-code" || model === "k2p5") {
       return "kimi";
+    }
+    if (model.startsWith("gemini") || model.startsWith("models/gemini")) {
+      return "google";
     }
     return this.defaultProvider;
   }

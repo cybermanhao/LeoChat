@@ -60,7 +60,7 @@ export interface SettingsSlice {
   llmConfig: LLMConfig | null;
   mcpTools: MCPTool[];
 
-  setProviderKey: (provider: LLMProvider, key: string) => void;
+  setProviderKey: (provider: LLMProvider, key: string, opts?: { sync?: boolean }) => void;
   setCurrentProvider: (provider: LLMProvider) => void;
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;

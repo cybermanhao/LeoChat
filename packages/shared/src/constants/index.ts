@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
   MOONSHOT: "https://api.moonshot.cn/v1",
   KIMI: "https://api.kimi.com/coding/v1",
   GOOGLE: "https://generativelanguage.googleapis.com/v1beta",
+  // Gemini 的 OpenAI 兼容层 —— 供 OpenAI SDK 直接调用
+  GOOGLE_OPENAI: "https://generativelanguage.googleapis.com/v1beta/openai",
   MCP_LOCAL: "http://localhost:3001",
 } as const;
 
@@ -15,9 +17,9 @@ export const DEFAULT_MODELS = {
   CHAT: "deepseek-v4-flash",
   FAST: "deepseek-v4-flash",
   REASONING: "deepseek-v4-pro",
-  // OpenRouter 模型
-  OPENROUTER_CHAT: "anthropic/claude-3.5-sonnet",
-  OPENROUTER_FAST: "anthropic/claude-3-haiku",
+  // OpenRouter 模型（slug 以 OpenRouter /models 为准，会随时间变化）
+  OPENROUTER_CHAT: "deepseek/deepseek-chat",
+  OPENROUTER_FAST: "google/gemini-2.5-flash-lite",
 } as const;
 
 // LLM 提供商配置

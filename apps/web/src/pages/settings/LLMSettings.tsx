@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check, Eye, EyeOff, ExternalLink, Sparkles, RefreshCw, Search } from "lucide-react";
-import { getServerBaseUrl } from "../../lib/api";
 import { cn } from "@ai-chatbox/ui";
+import { chatApi } from "../../lib/api";
 import { useChatStore, type LLMProvider } from "../../stores/chat";
+import { useModelCatalog } from "../../lib/model-catalog";
 import { useT } from "../../i18n";
 
 // --- Provider 配置 ---
@@ -14,16 +15,6 @@ interface ProviderInfo {
   link: string;
   linkText: string;
   color: string;
-}
-
-// --- 模型列表 ---
-
-interface Model {
-  id: string;
-  name: string;
-  description: string;
-  contextWindow: number;
-  pricing: string;
 }
 
 // --- 组件 ---
@@ -82,50 +73,18 @@ export function LLMSettings() {
     },
   ], [t]);
 
-  const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
-    deepseek: [
-      { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1/1M tokens" },
-      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4/1M tokens" },
-    ],
-    openrouter: [
-      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3/1M" },
-      { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15/1M" },
-      { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25/1M" },
-      { id: "openai/gpt-4o", name: "GPT-4o (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50/1M" },
-      { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash (via OR)", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14/1M" },
-    ],
-    openai: [
-      { id: "gpt-4o", name: "GPT-4o", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50/1M" },
-      { id: "gpt-4o-mini", name: "GPT-4o Mini", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15/1M" },
-      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10/1M" },
-    ],
-    moonshot: [
-      { id: "moonshot-v1-8k", name: "Moonshot v1 8K", description: t("models.moonshot.8k.description"), contextWindow: 8000, pricing: "¥12/1M tokens" },
-      { id: "moonshot-v1-32k", name: "Moonshot v1 32K", description: t("models.moonshot.32k.description"), contextWindow: 32000, pricing: "¥24/1M tokens" },
-      { id: "moonshot-v1-128k", name: "Moonshot v1 128K", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60/1M tokens" },
-    ],
-    kimi: [
-      { id: "kimi-code", name: "Kimi k2.6", description: "Kimi coding model with 262K context", contextWindow: 262144, pricing: "" },
-      { id: "kimi-for-coding", name: "Kimi k2.6 (upstream ID)", description: "Upstream model ID alias", contextWindow: 262144, pricing: "" },
-    ],
-    google: [
-      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Fast and efficient Gemini model", contextWindow: 1000000, pricing: "$0.10/1M" },
-      { id: "gemini-2.0-flash-thinking-exp", name: "Gemini 2.0 Flash Thinking", description: "Gemini with extended thinking", contextWindow: 1000000, pricing: "$0.10/1M" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", description: "Powerful multimodal model", contextWindow: 2000000, pricing: "$1.25/1M" },
-    ],
-  }), [t]);
-
   const [localKey, setLocalKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 模型获取状态
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
-  const [fetchingModels, setFetchingModels] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [modelSearch, setModelSearch] = useState("");
   const [customModelInput, setCustomModelInput] = useState("");
+
+  // 模型目录：OpenRouter 走动态获取 + 24h 缓存，其它 provider 用精选兜底
+  const catalog = useModelCatalog(currentProvider, providerKeys[currentProvider] || "", t);
 
   useEffect(() => {
     return () => {
@@ -141,54 +100,49 @@ export function LLMSettings() {
     setLocalKey(key === "backend" ? "" : key);
     setShowKey(false);
     setSaved(false);
-    setFetchedModels([]);
-    setFetchError(null);
+    setSaveError(null);
     setModelSearch("");
   }, [currentProvider, providerKeys]);
 
-  const handleFetchModels = async () => {
-    const keyToUse = localKey.trim() || providerKeys[currentProvider] || "";
-    if (!keyToUse) return;
-    setFetchingModels(true);
-    setFetchError(null);
+  const handleSaveKey = async () => {
+    const key = localKey.trim();
+    if (!key || syncing) return;
+    setSaveError(null);
+    setSaved(false);
+    setSyncing(true);
+    // 本地持久化；同步交给下面这次 await（sync:false 避免 store 再发一次 POST）
+    setProviderKey(currentProvider, key, { sync: false });
     try {
-      const serverBase = await getServerBaseUrl();
-      const res = await fetch(`${serverBase}/api/llm/models`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: currentProvider, apiKey: keyToUse }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-      const data = await res.json() as { models: string[] };
-      if (data.models.length > 0) {
-        setFetchedModels(data.models);
-      } else {
-        setFetchError("未返回模型列表");
-      }
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : "获取失败");
-    } finally {
-      setFetchingModels(false);
-    }
-  };
-
-  const handleSaveKey = () => {
-    if (localKey.trim()) {
-      setProviderKey(currentProvider, localKey.trim());
+      // 显式等待后端确认拿到 key —— 失败时给出可见反馈，否则聊天会以笼统的 502 失败
+      await chatApi.setLLMConfig(currentProvider, key);
       setSaved(true);
-      if (savedTimerRef.current) {
-        clearTimeout(savedTimerRef.current);
-      }
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "同步到后端失败");
+    } finally {
+      setSyncing(false);
     }
   };
 
   const currentProviderInfo = PROVIDERS.find((p) => p.id === currentProvider)!;
-  const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const hasKey = !!(localKey.trim() || (providerKeys[currentProvider] && providerKeys[currentProvider] !== ""));
+
+  const visibleModels = catalog.models.filter(
+    (m) =>
+      !modelSearch ||
+      m.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
+      m.name.toLowerCase().includes(modelSearch.toLowerCase())
+  );
+  const currentInList = catalog.models.some((m) => m.id === currentModel);
+
+  const applyCustomModel = () => {
+    const id = customModelInput.trim();
+    if (id) {
+      setCurrentModel(id);
+      setCustomModelInput("");
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -247,10 +201,10 @@ export function LLMSettings() {
             <input
               type={showKey ? "text" : "password"}
               value={localKey}
-              onChange={(e) => { setLocalKey(e.target.value); setSaved(false); }}
+              onChange={(e) => { setLocalKey(e.target.value); setSaved(false); setSaveError(null); }}
               placeholder={t("settings.api.keyPlaceholder")}
               className="w-full rounded-md border bg-background px-3 py-2 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary"
-              onKeyDown={(e) => { if (e.key === "Enter") handleSaveKey(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleSaveKey(); }}
             />
             <button
               type="button"
@@ -272,18 +226,20 @@ export function LLMSettings() {
               <ExternalLink className="h-3 w-3" />
             </a>
             <button
-              onClick={handleSaveKey}
-              disabled={!localKey.trim()}
+              onClick={() => void handleSaveKey()}
+              disabled={!localKey.trim() || syncing}
               className={cn(
                 "px-4 py-1.5 rounded-md text-sm font-medium transition-colors",
                 saved
                   ? "bg-green-500/10 text-green-500"
-                  : localKey.trim()
+                  : localKey.trim() && !syncing
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
               )}
             >
-              {saved ? (
+              {syncing ? (
+                "验证中..."
+              ) : saved ? (
                 <span className="flex items-center gap-1">
                   <Check className="h-3.5 w-3.5" />
                   {t("settings.api.saveSuccess")}
@@ -293,6 +249,13 @@ export function LLMSettings() {
               )}
             </button>
           </div>
+
+          {saveError && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
+              后端未确认收到 key：{saveError}
+              <span className="block text-muted-foreground mt-0.5">key 已本地保存，可刷新页面重试，或检查后端是否运行。</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -302,20 +265,25 @@ export function LLMSettings() {
           <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5" />
             {t("settings.model.selectModel")}
+            {catalog.source === "api" && (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                实时 · {catalog.models.length}
+              </span>
+            )}
           </h3>
           <button
-            onClick={handleFetchModels}
-            disabled={fetchingModels || !hasKey}
-            title={!hasKey ? t("settings.api.configureKeyFirst", { provider: currentProviderInfo.name }) : "从 API 获取模型列表"}
+            onClick={catalog.refresh}
+            disabled={catalog.loading || !catalog.canRefresh}
+            title={!catalog.canRefresh ? t("settings.api.configureKeyFirst", { provider: currentProviderInfo.name }) : "刷新模型列表"}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-              hasKey
+              catalog.canRefresh
                 ? "text-primary hover:bg-primary/10 border border-primary/30"
                 : "text-muted-foreground border border-border cursor-not-allowed opacity-50"
             )}
           >
-            <RefreshCw className={cn("h-3 w-3", fetchingModels && "animate-spin")} />
-            {fetchingModels ? "获取中..." : "获取模型列表"}
+            <RefreshCw className={cn("h-3 w-3", catalog.loading && "animate-spin")} />
+            {catalog.loading ? "刷新中..." : "刷新"}
           </button>
         </div>
 
@@ -325,34 +293,26 @@ export function LLMSettings() {
           </div>
         )}
 
-        {fetchError && (
+        {catalog.error && (
           <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-            获取失败：{fetchError}
+            获取失败：{catalog.error}
           </div>
         )}
 
-        {/* 自定义模型输入 */}
+        {/* 自定义模型输入 —— 列表未收录时的兜底入口 */}
         <div className="flex gap-2">
           <input
             type="text"
             value={customModelInput}
             onChange={(e) => setCustomModelInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && customModelInput.trim()) {
-                setCurrentModel(customModelInput.trim());
-                setCustomModelInput("");
-              }
+              if (e.key === "Enter") applyCustomModel();
             }}
-            placeholder="输入自定义模型 ID，如 kimi-k2.6..."
+            placeholder="输入模型 ID（列表没有的也能用）"
             className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary"
           />
           <button
-            onClick={() => {
-              if (customModelInput.trim()) {
-                setCurrentModel(customModelInput.trim());
-                setCustomModelInput("");
-              }
-            }}
+            onClick={applyCustomModel}
             disabled={!customModelInput.trim()}
             className={cn(
               "px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
@@ -366,7 +326,7 @@ export function LLMSettings() {
         </div>
 
         {/* 当前选中的模型（不在列表里时显示） */}
-        {currentModel && !models.some(m => m.id === currentModel) && !fetchedModels.includes(currentModel) && (
+        {currentModel && !currentInList && (
           <div className="flex items-center gap-2 rounded-lg border border-primary bg-primary/5 px-3 py-2">
             <Check className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="text-sm font-medium text-foreground flex-1 truncate">{currentModel}</span>
@@ -374,79 +334,55 @@ export function LLMSettings() {
           </div>
         )}
 
-        {/* 从 API 获取的模型列表 */}
-        {fetchedModels.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-medium">API 模型列表</span>
-              <span className="text-xs">({fetchedModels.length})</span>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                placeholder="搜索模型..."
-                className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="max-h-52 overflow-y-auto space-y-1 rounded-lg border bg-card p-1">
-              {fetchedModels
-                .filter(id => !modelSearch || id.toLowerCase().includes(modelSearch.toLowerCase()))
-                .map((id) => {
-                  const isSelected = currentModel === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setCurrentModel(id)}
-                      className={cn(
-                        "w-full flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50",
-                        isSelected ? "bg-primary/10 text-primary font-medium" : "text-foreground"
-                      )}
-                    >
-                      {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
-                      <span className={cn("truncate", !isSelected && "pl-5")}>{id}</span>
-                    </button>
-                  );
-                })}
-              {fetchedModels.filter(id => !modelSearch || id.toLowerCase().includes(modelSearch.toLowerCase())).length === 0 && (
-                <div className="py-4 text-center text-xs text-muted-foreground">无匹配模型</div>
-              )}
-            </div>
+        {/* 搜索框（列表 > 8 条时显示） */}
+        {catalog.models.length > 8 && (
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={modelSearch}
+              onChange={(e) => setModelSearch(e.target.value)}
+              placeholder={t("models.searchPlaceholder")}
+              className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
         )}
 
-        {/* 预设模型（未获取 API 列表时显示） */}
-        {fetchedModels.length === 0 && (
-          <div className="space-y-1.5">
-            {models.map((model) => {
-              const isSelected = currentModel === model.id;
-              return (
-                <button
-                  key={model.id}
-                  onClick={() => setCurrentModel(model.id)}
-                  className={cn(
-                    "w-full flex items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50",
-                    isSelected ? "border-primary bg-primary/5" : "border-border"
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{model.name}</span>
-                      {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>{(model.contextWindow / 1000).toFixed(0)}K ctx</span>
-                      <span>{model.pricing}</span>
-                    </div>
+        {/* 模型列表 */}
+        <div className="max-h-72 overflow-y-auto space-y-1.5">
+          {visibleModels.map((model) => {
+            const isSelected = currentModel === model.id;
+            const showId = model.name !== model.id;
+            return (
+              <button
+                key={model.id}
+                onClick={() => setCurrentModel(model.id)}
+                className={cn(
+                  "w-full flex items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50",
+                  isSelected ? "border-primary bg-primary/5" : "border-border"
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm truncate">{model.name}</span>
+                    {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  {showId && <p className="text-[11px] text-muted-foreground/70 font-mono truncate">{model.id}</p>}
+                  {model.description && <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>}
+                  {(model.contextWindow || model.pricing) && (
+                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                      {model.contextWindow ? <span>{(model.contextWindow / 1000).toFixed(0)}K ctx</span> : null}
+                      {model.pricing ? <span>{model.pricing}</span> : null}
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+          {visibleModels.length === 0 && (
+            <div className="py-4 text-center text-xs text-muted-foreground">无匹配模型</div>
+          )}
+        </div>
       </div>
 
       {/* --- 区块 D: 记忆深度 --- */}
