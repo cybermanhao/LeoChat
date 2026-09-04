@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,19 +6,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ai-chatbox/ui";
-import { Sparkles, Check, ExternalLink } from "lucide-react";
+import { Sparkles, Check, ExternalLink, RefreshCw } from "lucide-react";
 import { useT } from "../i18n";
-
-type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
-
-interface Model {
-  id: string;
-  name: string;
-  provider: string;
-  description?: string;
-  contextWindow?: number;
-  pricing?: string;
-}
+import { useChatStore, type LLMProvider } from "../stores/chat";
+import { useModelCatalog } from "../lib/model-catalog";
 
 const PROVIDER_INFO: Record<LLMProvider, { name: string; link: string }> = {
   deepseek: { name: "DeepSeek", link: "https://platform.deepseek.com" },
@@ -46,65 +37,27 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const { t } = useT();
   const [searchQuery, setSearchQuery] = useState("");
+  const [customInput, setCustomInput] = useState("");
 
-  const DEEPSEEK_MODELS = useMemo<Model[]>(() => [
-    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.deepseek.chat.description"), contextWindow: 64000, pricing: "¥1 / 1M tokens" },
-    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "DeepSeek", description: t("models.deepseek.reasoner.description"), contextWindow: 64000, pricing: "¥4 / 1M tokens" },
-  ], [t]);
+  const providerKeys = useChatStore((s) => s.providerKeys);
+  const catalog = useModelCatalog(currentProvider, providerKeys[currentProvider] || "", t);
 
-  const OPENAI_MODELS = useMemo<Model[]>(() => [
-    { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.openai.gpt4o.description"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
-    { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", description: t("models.openai.gpt4oMini.description"), contextWindow: 128000, pricing: "$0.15 / 1M tokens" },
-    { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", description: t("models.openai.gpt4Turbo.description"), contextWindow: 128000, pricing: "$10.00 / 1M tokens" },
-  ], [t]);
-
-  const OPENROUTER_MODELS = useMemo<Model[]>(() => [
-    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", description: t("models.anthropic.sonnet.description"), contextWindow: 200000, pricing: "$3.00 / 1M tokens" },
-    { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", description: t("models.anthropic.opus.description"), contextWindow: 200000, pricing: "$15.00 / 1M tokens" },
-    { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", description: t("models.google.geminiPro.description"), contextWindow: 1000000, pricing: "$1.25 / 1M tokens" },
-    { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", description: t("models.common.viaOpenRouter"), contextWindow: 128000, pricing: "$2.50 / 1M tokens" },
-    { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", description: t("models.common.viaOpenRouter"), contextWindow: 64000, pricing: "$0.14 / 1M tokens" },
-  ], [t]);
-
-  const MOONSHOT_MODELS = useMemo<Model[]>(() => [
-    { id: "moonshot-v1-8k", name: "Moonshot v1 8K", provider: "Moonshot", description: t("models.moonshot.8k.description"), contextWindow: 8000, pricing: "¥12 / 1M tokens" },
-    { id: "moonshot-v1-32k", name: "Moonshot v1 32K", provider: "Moonshot", description: t("models.moonshot.32k.description"), contextWindow: 32000, pricing: "¥24 / 1M tokens" },
-    { id: "moonshot-v1-128k", name: "Moonshot v1 128K", provider: "Moonshot", description: t("models.moonshot.128k.description"), contextWindow: 128000, pricing: "¥60 / 1M tokens" },
-  ], [t]);
-
-  const KIMI_MODELS = useMemo<Model[]>(() => [
-    { id: "kimi-code", name: "Kimi k2.6", provider: "Kimi", description: "Kimi coding model — 262K context", contextWindow: 262144 },
-    { id: "kimi-for-coding", name: "Kimi k2.6 (upstream ID)", provider: "Kimi", contextWindow: 262144 },
-  ], []);
-
-  const GOOGLE_MODELS = useMemo<Model[]>(() => [
-    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", description: "Fast and efficient Gemini model", contextWindow: 1000000, pricing: "$0.10 / 1M tokens" },
-    { id: "gemini-2.0-flash-thinking-exp", name: "Gemini 2.0 Flash Thinking", provider: "Google", description: "Gemini with extended thinking", contextWindow: 1000000, pricing: "$0.10 / 1M tokens" },
-    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google", description: "Powerful multimodal model", contextWindow: 2000000, pricing: "$1.25 / 1M tokens" },
-  ], []);
-
-  const MODELS_BY_PROVIDER = useMemo<Record<LLMProvider, Model[]>>(() => ({
-    deepseek: DEEPSEEK_MODELS,
-    openai: OPENAI_MODELS,
-    openrouter: OPENROUTER_MODELS,
-    moonshot: MOONSHOT_MODELS,
-    kimi: KIMI_MODELS,
-    google: GOOGLE_MODELS,
-  }), [DEEPSEEK_MODELS, OPENAI_MODELS, OPENROUTER_MODELS, MOONSHOT_MODELS, KIMI_MODELS, GOOGLE_MODELS]);
-
-  const models = MODELS_BY_PROVIDER[currentProvider] || [];
   const providerInfo = PROVIDER_INFO[currentProvider];
 
-  const filteredModels = models.filter(
+  const filteredModels = catalog.models.filter(
     (model) =>
       model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      model.provider.toLowerCase().includes(searchQuery.toLowerCase()) ||
       model.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleSelect = (modelId: string) => {
     onSelect(modelId);
     onOpenChange(false);
+  };
+
+  const applyCustom = () => {
+    const id = customInput.trim();
+    if (id) handleSelect(id);
   };
 
   return (
@@ -114,6 +67,11 @@ export function ModelSelector({
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
             {t("settings.model.selectModel")}
+            {catalog.source === "api" && (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                实时 · {catalog.models.length}
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription>
             {t("settings.model.defaultProvider")}: {providerInfo.name}
@@ -122,52 +80,97 @@ export function ModelSelector({
 
         <div className="space-y-4">
           {/* 搜索框 */}
-          <input
-            type="text"
-            placeholder={t("models.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder={t("models.searchPlaceholder")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              onClick={catalog.refresh}
+              disabled={catalog.loading || !catalog.canRefresh}
+              title={catalog.canRefresh ? "刷新模型列表" : "请先在设置中配置该 provider 的 API Key"}
+              className="flex items-center gap-1 rounded-md border border-primary/30 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={catalog.loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            </button>
+          </div>
+
+          {catalog.error && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
+              获取失败：{catalog.error}
+            </div>
+          )}
 
           {/* 模型列表 */}
-          <div className="max-h-[400px] space-y-1 overflow-y-auto">
-            {filteredModels.map((model) => (
-              <button
-                key={model.id}
-                onClick={() => handleSelect(model.id)}
-                className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${
-                  currentModel === model.id
-                    ? "border-primary bg-primary/5"
-                    : "border-transparent"
-                }`}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{model.name}</span>
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                      {model.provider}
-                    </span>
-                    {currentModel === model.id && (
-                      <Check className="h-4 w-4 text-primary" />
+          <div className="max-h-[360px] space-y-1 overflow-y-auto">
+            {filteredModels.map((model) => {
+              const showId = model.name !== model.id;
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => handleSelect(model.id)}
+                  className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${
+                    currentModel === model.id
+                      ? "border-primary bg-primary/5"
+                      : "border-transparent"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{model.name}</span>
+                      {currentModel === model.id && (
+                        <Check className="h-4 w-4 text-primary shrink-0" />
+                      )}
+                    </div>
+                    {showId && (
+                      <p className="text-[11px] font-mono text-muted-foreground/70 truncate">{model.id}</p>
+                    )}
+                    {model.description && (
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {model.description}
+                      </p>
+                    )}
+                    {(model.contextWindow || model.pricing) && (
+                      <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
+                        {model.contextWindow ? (
+                          <span>
+                            {t("models.context")}: {(model.contextWindow / 1000).toFixed(0)}K
+                          </span>
+                        ) : null}
+                        {model.pricing ? <span>{model.pricing}</span> : null}
+                      </div>
                     )}
                   </div>
-                  {model.description && (
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      {model.description}
-                    </p>
-                  )}
-                  <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
-                    {model.contextWindow && (
-                      <span>
-                        {t("models.context")}: {(model.contextWindow / 1000).toFixed(0)}K
-                      </span>
-                    )}
-                    {model.pricing && <span>{model.pricing}</span>}
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
+            {filteredModels.length === 0 && (
+              <div className="py-6 text-center text-xs text-muted-foreground">无匹配模型</div>
+            )}
+          </div>
+
+          {/* 自定义模型输入 */}
+          <div className="flex gap-2 border-t pt-3">
+            <input
+              type="text"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyCustom();
+              }}
+              placeholder="输入模型 ID（列表没有的也能用）"
+              className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              onClick={applyCustom}
+              disabled={!customInput.trim()}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+            >
+              使用
+            </button>
           </div>
 
           {/* 提供商链接 */}

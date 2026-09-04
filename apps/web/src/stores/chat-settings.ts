@@ -1,4 +1,5 @@
 import type { LLMProvider, SettingsSlice, SliceCreator } from "./chat-types";
+import { DEFAULT_MODEL_BY_PROVIDER } from "../lib/model-catalog";
 
 export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   providerKeys: {
@@ -23,11 +24,13 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   setLLMConfig: (config) => set({ llmConfig: config }),
   setMCPTools: (tools) => set({ mcpTools: tools }),
 
-  setProviderKey: (provider, key) => {
+  setProviderKey: (provider, key, opts) => {
     set((state) => ({
       providerKeys: { ...state.providerKeys, [provider]: key },
     }));
-    if (key && key !== "backend") {
+    // 默认 fire-and-forget 同步到后端；调用方若自己 await 同步（并处理错误），
+    // 传 { sync: false } 避免重复 POST /llm/config。
+    if ((opts?.sync ?? true) && key && key !== "backend") {
       import("../lib/api").then(({ chatApi }) => {
         chatApi.setLLMConfig(provider, key).catch((err) => {
           console.warn("[Chat] Failed to sync API key to backend:", err);
@@ -37,17 +40,9 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   },
 
   setCurrentProvider: (provider) => {
-    const defaultModels: Record<LLMProvider, string> = {
-      deepseek: "deepseek-v4-flash",
-      openrouter: "anthropic/claude-3.5-sonnet",
-      openai: "gpt-4o",
-      moonshot: "moonshot-v1-8k",
-      kimi: "kimi-code",
-      google: "gemini-2.0-flash",
-    };
     set({
       currentProvider: provider,
-      currentModel: defaultModels[provider],
+      currentModel: DEFAULT_MODEL_BY_PROVIDER[provider],
     });
   },
 
@@ -63,14 +58,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     const { availableProviders, defaultProvider } = config;
     if (availableProviders.length > 0 && defaultProvider) {
       const provider = defaultProvider as LLMProvider;
-      const defaultModels: Record<LLMProvider, string> = {
-        deepseek: "deepseek-v4-flash",
-        openrouter: "anthropic/claude-3.5-sonnet",
-        openai: "gpt-4o",
-        moonshot: "moonshot-v1-8k",
-        kimi: "kimi-code",
-        google: "gemini-2.0-flash",
-      };
       const newProviderKeys: Record<LLMProvider, string> = { ...get().providerKeys };
       availableProviders.forEach((p) => {
         const prov = p as LLMProvider;
@@ -80,7 +67,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       });
       set({
         currentProvider: provider,
-        currentModel: defaultModels[provider],
+        currentModel: DEFAULT_MODEL_BY_PROVIDER[provider],
         providerKeys: newProviderKeys,
       });
     }
