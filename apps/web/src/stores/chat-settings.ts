@@ -1,4 +1,5 @@
 import type { LLMProvider, SettingsSlice, SliceCreator } from "./chat-types";
+import { DEFAULT_MODEL_BY_PROVIDER } from "../lib/model-catalog";
 
 export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   providerKeys: {
@@ -37,17 +38,9 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   },
 
   setCurrentProvider: (provider) => {
-    const defaultModels: Record<LLMProvider, string> = {
-      deepseek: "deepseek-v4-flash",
-      openrouter: "anthropic/claude-3.5-sonnet",
-      openai: "gpt-4o",
-      moonshot: "moonshot-v1-8k",
-      kimi: "kimi-code",
-      google: "gemini-2.0-flash",
-    };
     set({
       currentProvider: provider,
-      currentModel: defaultModels[provider],
+      currentModel: DEFAULT_MODEL_BY_PROVIDER[provider],
     });
   },
 
@@ -63,14 +56,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     const { availableProviders, defaultProvider } = config;
     if (availableProviders.length > 0 && defaultProvider) {
       const provider = defaultProvider as LLMProvider;
-      const defaultModels: Record<LLMProvider, string> = {
-        deepseek: "deepseek-v4-flash",
-        openrouter: "anthropic/claude-3.5-sonnet",
-        openai: "gpt-4o",
-        moonshot: "moonshot-v1-8k",
-        kimi: "kimi-code",
-        google: "gemini-2.0-flash",
-      };
       const newProviderKeys: Record<LLMProvider, string> = { ...get().providerKeys };
       availableProviders.forEach((p) => {
         const prov = p as LLMProvider;
@@ -80,7 +65,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       });
       set({
         currentProvider: provider,
-        currentModel: defaultModels[provider],
+        currentModel: DEFAULT_MODEL_BY_PROVIDER[provider],
         providerKeys: newProviderKeys,
       });
     }

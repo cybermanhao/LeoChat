@@ -498,7 +498,7 @@ function ApiKeyStep({
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             disabled={testStatus === "testing"}
-            placeholder="输入模型名称，如 anthropic/claude-3.5-sonnet"
+            placeholder="输入模型名称，如 deepseek/deepseek-chat"
             className={cn(
               "w-full rounded-lg border border-border bg-card text-foreground px-3 py-2",
               "focus:outline-none focus:ring-2 focus:ring-primary/50",
