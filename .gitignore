@@ -35,6 +35,8 @@ pnpm-debug.log*
 # Electron
 release/
 *.asar
+# ...but keep the "release" project skill (the bare release/ rule above would hide it)
+!.claude/skills/release/
 
 # Test
 coverage/
