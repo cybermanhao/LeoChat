@@ -579,7 +579,7 @@ export function createModelAdapter(provider: LLMProvider): ModelAdapterInstance 
       return new OpenAIAdapter();
     case "anthropic":
       return new AnthropicAdapter();
-    case "kimi-code":
+    case "kimi":
       return new KimiCodeAdapter();
     case "google":
       return new GeminiAdapter();
@@ -596,5 +596,5 @@ export function createModelAdapter(provider: LLMProvider): ModelAdapterInstance 
  * 获取支持的提供商列表
  */
 export function getSupportedProviders(): LLMProvider[] {
-  return ["openrouter", "openai", "anthropic", "google", "deepseek", "moonshot", "kimi-code", "custom"];
+  return ["openrouter", "openai", "anthropic", "google", "deepseek", "moonshot", "kimi", "custom"];
 }
