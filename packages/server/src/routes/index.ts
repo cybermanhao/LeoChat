@@ -558,9 +558,14 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
   app.post("/mcp/servers/:id/connect", async (c) => {
     const serverId = c.req.param("id");
     const config = context.sessionManager.getConfig(serverId);
-    // uvx-based servers may need to download the tool on first run — allow 60s
+    // uvx-based servers may need to download the tool on first run — allow 60s.
+    // The bundled OCR exe is its own slow case for a different reason: it's a
+    // ~287MB PyInstaller --onefile build, which re-extracts itself to a temp
+    // dir on every single launch (not just the first), on top of loading the
+    // OCR models at startup — 15s isn't enough even on a warm cache.
     const isUvxBased = config?.command === "uvx" || config?.command?.endsWith("uvx.exe");
-    const timeoutMs = config?.timeout ?? (isUvxBased ? 60000 : 15000);
+    const isOcrExe = config?.command?.endsWith("ocr-mcp-server.exe") ?? false;
+    const timeoutMs = config?.timeout ?? (isUvxBased || isOcrExe ? 60000 : 15000);
     const timeout = new Promise<never>((_, rej) =>
       setTimeout(() => rej(new Error(`MCP connect timeout for ${serverId}`)), timeoutMs)
     );

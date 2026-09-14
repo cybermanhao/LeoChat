@@ -42,8 +42,10 @@ win:
       to: "mcp-servers/excel-mcp-server.exe"
     - from: "../../build-resources/word-mcp-server.exe"
       to: "mcp-servers/word-mcp-server.exe"
-    - from: "../../build-resources/ocr-mcp-server.exe"
-      to: "mcp-servers/ocr-mcp-server.exe"
+    # --onedir build (not --onefile) — see scripts/build-ocr-mcp-win.mjs for why.
+    # Ships as a whole directory, not a single exe.
+    - from: "../../build-resources/ocr-mcp-server"
+      to: "mcp-servers/ocr-mcp-server"
     - from: "../../build-resources/ocr-models"
       to: "ocr-models"
 nsis:

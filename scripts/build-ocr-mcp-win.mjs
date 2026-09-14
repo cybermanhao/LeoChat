@@ -4,10 +4,16 @@
  * Modeled directly on build-word-mcp-win.mjs — same venv/PyInstaller recipe.
  * Requires Python 3.8+ on the build machine (CI always has it).
  *
+ * Uses --onedir (not --onefile): a --onefile build has to re-extract its
+ * entire ~287MB archive to a temp dir on EVERY launch, which measured
+ * ~54s on a warm cache — enough to blow past any reasonable MCP connect
+ * timeout, worse under real-world disk/AV contention. --onedir extracts
+ * once at build time; each launch just runs the already-unpacked files.
+ *
  * Usage:
  *   node scripts/build-ocr-mcp-win.mjs [--force]
  *
- * Output: build-resources/ocr-mcp-server.exe
+ * Output: build-resources/ocr-mcp-server/ocr-mcp-server.exe (+ supporting files)
  *         build-resources/ocr-models/official_models/  (pre-downloaded OCR models,
  *         ~177MB — bundled so the packaged app works fully offline; otherwise
  *         they'd auto-download on first real OCR call)
@@ -20,12 +26,13 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const OUT_DIR = join(ROOT, "build-resources");
-const OUT_EXE = join(OUT_DIR, "ocr-mcp-server.exe");
+const OUT_APP_DIR = join(OUT_DIR, "ocr-mcp-server");
+const OUT_EXE = join(OUT_APP_DIR, "ocr-mcp-server.exe");
 const MODELS_CACHE_DIR = join(OUT_DIR, "ocr-models");
 const FORCE = process.argv.includes("--force");
 
 if (existsSync(OUT_EXE) && existsSync(MODELS_CACHE_DIR) && !FORCE) {
-  console.log("✓ ocr-mcp-server.exe + models already exist (use --force to rebuild)");
+  console.log("✓ ocr-mcp-server/ + models already exist (use --force to rebuild)");
   process.exit(0);
 }
 
@@ -112,7 +119,7 @@ const collectAllPkgs = ["paddlex", "paddleocr", "paddleocr_mcp", "paddle"];
 const collectFlags = collectAllPkgs.map(p => `--collect-all ${p}`).join(" ");
 
 execSync(
-  `"${pyinstallerExe}" --onefile --name ocr-mcp-server ${metadataFlags} ${collectFlags} --distpath "${OUT_DIR}" --workpath "${join(ROOT, ".pyinstaller-work-ocr")}" --specpath "${join(ROOT, ".pyinstaller-spec")}" "${entryPoint}"`,
+  `"${pyinstallerExe}" --onedir --name ocr-mcp-server ${metadataFlags} ${collectFlags} --distpath "${OUT_DIR}" --workpath "${join(ROOT, ".pyinstaller-work-ocr")}" --specpath "${join(ROOT, ".pyinstaller-spec")}" "${entryPoint}"`,
   { stdio: "inherit", cwd: ROOT }
 );
 
@@ -149,5 +156,5 @@ if (smoke.status !== 0) {
 }
 console.log("✓ Smoke test passed (clean startup + clean exit on stdin close)");
 
-console.log(`✓ ocr-mcp-server.exe built at build-resources/ocr-mcp-server.exe`);
+console.log(`✓ ocr-mcp-server built at build-resources/ocr-mcp-server/`);
 console.log(`✓ OCR models cached at build-resources/ocr-models`);
