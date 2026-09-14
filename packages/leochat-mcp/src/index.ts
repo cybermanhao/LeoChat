@@ -140,13 +140,25 @@ function truncateBashOutput(text: string): { content: string; totalLines: number
 
 function runBash(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve) => {
-    const child = exec(command, { timeout: timeoutMs, shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash" }, (err, stdout, stderr) => {
+    // cmd.exe 在中文 Windows 上默认活动代码页是 GBK(CP936)，本地化的系统消息
+    // （比如报错文案）会按 GBK 输出字节；但 Node 的 exec 默认按 UTF-8 解码
+    // stdout/stderr，两边编码对不上就是乱码。先切到 UTF-8 代码页(65001)再跑
+    // 真正的命令，让 cmd.exe 自己输出 UTF-8 字节，跟 Node 的默认解码对上。
+    const effectiveCommand =
+      process.platform === "win32" ? `chcp 65001>nul & ${command}` : command;
+    const child = exec(effectiveCommand, { timeout: timeoutMs, shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash" }, (err, stdout, stderr) => {
       resolve({
         stdout: stdout || "",
         stderr: stderr || (err && !stdout ? err.message : ""),
         code: err?.code ?? 0,
       });
     });
+    // 防御性收尾：如果命令本身意外地进入了等待交互输入的状态（比如生成了
+    // Windows cmd.exe 会当成"设置新日期"的 Unix 风格 date 命令，内置 date
+    // 遇到无法识别的参数会弹出"输入新日期:"提示卡住），没有东西连着它的
+    // stdin 就永远等不到输入——立刻关掉 stdin，让这类阻塞在读取输入的命令
+    // 马上拿到 EOF 报错退出，而不是干等到 timeoutMs 才被强杀。
+    child.stdin?.end();
     // Ensure child is killed on timeout
     child.on("close", () => {});
   });
@@ -477,10 +489,15 @@ server.registerTool(
 // card rendering must go through the structured content path, not
 // through this MCP tool.
 
+const BASH_SHELL_DESCRIPTION =
+  process.platform === "win32"
+    ? "Windows cmd.exe（不是 POSIX bash/sh！用 Windows 命令语法，例如日期用 `date /t`，不要用 `date \"+%Y-%m-%d\"` 这种 Unix 写法——cmd.exe 的内置 date 命令遇到无法识别的参数会进入交互式'输入新日期'提示并一直阻塞到超时）"
+    : "POSIX shell (/bin/bash)";
+
 server.registerTool(
   "bash",
   {
-    description: `在 shell 中执行命令并返回输出。禁止命令: ${BASH_BANNED_COMMANDS.join(", ")}`,
+    description: `在 ${BASH_SHELL_DESCRIPTION} 中执行命令并返回输出。禁止命令: ${BASH_BANNED_COMMANDS.join(", ")}`,
     inputSchema: z.object({
       command: z.string().describe("要执行的 shell 命令"),
       timeout: z.number().describe("超时时间(ms)，默认 30000，最大 600000").optional(),
