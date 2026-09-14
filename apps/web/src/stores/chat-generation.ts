@@ -76,8 +76,14 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       temperature,
     };
 
-    // 简单模式强制无限上下文，专业模式按用户设置
-    const contextLength = uiMode === "simple" ? 0 : (CONTEXT_LEVEL_MAP[contextLevel] ?? 30);
+    // 简单模式不暴露上下文档位设置给用户调，但不能真的是 0（无限制）——
+    // MCP 工具（尤其是 Gmail/Calendar/Drive 这类返回大段真实数据的）会让发给
+    // LLM 的历史消息体积跟着无限增长，给一个不会日常感知到、但能挡住失控增长
+    // 的默认上限。专业模式仍按用户自己的档位设置。
+    // （注：这不是那次白屏卡死的修复——那个根因是渲染层未 memo 的正则/JSON
+    // 解析，见 ChatArea.tsx 的 ParsedMessageText 和 tool-call-block.tsx。）
+    const SIMPLE_MODE_DEFAULT_CONTEXT_LENGTH = 50;
+    const contextLength = uiMode === "simple" ? SIMPLE_MODE_DEFAULT_CONTEXT_LENGTH : (CONTEXT_LEVEL_MAP[contextLevel] ?? 30);
     const modelContextLimit = getModelContextLimit(currentModel);
 
     const TaskLoopClass = await getTaskLoop();

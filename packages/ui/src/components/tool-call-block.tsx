@@ -109,7 +109,7 @@ const statusConfig: Record<
   },
 };
 
-export function ToolCallBlock({
+export const ToolCallBlock = React.memo(function ToolCallBlock({
   name,
   status,
   arguments: args,
@@ -210,14 +210,21 @@ export function ToolCallBlock({
       )}
     </div>
   );
-}
+});
 
 /**
  * 工具结果显示组件 - 自动检测并渲染卡片
+ *
+ * result 可能是 MCP 工具返回的大段真实数据（Drive/Calendar 等动辄几十 KB 的 JSON）。
+ * JSON.stringify + 两轮正则扫描不便宜——如果不 memo，父组件每次因为无关状态（比如
+ * 流式输出的下一个 token）重渲染，所有已展开的 ToolCallBlock 都会重新跑一遍这段解析，
+ * 多个展开的大结果叠加流式高频重渲染会直接把主线程占满，表现为点开详情后卡死/白屏。
  */
-function ResultDisplay({ result }: { result: unknown }) {
-  const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-  const { cards, columns, hasCards } = parseCardTagsSimple(resultStr);
+const ResultDisplay = React.memo(function ResultDisplay({ result }: { result: unknown }) {
+  const { resultStr, cards, columns, hasCards } = React.useMemo(() => {
+    const str = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    return { resultStr: str, ...parseCardTagsSimple(str) };
+  }, [result]);
 
   if (hasCards) {
     return (
@@ -236,7 +243,7 @@ function ResultDisplay({ result }: { result: unknown }) {
       </pre>
     </div>
   );
-}
+});
 
 // CSS for indeterminate progress
 const progressStyle = `

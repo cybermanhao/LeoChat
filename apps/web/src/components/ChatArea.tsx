@@ -31,6 +31,61 @@ import { executeLeoCardAction } from "../lib/card-actions";
 import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 
+/**
+ * parseActionTags/parseCardTags 对整段文本做正则扫描——流式输出时，每个 token 到达
+ * 都会带着目前为止累积的全部文本重新扫描一遍。不 memo 的话，随着这一轮回复变长，
+ * 每个 token 的解析成本跟着变长，整轮下来是 O(n²)，跟用户是否点击过任何东西无关，
+ * 纯靠多轮吐字/长回复就能把主线程堵死（对应"没有任何手动操作也卡死"的复现）。
+ * 用 useMemo 把解析结果按 content 缓存，content 没变就不重新扫描。
+ */
+const ParsedMessageText = ({
+  content,
+  isStreaming,
+  enableMarkdown,
+  onAction,
+}: {
+  content: string;
+  isStreaming: boolean;
+  enableMarkdown: boolean;
+  onAction: (actionName: string, attributes: Record<string, string>) => void;
+}) => {
+  const { parsedActions, cards, columns, cleanContent } = useMemo(() => {
+    const { actions, cleanContent: contentWithoutActions } = parseActionTags(content);
+    const { cards: parsedCards, columns: parsedColumns, cleanContent: finalContent } =
+      parseCardTags(contentWithoutActions);
+    return { parsedActions: actions, cards: parsedCards, columns: parsedColumns, cleanContent: finalContent };
+  }, [content]);
+
+  return (
+    <div className="space-y-4">
+      {cleanContent && (
+        <StreamingContent
+          content={cleanContent}
+          isStreaming={isStreaming}
+          enableMarkdown={enableMarkdown}
+          renderCodeBlock={(code, language) => (
+            <CodeBlock code={code} language={language} showLineNumbers />
+          )}
+        />
+      )}
+      {cards.length > 0 && (
+        <ActionCardGroup cards={cards} columns={columns as 1 | 2 | 3} isStreaming={isStreaming} />
+      )}
+      {parsedActions.length > 0 && (
+        <ActionButtonGroup
+          actions={parsedActions.map((a) => ({
+            name: a.name,
+            label: a.attributes.label,
+            attributes: a.attributes,
+          }))}
+          isStreaming={isStreaming}
+          onAction={onAction}
+        />
+      )}
+    </div>
+  );
+};
+
 export function ChatArea() {
   const { t } = useT();
   const navigate = useNavigate();
@@ -660,39 +715,13 @@ export function ChatArea() {
               }
               renderContent={(content, isLastTextItem) => {
                 const isStreamingMsg = isGenerating && index === messages.length - 1 && message.role === "assistant";
-                const { actions: parsedActions, cleanContent: contentWithoutActions } = parseActionTags(content);
-                const { cards, columns, cleanContent } = parseCardTags(contentWithoutActions);
                 return (
-                  <div className="space-y-4">
-                    {cleanContent && (
-                      <StreamingContent
-                        content={cleanContent}
-                        isStreaming={isStreamingMsg && isLastTextItem}
-                        enableMarkdown={enableMarkdown}
-                        renderCodeBlock={(code, language) => (
-                          <CodeBlock code={code} language={language} showLineNumbers />
-                        )}
-                      />
-                    )}
-                    {cards.length > 0 && (
-                      <ActionCardGroup
-                        cards={cards}
-                        columns={columns as 1 | 2 | 3}
-                        isStreaming={isStreamingMsg}
-                      />
-                    )}
-                    {parsedActions.length > 0 && (
-                      <ActionButtonGroup
-                        actions={parsedActions.map((a) => ({
-                          name: a.name,
-                          label: a.attributes.label,
-                          attributes: a.attributes,
-                        }))}
-                        isStreaming={isStreamingMsg}
-                        onAction={(actionName, attributes) => executeAction(actionName, attributes)}
-                      />
-                    )}
-                  </div>
+                  <ParsedMessageText
+                    content={content}
+                    isStreaming={isStreamingMsg && isLastTextItem}
+                    enableMarkdown={enableMarkdown}
+                    onAction={executeAction}
+                  />
                 );
               }}
             />
