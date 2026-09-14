@@ -65,6 +65,16 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     args: ["--from", "office-word-mcp-server", "word_mcp_server"],
   },
   {
+    id: "ocr",
+    name: "OCR",
+    transport: "stdio",
+    command: "uvx",
+    args: ["--from", "paddleocr-mcp[local-cpu]", "paddleocr_mcp"],
+    // 打包版会覆盖成独立 exe + 预下载好的模型缓存目录（见 initBuiltinServers
+    // 的 "ocr" case）；这里的 uvx fallback 只在开发环境/非 Windows 下用，
+    // 首次运行会联网下载模型到默认的 ~/.paddlex。
+  },
+  {
     id: "playwright",
     name: "Playwright",
     transport: "stdio",
@@ -539,6 +549,20 @@ export const useMCPStore = create<MCPState>()(
                   ? { ...s, command: uvCmd, args: ["--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } }
                   : { ...s, command: uvCmd, args: ["tool", "run", "--from", "office-word-mcp-server", "word_mcp_server"], env: { ...s.env, ...uvEnv } };
               }
+              case "ocr": {
+                const ocrModelsDir = res.ocrModelsDir as string | undefined;
+                // 打包版模型是提前下载好的，指向那份缓存——不设的话首次真正
+                // OCR 调用会联网下载模型（~177MB），跟"离线可用"这个初衷矛盾。
+                const modelEnv: Record<string, string> = ocrModelsDir
+                  ? { PADDLE_PDX_CACHE_HOME: ocrModelsDir }
+                  : {};
+                if (res.ocr) {
+                  return { ...s, command: res.ocr, args: [], env: { ...s.env, ...modelEnv } };
+                }
+                return uvIsUvx
+                  ? { ...s, command: uvCmd, args: ["--from", "paddleocr-mcp[local-cpu]", "paddleocr_mcp"], env: { ...s.env, ...modelEnv } }
+                  : { ...s, command: uvCmd, args: ["tool", "run", "--from", "paddleocr-mcp[local-cpu]", "paddleocr_mcp"], env: { ...s.env, ...modelEnv } };
+              }
               default:
                 return s;
             }
@@ -558,7 +582,7 @@ export const useMCPStore = create<MCPState>()(
           );
           // IPC 解析路径的服务器每次都用新路径，不保留持久化的旧路径
           // 对于 filesystem，保留用户配置的目录（args[1+]）
-          const PATH_RESOLVED = new Set(["leochat", "filesystem", "everything", "memory", "fetch", "excel", "word"]);
+          const PATH_RESOLVED = new Set(["leochat", "filesystem", "everything", "memory", "fetch", "excel", "word", "ocr"]);
           const mergedBuiltin = builtinServers.map((s) => {
             if (!PATH_RESOLVED.has(s.id)) {
               return currentBuiltinMap.get(s.id) || s;

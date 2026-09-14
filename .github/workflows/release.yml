@@ -65,6 +65,13 @@ jobs:
           NODE_MIRROR: https://npmmirror.com/mirrors/node
           UV_MIRROR: https://github.com/astral-sh/uv/releases/download
 
+      - name: Build OCR MCP exe + pre-download OCR models
+        # Separate step from Word's — much heavier dependency tree (PaddlePaddle),
+        # this alone is a multi-minute pip install + PyInstaller pass + a model
+        # download, worth its own CI log section for when it inevitably needs
+        # debugging.
+        run: node scripts/build-ocr-mcp-win.mjs
+
       - name: Build Electron app
         run: pnpm --filter @ai-chatbox/electron build
 

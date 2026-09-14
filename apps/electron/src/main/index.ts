@@ -244,6 +244,12 @@ function setupIPC(): void {
         excel: process.platform === "win32"
           ? join(root, "mcp-servers/excel-mcp-server/dist/excel-mcp-server.exe")
           : null,
+        ocr: process.platform === "win32"
+          ? join(root, "build-resources/ocr-mcp-server.exe")
+          : null,
+        ocrModelsDir: process.platform === "win32"
+          ? join(root, "build-resources/ocr-models")
+          : null,
       };
     }
     const r = process.resourcesPath;
@@ -265,6 +271,11 @@ function setupIPC(): void {
       node: isWin ? join(r, "node.exe") : null,
       uv:   isWin ? join(r, "uv.exe") : null,
       word: isWin ? join(r, "mcp-servers/word-mcp-server.exe") : null,
+      ocr:  isWin ? join(r, "mcp-servers/ocr-mcp-server.exe") : null,
+      // 预下载好的 OCR 模型缓存目录（PP-OCRv6 det/rec 等，~177MB），打包进
+      // extraResources 的 "ocr-models"——启动时把它设成 PADDLE_PDX_CACHE_HOME，
+      // 这样离线也能用，不需要用户第一次用 OCR 时联网下载模型。
+      ocrModelsDir: isWin ? join(r, "ocr-models") : null,
     };
   });
 
