@@ -247,15 +247,24 @@ function setupIPC(): void {
       };
     }
     const r = process.resourcesPath;
+    const isWin = process.platform === "win32";
     return {
       leochat:    join(r, "leochat-mcp.js"),
       filesystem: join(r, "mcp-servers/filesystem.js"),
       everything: join(r, "mcp-servers/everything.js"),
       memory:     join(r, "mcp-servers/memory.js"),
       fetch:      join(r, "mcp-servers/fetch.js"),
-      excel: process.platform === "win32"
-        ? join(r, "mcp-servers/excel-mcp-server.exe")
-        : null,
+      excel: isWin ? join(r, "mcp-servers/excel-mcp-server.exe") : null,
+      // node.exe/uv.exe/word-mcp-server.exe 都由 electron-builder.yml 的
+      // win.extraResources 打进 release 包——但之前这里一直没把它们的路径
+      // 返回给渲染进程，导致 leochat/everything/memory/fetch（node 启动）和
+      // word（uvx 启动）在打包后全部 fallback 到裸的 "node"/"uvx" 命令，
+      // 依赖终端用户系统里装了 Node/uv，绝大多数用户机器上没有，于是连接失败。
+      // 只有 excel（自带独立 exe，走上面的 excel 分支）和恰好系统装了 Node 的
+      // 用户的 filesystem 能连上，其余全挂——这正是 0.2.4 用户反馈的现象。
+      node: isWin ? join(r, "node.exe") : null,
+      uv:   isWin ? join(r, "uv.exe") : null,
+      word: isWin ? join(r, "mcp-servers/word-mcp-server.exe") : null,
     };
   });
 
