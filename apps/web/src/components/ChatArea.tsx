@@ -816,6 +816,7 @@ function BashApprovalBanner({ approval }: { approval: PendingApproval }) {
   const [loading, setLoading] = useState<"allow" | "allow-session" | "deny" | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(60);
   const allowToolForSession = useChatStore((s) => s.allowToolForSession);
+  const clearPendingApproval = useChatStore((s) => s.clearPendingApproval);
 
   // Countdown timer
   useEffect(() => {
@@ -830,8 +831,13 @@ function BashApprovalBanner({ approval }: { approval: PendingApproval }) {
     try {
       await chatApi.approveToolCall(approval.id, approved);
     } catch (e) {
+      // 404 常见于：后端自己的 60 秒超时刚好在这个点自动拒绝了，
+      // approval 已经不在了——这种情况下横幅也该消失，而不是卡在这。
       console.error("[BashApproval]", e);
-      setLoading(null);
+    } finally {
+      // 不管成功/失败/404，横幅的去留不应该继续依赖后续某个异步 SSE 事件
+      // 是否回来——点了就该立刻消失，避免"批准/拒绝后卡住不动"。
+      clearPendingApproval(approval.id);
     }
   };
 

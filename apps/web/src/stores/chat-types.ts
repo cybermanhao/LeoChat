@@ -120,6 +120,14 @@ export interface GenerationSlice {
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
   /** Approve this call AND mark toolName as auto-approved for the rest of the session */
   allowToolForSession: (approvalId: string, toolName: string) => void;
+  /**
+   * Drop a pending approval from the queue right away, independent of whether the
+   * backend's tool_result/tool_error event for it ever arrives. The banner used to
+   * only disappear once that async SSE event came back and matched the id — if it
+   * got lost/raced (e.g. the backend's own 60s auto-timeout firing around the same
+   * moment as a manual click), the banner would stay stuck forever.
+   */
+  clearPendingApproval: (approvalId: string) => void;
   /** Resume an interrupted task from its last backend checkpoint */
   resumeFromTask: (chatId: string, taskId: string) => Promise<void>;
   /** Discard a pending task — clears the resume prompt without resuming */

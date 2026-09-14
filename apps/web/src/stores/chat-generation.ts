@@ -45,6 +45,13 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       console.warn("[chat-generation] Already generating, ignoring sendMessage");
       return;
     }
+    // 立刻同步置位，不要等到 TaskLoop 建好之后——下面马上有个 await（动态 import
+    // TaskLoop），在这个 await 落地之前 isGenerating 仍然是 false。如果这段时间
+    // 窗口内 sendMessage 被第二次调用（双击发送、回车连续触发等），两次调用都会
+    // 在上面的守卫检查里看到 false，都放行，各自起一个 TaskLoop、各自打一次
+    // /api/chat——后建的会覆盖 activeTaskLoop，先建的那个请求在后端变成孤儿，
+    // 继续占着它触发的 bash 审批 id 不放，导致"批准/拒绝后卡住不消失"之类的问题。
+    set({ isGenerating: true });
 
     const {
       currentConversationId,
@@ -86,28 +93,39 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const contextLength = uiMode === "simple" ? SIMPLE_MODE_DEFAULT_CONTEXT_LENGTH : (CONTEXT_LEVEL_MAP[contextLevel] ?? 30);
     const modelContextLimit = getModelContextLimit(currentModel);
 
-    const TaskLoopClass = await getTaskLoop();
-    const taskLoop = new TaskLoopClass({
-      chatId: convId,
-      history: historyWithoutSystem,
-      llmConfig,
-      mcpTools,
-      maxEpochs: unlimitedEpochs ? 1000 : maxEpochs,
-      parallelToolCalls: true,
-      useBackendProxy: true,
-      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
-      systemPrompt,
-      contextLength: contextLength > 0 ? contextLength : undefined,
-      modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
-      onToolCall: async (toolName: string, _args: Record<string, unknown>) => {
-        throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
-      },
-    });
+    let taskLoop: TaskLoop;
+    let unsubscribe: () => void;
+    try {
+      const TaskLoopClass = await getTaskLoop();
+      taskLoop = new TaskLoopClass({
+        chatId: convId,
+        history: historyWithoutSystem,
+        llmConfig,
+        mcpTools,
+        maxEpochs: unlimitedEpochs ? 1000 : maxEpochs,
+        parallelToolCalls: true,
+        useBackendProxy: true,
+        backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
+        systemPrompt,
+        contextLength: contextLength > 0 ? contextLength : undefined,
+        modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
+        onToolCall: async (toolName: string, _args: Record<string, unknown>) => {
+          throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
+        },
+      });
 
-    const unsubscribe = taskLoop.subscribe((event: TaskLoopEvent) => {
-      if (get().activeTaskLoop !== taskLoop) return;
-      get()._handleTaskLoopEvent(convId, event);
-    });
+      unsubscribe = taskLoop.subscribe((event: TaskLoopEvent) => {
+        if (get().activeTaskLoop !== taskLoop) return;
+        get()._handleTaskLoopEvent(convId, event);
+      });
+    } catch (error) {
+      // 建 TaskLoop 这一步本身失败（懒加载 import 炸了、拿后端端口失败等）——
+      // 上面已经同步置了 isGenerating:true，这里必须自己收尾，不然会卡死在
+      // "生成中" 状态，永远进不了后面 try/finally 里正常的复位逻辑。
+      console.error("[chat-generation] Failed to start TaskLoop:", error);
+      set({ isGenerating: false });
+      return;
+    }
 
     set({
       input: "",
@@ -258,6 +276,12 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         }));
       }
     }
+  },
+
+  clearPendingApproval: (id) => {
+    set((state) => ({
+      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== id),
+    }));
   },
 
   allowToolForSession: (id, toolName) => {
