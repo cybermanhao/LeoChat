@@ -73,6 +73,9 @@ const BUILTIN_SERVERS: MCPServerConfig[] = [
     // 打包版会覆盖成独立 exe + 预下载好的模型缓存目录（见 initBuiltinServers
     // 的 "ocr" case）；这里的 uvx fallback 只在开发环境/非 Windows 下用，
     // 首次运行会联网下载模型到默认的 ~/.paddlex。
+    // PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT=0 关掉 oneDNN，绕开 paddlepaddle
+    // 3.3.x 的一个已知 bug（见 initBuiltinServers 的 "ocr" case 里的注释）。
+    env: { PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "0" },
   },
   {
     id: "playwright",
@@ -553,9 +556,15 @@ export const useMCPStore = create<MCPState>()(
                 const ocrModelsDir = res.ocrModelsDir as string | undefined;
                 // 打包版模型是提前下载好的，指向那份缓存——不设的话首次真正
                 // OCR 调用会联网下载模型（~177MB），跟"离线可用"这个初衷矛盾。
-                const modelEnv: Record<string, string> = ocrModelsDir
-                  ? { PADDLE_PDX_CACHE_HOME: ocrModelsDir }
-                  : {};
+                // PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT=0：paddlepaddle 3.3.x 的
+                // oneDNN PIR 执行器有个已知 bug（PaddlePaddle/Paddle#77340、
+                // PaddleOCR#18162），处理带浮点数组参数的算子（OCR 预处理里的
+                // resize/interpolate）会直接报 NotImplementedError，每次推理
+                // 必现。关掉 oneDNN 走纯 CPU 路径绕过，代价是慢一点但能跑。
+                const modelEnv: Record<string, string> = {
+                  ...(ocrModelsDir ? { PADDLE_PDX_CACHE_HOME: ocrModelsDir } : {}),
+                  PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT: "0",
+                };
                 if (res.ocr) {
                   return { ...s, command: res.ocr, args: [], env: { ...s.env, ...modelEnv } };
                 }
