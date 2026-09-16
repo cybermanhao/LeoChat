@@ -329,6 +329,20 @@ html, body, #root {
 2. 某些类型更改需要重启 dev server
 3. 检查是否有 TypeScript 错误
 
+### `pnpm dev` 强杀后留下孤儿进程（已知限制，非 bug）
+
+`pnpm dev` 是 `pnpm -r --parallel run dev`，会拉起一堆子进程（各包的 `tsup --watch`/`tsx watch` + `electron-vite dev`）。如果不是在原终端里用 Ctrl+C 正常停掉，而是直接强杀最外层 PID（`Stop-Process -Force`、`taskkill //F //PID <pid>` 不带 `/T`），子进程会变成孤儿继续跑——Windows 没有 POSIX 的进程组机制，父进程被强杀时操作系统不会级联杀掉子进程，被杀的进程也来不及跑任何清理代码（`SIGINT` 之类的信号根本没机会送达）。这是操作系统层面的限制，应用代码解决不了。
+
+**排查/清理：**
+```powershell
+# 找 LeoChat 相关的残留 tsup/tsx watch 进程
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*LeoChat*tsup*' -or $_.CommandLine -like '*LeoChat*tsx*' } | Select-Object ProcessId, CommandLine
+# 确认无误后按 PID 清理
+Stop-Process -Id <pid> -Force
+```
+
+**规避：** 尽量在原终端窗口用 Ctrl+C 停止 `pnpm dev`（大概率正常退出，不留孤儿）；如果必须强杀，接受清理孤儿进程是额外的一步。真要彻底根治"强杀也不留孤儿"，需要引入 Windows Job Object 把整棵进程树绑定到父进程生命周期——这个方案存在但目前没有实现，按用户决定暂不做。
+
 ## 项目结构
 
 ```
