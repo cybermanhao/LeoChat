@@ -101,6 +101,11 @@ export interface PausedRun {
 export interface SessionStore {
   savePaused(run: PausedRun): Promise<void>;
   loadPaused(runId: string): Promise<PausedRun | null>;
+  /**
+   * 原子操作：认领一个暂停的运行，防止两个 resume() 同时处理（Q5）。
+   * 已被认领且未超过 ttlMs 时返回 false；savePaused() 会解除认领。
+   */
+  claimPaused(runId: string, ttlMs: number): Promise<boolean>;
   /** 恢复成功、这批调用全部有了结果后删除暂停记录；之后同一个 runId 再 resume 会得到 not_found */
   deletePaused(runId: string): Promise<void>;
   /** 原子操作：把 approvalId 标记为已消费并返回对应的调用；已经消费过则返回 null（防重放） */

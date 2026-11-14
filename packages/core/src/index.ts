@@ -13,4 +13,4 @@ export * from "./stop";
 export * from "./messages";
 export * from "./ui/types";
 export { run, resume, toModelMessages, unansweredToolUses } from "./run";
-export { memoryStore, deferAnswerer } from "./store";
+export { memoryStore, deferAnswerer, d1Store, D1_SCHEMA, type D1Like, type D1StatementLike } from "./store";

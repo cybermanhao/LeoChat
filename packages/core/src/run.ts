@@ -26,6 +26,8 @@ import { addUsage, emptyUsage, type FinishReason, type Usage } from "./usage";
 
 const DEFAULT_RETRY: RetryConfig = { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 8_000 };
 const DEFAULT_MAX_PARALLEL = 10;
+/** resume 认领的有效期：处理 resume 的进程崩溃后，超过这个时间可以重新认领 */
+const RESUME_CLAIM_TTL_MS = 5 * 60_000;
 
 type Init = { kind: "fresh" } | { kind: "resume"; runId: string; decisions: ResumeOptions["decisions"] };
 
@@ -278,6 +280,10 @@ async function loop<Ctx>(
     if (!opts.store) return fail("config", "resume() requires a SessionStore (opts.store)");
     const paused = await opts.store.loadPaused(runId);
     if (!paused) return fail("not_found", `No paused run: ${runId}`);
+    // Q5：先原子地认领，防止两个 resume 同时处理同一个暂停的运行（例如用户连点两次"同意"）
+    if (!(await opts.store.claimPaused(runId, RESUME_CLAIM_TTL_MS))) {
+      return fail("conflict", `Paused run ${runId} is already being resumed`);
+    }
     transcript = paused.transcript;
     totalUsage = paused.usage;
     // 这批的全部调用（用于排序和展示）与其中还没有结果的调用

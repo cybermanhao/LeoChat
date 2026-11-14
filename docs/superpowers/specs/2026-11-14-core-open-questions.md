@@ -25,10 +25,9 @@
 - **备选：** 触发停止后再跑一个"禁用所有工具"的 step，让模型基于已有结果给出总结（OpenAI Agents 的 `errorHandlers.maxTurns` 可以做类似的事）。
 - **影响：** 会展 demo 现在达到 6 轮时直接报错；博客 agent 达到 12 轮时也是直接结束。可以做成选项 `finalStepOnStop: true`。
 
-### Q5 两个 resume() 同时进来（例如用户连点两次"同意"）怎么办？
-- **当前做法：** 内存 store 在单线程里没有问题；`consumeApproval` 保证同一个审批只被执行一次。但第二个 resume 会把"已消费"视为"没有决定"，可能重新保存一份旧的暂停状态。
-- **计划：** 第 6 步实现 D1 store 时加版本号（乐观锁），`savePaused` 带上期望版本，冲突时第二个 resume 直接返回 `conflict` 错误。
-- **影响：** 只影响 Workers 场景，第 6 步一起解决。不需要你决定，只是告知。
+### Q5 两个 resume() 同时进来（例如用户连点两次"同意"）怎么办？ — 已解决（第 6 步）
+- **做法：** `SessionStore.claimPaused(runId, ttl)` 原子地认领暂停的运行，第二个 resume 直接得到 `conflict` 错误，不会再保存过期的状态。认领 5 分钟后过期，防止处理它的进程崩溃后永远锁住；再次暂停时自动解除认领。D1 实现用单条条件 UPDATE 保证原子性，已用真实 SQLite 测过并发场景。
+- 不需要你决定，只是告知。
 
 ## 第 3 步：DeepSeek adapter
 
