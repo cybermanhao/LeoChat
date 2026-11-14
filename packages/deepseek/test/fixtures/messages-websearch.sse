@@ -1,0 +1,963 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"e9116f2d-79f6-4d17-9fa2-3122f94c9486","type":"message","role":"assistant","model":"deepseek-flash","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":54,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"service_tier":"standard"}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: ping
+data: {"type":"ping"}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"We"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" answer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" web"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Date"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"6"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"11"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"13"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" future"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" relative"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" current"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"5"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"06"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"?"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Wait"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" current"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" date"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"5"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"06"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"03"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" requested"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"6"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"11"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"13"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" future"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" web"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" maybe"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" no"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" info"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" But"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" asks"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" web"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":":"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" what"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" did"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Se"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ek"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" announce"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" on"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"6"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"11"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"13"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"?"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Answer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" in"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" one"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" sentence"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" use"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Could"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" be"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" trick"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":":"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" future"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" date"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" no"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" announcement"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" But"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" maybe"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" web"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" returns"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" nothing"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" We"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" answer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" one"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" sentence"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Let"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"'s"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"e9116f2d-79f6-4d17-9fa2-3122f94c9486"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_ds_00_2645d27a322547fe9a5d952c7dccda47","name":"deepseek_web_search","input":{"action":"search","queries":["DeepSeek announcement 2026-11-13","DeepSeek November 13 2026 announcement"]},"caller":{"type":"direct"},"kind":"deep_search"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_ds_00_2645d27a322547fe9a5d952c7dccda47","content":[{"type":"web_search_result","title":"DeepSeek发布全家桶应用API","url":"https://www.163.com/dy/article/LBLAGNHH05198CJN.html?spss=dy_author","encrypted_content":"5hE8A3uxp/hcNEYt5qEhmhKQl5J/nvtSoBRkRCFFn3qpIBLwx27M1+b+YRzJOvt9tITNyby9JhflY3mM1uzXzezm/jj1SR3a+KkddRzECqUTX+s88qHv/nYXSy1/pT60Oog53gDZYeEpmK7E6Vs9CB/QO54KGywxqRBqLgNmR87RQg7SjPNgWdQ0qDF0VH78gf9sYFcjCT8q8uurB64wXOQbi4KvmykBX+6ahhYwOIavZldWMtSfM7B5R35XDz1rcFlD87ceXWxvUE2Ara26KMSN9EYF8DzX50gA8B6Uo65mhPU2o2lJGf3wtZB9HXrTUDao9z+4pMvflMuAhTyFhPc1R+/FDm8Pm/n2JInVM2FP0SfDmXvd/f7EIQZ0LqUFJsUwTUEoEBiyxKpoE08GGVuogPWwaULuIWYPeMvfKUWnot1W0saPVQlcBgvG82DZ1iCHQjG1eylgM4ZIQpBX/Q4EXLpLd4BbuCbUXEtsdGmqcfHxyM9Lb7dgJlNs/k6Frf8VkbRRNsF0mX6N/ImNjHzuaoS7zyOTy/Q4wQejdXHghtcPc1Wt0wJm3AHHpn/k8HchpcWx","page_age":"2026-11-12T16:00:00+00:00","snippet":"【DeepSeek发布全家桶应用API】财联社11月13日电，DeepSeek发表公告称，正式开放这套全家桶应用API：在原有API中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含OCR、ASR、TTS等），支持单独或组合调用。开发者可以在自己的应用中轻松实现复杂的对话功能...","site_name":"网易","site_icon":"https://cdn.deepseek.com/site-icons/163.com"},{"type":"web_search_result","title":"DeepSeek发布全家桶应用API","url":"https://www.sohu.com/a/1101254724_115362?scm=10001.7746_13-119000.0.0-0-0-0-0.0&spm=smpc.channel_354.block3_32_P7Ovbu_1_fd.37.17945803153725fJgfq4_7746","encrypted_content":"n3MrfcIN61kmQfeBZzTUcxjErCnnZlgVY8UF6FOEXKJa/PRyh8q3yaMpLlbKhg4bFF/3f/ZN8GvBiKaMIkI4FiKXT1d1NkY6mhBWAm+CIKmfFOzb/CUEoWI7Mpp5Jl7sN35V/VWXEK8M4S9uYGB4PrNb+f59KKbU+w7Xg1TnVYMwJ59FedYQOylsf25GZqh/8VcUJAnFqHf9JnE++rGkAGlv4wbGLF5yUd7mePHCbQhMGr2scloZrSU5Uhbfyyk8xBCD6tgetB4rw5a3syVA8M83+mlzbEKsT/KJnaN6HFzGyr6xJmRf2ndc0Uo+UFhZewFDGKto+0Pj4GsArDnOHS2of7+h7poTxmcpuf6VN+cCL3VhdbXNLVWsmIzG9e4ryxyvpUt4259Zc8zmK/3YY6klFRzyVngswUB0aHSwio6xqwUCEBqT1AN1tInc5vGoHbhKJoz0IO6pkuozPzCG+pb46cs1NPGmLSY9bEgq2B2VhLr6H6pVSgyyw/HIN5l0aYvQaWMz+lTkuN3yrNyTtCESrOn9tKpKgZCP3vuaA+QVw0zkpyT0RBilsbb5vrcOsTKh","page_age":"2026-11-12T16:00:00+00:00","snippet":"2026-11-13 22:30 发布于：四川省 每经AI快讯，11月13日，DeepSeek公告，正式开放这套全家桶应用API：在原有API中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含OCR、ASR、TTS等），支持单独或组合调用。开发者可以在自己的应用中轻松实现复杂的对话功能...","site_name":"Sohu","site_icon":"https://cdn.deepseek.com/site-icons/sohu.com"},{"type":"web_search_result","title":"DeepSeek开放“全家桶”应用API，开发者可1:1复刻完整App","url":"https://ishare.ifeng.com/c/s/v0069M--PerMb1L3oHwMy--Jd-_W6l2CgdrNd8SzZDrDHoG88FF1CR7nsupN4ttdEVzZQ21","encrypted_content":"q2HrtXbjNl+G+/oJGkESgheynMoKS7HAvpJvPsdNbxFMpaTF8ydhjAnb6vPppcf2NDAVz2vbMqg4KbhYi1QRxWZibd0G2iWDpK+TQ6aUOenpZyxuPXkSdBX70Vr0uaVcI60A7YTz4tAZvrwcnNhx4I56l0rm4RlgLhhrcKFB/FEr2jU1ZC+1RcVbt5DSvxRr7DnbtinzawxUDskXImAocbyKGdmNDlxj7xX4dt51Q4npvtLCiQ4pWsVFLM4j4kTrEK/5s5EPfR0tnFFe2bL51y+db3Hy5x1ZA0qBweG94ZL5zyFobVEOrvblxJKstenxupgrm1cPcTZDDOiajMpPYQdTfPzi7JwqUXL7A4P8cB9l9X22jWfhFNx7+eLElfkUMaOQNZ3syIx+5e0Ns32hvppQtBzflW99DNyNF4cgTNr/SxDwWyC/3diGC5D4iv+UdjlJ1jUGytqnZVpNCWKaN8GlOGMAmni7JTZQKm4uDLFH","page_age":"2026-11-12T16:00:00+00:00","snippet":"凤凰网科技讯（编辑/云飞） 11月13日，DeepSeek宣布正式开放“全家桶”应用API，将DeepSeek App中的联网搜索、文件输入、阅读链接、语音交互及安全校验等能力整合进原有API，开发者开启对应参数即可在自有应用中实现复杂对话功能，甚至1:1复刻完整DeepSeek App。","site_name":"凤凰网","site_icon":"https://cdn.deepseek.com/site-icons/ifeng.com"},{"type":"web_search_result","title":"DeepSeek发布全家桶应用API","url":"https://m.stnn.cc/detail/6af71fd88f9d2b19dd7397e2.html","encrypted_content":"rJfVpF3dakzK9q/WT+WErMbuHZ+At0dWr1JKYT6AiSFJWz6o4ThViN1vIZIuimd6bh0YSHMrimX2PFh6yMsmpPP0slNAYk+lChVANxg5gzk+1zeJlf1vixipV84urwWfPBpleR43dwLvAv5aH7Dx/vpuwg1Jm6olzYN1jvkWjAnXv7lEqEQ5USymBrrn5kTZLD6uGItheCLlAt99N+c74BuyfftjK4bCwpJsioyOdiW6EAZdFtoYw2u4f/4pmXBNN3zcYkt42sa7zn3hwToRLG80h78lD3ty8XrLIDet87s6+emq7ANp5AjTjxUsi1mR0O5ouHNcmXnXEpj1cAzOvOTcu5YhyaIeKVyWD8CrmVM18va5wphmxljm6QIJBQpxtO5udK72SonvoHzALywhExbHV1tfr6Ggic2kTi009Nfp6yh2Ibxerc1hVJerk++mUVPEOMoyvX69jTieV9QsTEEVwhp2+1RmJs8ltHrAnkfoVKzfCaRffZHxFdpo8b+trC/F0bRdlAc4Dih/oNBcgEdtHuA=","page_age":"2026-11-12T16:00:00+00:00","snippet":"星岛财讯，11月13日，DeepSeek公告，正式开放这套全家桶应用API：在原有API中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含OCR、ASR、TTS等），支持单独或组合调用。开发者可以在自己的应用中轻松实现复杂的对话功能，甚至1...","site_name":"星岛环球网","site_icon":"https://cdn.deepseek.com/site-icons/stnn.cc"},{"type":"web_search_result","title":"DeepSeek 发布全家桶应用 API：开发者将能 1:1 复刻完整 DeepSeek App","url":"https://www.ithome.com/1/026/960.htm","encrypted_content":"/bcsrXnBYUEJs3XYUjjG2XkNzvawhJNbybHflNF5cSMPRj9gKPL0YR55lz31TpcW5elWjkP2DD9DJAk1DCroayymvW5KlBEn6Pifb3fveQjmjE46uYwZ1/L5Zny29lsCMiXvaccT8UM/XnANNyvP8v86f5MIsFwFAQRVOchFEIU1MX6b5YOtGhVaKUHBDQ777+PZf4jFZzFdXw5A3sRj9w/FE9COm6baAEnIyLqxXUpC+3BqPXY9r5lzMomYEofByZ96tfxMSlsQUGONpJEXjDnXBx7MHaOszzxW9Mcc2Od4DWGpIQBEAWSfncK04i4/gAiWgaY4kTX8z5Phhz/E6ejqmfSWNRIxeb9C4b/dogaUBN0cvd+dJzncrSuEax9/MCWocp+uNBVfqNTg","page_age":"2026-11-12T16:00:00+00:00","snippet":"IT之家 11 月 13 日消息，今天（13 日）晚间，DeepSeek 宣布正式开放全家桶应用 API：在原有 API 中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含 OCR...","site_name":"IT之家","site_icon":"https://cdn.deepseek.com/site-icons/ithome.com"},{"type":"web_search_result","title":"DeepSeek发布全家桶应用API","url":"https://m.jiemian.com/article/15332487.html","encrypted_content":"0uq6/jW9AeHMBsO1wUzgBmEtTKrxliMmH5SLOUyoGXruPVxjON059btGS30PKCxFatMkhjUPzzIXmkFv98U5bx9eT1vI2jH8tT8Ryqk5aGuBZvLnTcpcUkdOXiZHThpwDkS6yU5fM9CkNVnA06jUSjSIwxP7WGXBg10FfOjBdb2HCsGt+PaASHI6rJ/2rcMXaVNobtjsPDq3bj2ZUTR0bPtaJUFxcxiomUD/BkMFXJasFIMzqR23TvNPYSTPT29PrkkKVpFXXAcO4hiusJzX4dFXT3yoOqMGv5E1nFDq9lMZyPAtRulhxxLaWuvFZ/SRQ8+YiJr21FPJ6kB4LLuhJSkHwYNxq9fgKtCFCf2dlH/MbDgE6iivCAcDYcSr2Z7uQmPEJZfB0WU3YKa9h2kCgJ7v0tWpkT7VNbByS9sB4f1yI7i/6y+AePBkuy/k1lODtZU38cz4HRsKJs/30hQRPkjEpov98eqWzM1dFTKeZQWu87NkdoZdZ2/YWCNRDhqlQKwYW6DaQunZ+t0dxg==","page_age":"2026-11-12T16:00:00+00:00","snippet":"DeepSeek发布全家桶应用API 11月13日，DeepSeek正式开放全家桶应用API。在原有API中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含OCR、ASR、TTS等），支持单独或组合调用。开发者可以在自己的应用中轻松实现复杂的对话功能...","site_name":"Jiemian.com","site_icon":"https://cdn.deepseek.com/site-icons/jiemian.com"},{"type":"web_search_result","title":"DeepSeek Opens Its App's Search, File, OCR and Voice Tools as APIs So Developers Can Rebuild the App","url":"https://pandaily.com/deepseek-full-suite-application-apis-web-search-file-input-ocr-asr-tts-chat-demo","encrypted_content":"fDcSEb++WttjQv4aY1HCj3TbPSc5CgCLFtpzl13JnIVrNzOTsha07cqKos3UF54XfotgXbpn4SSPanhXLc6S5RTCPRcuatFR7HM6slgZaQnxUVTat2pyxio3Vr+1Mp85u22G1hUlFDfsfMEAl1KDu31DskS4dpLJFdbZGQEM5LTZl7EBVcggYLk8kR47RXeCtaWh8XBD3ku7yC/SLNLf0eC51iY5VTMAMGZQ0y1lAVE6OHLCFMGbho9SM6n29DpYq1HJvxxyXeWnuMA/WEGGTpQWVzgrlLhddMSFbWjNOreg2Qvl/3Aj","page_age":"2026-11-12T16:00:00+00:00","snippet":"DeepSeek Opens Its App's Search, File, OCR and Voice Tools as APIs So Developers Can Rebuild the App Published:November 13, 2026 ... The company announced the update in its API change log on November 13.","site_name":"Pandaily","site_icon":"https://cdn.deepseek.com/site-icons/pandaily.com"},{"type":"web_search_result","title":"DeepSeek开放全家桶API，核心功能“开箱即用”","url":"https://tidenews.com.cn/news.html?id=3614347&from_channel=5d8b4d25cf8dfd0001a4143c&top_id=3614350","encrypted_content":"Ya9DcJT6gsVQRrDufPT4P/R+PPA6GlVGJDwjj1L6ybQqsdVFQS6J/FVOaqCEZi/UBkzSKl75G0Zhfh2WdC2QhrzDSQrx6bdhgbz0DCtG3wntNxbB9EuwxAolP7KjbEYh1SSSkGvndmE0Tfe8GebPYAcUgEVzoIOBaiLzpjSOJ6piBrGhezNZ7ciwvrn6DYqQ0kV6BXBPuwoW/wMcqsMPDXVH89/Rs0Wzmq+UKvw6Oi4EExXO9HZ4uSl0Lnk4utSaXdvxrhD/jVMUsdFTW+Ev96mo8wut4tfnvBwzquFD6FPUsiYRRCE9vaBnDvoibv7qTABDnfGL9vLs+qGxZGrP/Q7wiFnTYoOzEa6+pEwJg1Zq3i6D7KX+p0TSsHNtLt7rhtFUPT5eRkJHxw==","page_age":"2026-11-12T16:00:00+00:00","snippet":"11月13日，DeepSeek宣布正式开放“全家桶应用API”，将DeepSeek App（含网页端）中联网搜索、文件输入、阅读链接、语音交互及安全审核等核心功能，通过原有API参数开启或独立接口的方式向开发者全面开放。","site_name":"潮新闻","site_icon":"https://cdn.deepseek.com/site-icons/tidenews.com.cn"},{"type":"web_search_result","title":"DeepSeek发布全家桶应用API","url":"https://www.jiemian.com/article/15332487.html","encrypted_content":"njhUyuIANE7QzDX/qDnWxceYtODnY7h+iEhAe9YpuplCcsNG1jU6/dr9WK6Ryt3r2x6yls6DBDm9ICI1nFlsGhHWTBklMOA1V33GdStzSnoV781KVOI1rxktYT+xmA+gF+3sx5LivRP6IZOL+VN6IPCHRvYTzw3bgCUo9R2IjxfBy0ob0rKAc/EBrJ3dyh/PtoTS6WLSsDJmqbIt77IhMkn/GxwMPdqxdlat5CmJ0ruD+JPp5qmIS5eSGcxq6GGP+hWoJ/kXRCz6LWf1OcFhuOJe6j/6i/Za8H4td8YiBhkBJqJDgblSHM4yMQ299cruBGCPxSKYOz5V84mAsZtsSPfJaxdzGsCqkg8LhlKhI9TxG/AS/qovD7dU4T6hdLShPoFzYcHdM7P5l/bc8QktWjUbw4nVIin/As/WQiU8C30D4ldf8CCcJPVxpP4iTyW6qGccVkwyxnNTnQA5jLPkfn+3haFiGqhbgCaPxw==","page_age":"2026-11-12T16:00:00+00:00","snippet":"11月13日，DeepSeek正式开放全家桶应用API。在原有API中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含OCR、ASR、TTS等），支持单独或组合调用。开发者可以在自己的应用中轻松实现复杂的对话功能...","site_name":"Jiemian.com","site_icon":"https://cdn.deepseek.com/site-icons/jiemian.com"},{"type":"web_search_result","title":"DeepSeek 发布全家桶应用 API- DoNews","url":"https://www.donews.com/news/detail/1/6772103.html","encrypted_content":"r7GrYzaBJlxidRCH8tIN8EIB0GxwXbMetjlXgKFsP36OWg2yJZ9PfyKE3B/j8h3uSGoMebZL3KIKdoYclf2x4OX+zIiHoDyfFF58TKhz6LB3axksr8OPwNzxqxLVkNbtX2YXwoZDtCLkTvyPizfdVLFm1SWBYwdbgtNGe0EBW902cDYJgfalKY77+5Q0ykq2weQLtN1wLgSuM+P2m503zOle19gwZsRlx/K8Ew7gZLsN5FrFZ6xZBNZXWiQesDai9j/1nFLWCpLMb2VbWsIwOm5t6XLlCW7WH4/zX4UGin1mToD10Y/IRFCCDuP9AidU1eiZUHekeD9MEQ+S3neSQMpn77vJzqMi8gRB+s5YD8M+h3R7U1r//xwvNaQ2meUo8CH6k3+5uojumtzb0Q==","page_age":"2026-11-13T16:00:00+00:00","snippet":"杨亮 2026-11-14 00 ... 11月14日消息，13 日晚间，DeepSeek 宣布正式开放全家桶应用 API：在原有 API 中开启对应参数，即可获得深度思考搜索、文件输入等对话功能；语音及相关底层能力也已开放独立接口（含 OCR...","site_name":"DoNews","site_icon":"https://cdn.deepseek.com/site-icons/donews.com"},{"type":"web_search_result","title":"突发！DeepSeek 重磅更新，全家桶 API 来了","url":"https://www.eet-china.com/mp/a539178.html","encrypted_content":"1+xRZ/9hjN/t1agFhfDHtIAPYQG2eOJUR6ZjkT7d/sc8t8PDAvAzzIYvNEa7ZpOh/2hAqrXrWL0M6hBnoz11alu3PwiiM/in7rD5InTu6puToaKZ53ATpW8OxGR8zTMsNeix8EqNSz30PJkMc8E1Vh859/BTdOvXgz/kSVIeTltJFYUwmSG3EVCqPt/NscLDSMeE/Qo1oG5zboxBTxS8A/SAXlevQLC2odv+wEngIkOM+/BcDEHEWuJU4Wo06FcW6vq5+YjF8OXM+6espSOw6vwcfsfs0qKB8VM809FmlaJ93zJiFfKYBFsnW1bm3TbucqaDNIXYiQ==","page_age":"2026-11-12T16:00:00+00:00","snippet":"DeepSeek 重磅更新，全家桶 API 来了 原创 程序员cxuan 2026-11-13 23:30 27浏览 0评论 0点赞 ... 刚刚，DeepSeek 官方的消息，DeepSeek 今天正式开放全家桶 API ... 发布全家桶应用 API","site_name":"电子工程专辑","site_icon":"https://cdn.deepseek.com/site-icons/eet-china.com"}],"kind":"deep_search"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: content_block_start
+data: {"type":"content_block_start","index":3,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"Search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" results"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" clearly"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" answer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" final"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" one"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" sentence"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" with"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" citation"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" maybe"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" mention"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" date"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"?"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"On"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" November"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"13"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"6"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"Se"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"ek"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" announced"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" official"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" opening"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" of"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" its"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" '"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"full"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"-b"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"ucket"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"'"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" application"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" API"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" integrating"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" app"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" capabilities"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" such"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" as"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"-thinking"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" file"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" input"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" link"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" reading"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" voice"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" interaction"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" and"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" security"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" checks"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" into"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" its"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" existing"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" API"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" so"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" developers"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" can"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" recreate"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" complete"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"Se"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"ek"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" App"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" in"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" their"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" own"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" applications"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":".\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" One"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" sentence"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Cite"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" sources"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Need"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" ensure"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" maybe"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"全家"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"桶"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" translation"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Could"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" answer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" concise"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Include"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" citations"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" lines"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Since"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" lines"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" enough"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" Final"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" one"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":" sentence"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"thinking_delta","thinking":"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"signature_delta","signature":"e9116f2d-79f6-4d17-9fa2-3122f94c9486"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":3}
+
+event: content_block_start
+data: {"type":"content_block_start","index":4,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"On"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" November"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"13"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"202"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"6"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" Deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"Se"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"ek"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" announced"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" official"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" opening"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" of"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" its"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" “"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"full"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"-s"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"uite"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"”"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" application"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" API"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" integrating"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" Deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"Se"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"ek"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" App"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" features"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" such"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" as"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" deep"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"-thinking"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" search"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" file"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" input"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" link"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" reading"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" voice"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" interaction"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" OCR"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" AS"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"R"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" and"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" T"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"TS"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" into"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" its"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" existing"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" API"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" so"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" developers"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" can"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" recreate"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" complete"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" app"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" experience"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" in"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" their"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" own"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":" applications"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://www.163.com/dy/article/LBLAGNHH05198CJN.html?spss=dy_author","title":"DeepSeek发布全家桶应用API","encrypted_index":"","cited_text":"On November 13, 2026, DeepSeek announced the official opening of its “full-suite” application API, integrating DeepSeek App features such as deep-thinking search, file input, link reading, voice interaction, OCR, ASR, and TTS into its existing API so developers can recreate the complete app experience in their own applications"}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://ishare.ifeng.com/c/s/v0069M--PerMb1L3oHwMy--Jd-_W6l2CgdrNd8SzZDrDHoG88FF1CR7nsupN4ttdEVzZQ21","title":"DeepSeek开放“全家桶”应用API，开发者可1:1复刻完整App","encrypted_index":"","cited_text":"On November 13, 2026, DeepSeek announced the official opening of its “full-suite” application API, integrating DeepSeek App features such as deep-thinking search, file input, link reading, voice interaction, OCR, ASR, and TTS into its existing API so developers can recreate the complete app experience in their own applications"}}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":4}
+
+event: content_block_start
+data: {"type":"content_block_start","index":5,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":5,"delta":{"type":"text_delta","text":"."}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":5}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2564,"cache_creation_input_tokens":0,"cache_read_input_tokens":1024,"output_tokens":376,"service_tier":"standard","server_tool_use":{"web_search_requests":1,"web_fetch_requests":0,"tool_search":2,"tool_fetch":0,"tool_image_search":0},"output_tokens_details":{"thinking_tokens":229}}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

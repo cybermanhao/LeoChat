@@ -30,6 +30,34 @@
 - **计划：** 第 6 步实现 D1 store 时加版本号（乐观锁），`savePaused` 带上期望版本，冲突时第二个 resume 直接返回 `conflict` 错误。
 - **影响：** 只影响 Workers 场景，第 6 步一起解决。不需要你决定，只是告知。
 
+## 第 3 步：DeepSeek adapter
+
+> 2026-11-14 实测：通过构建后的 `@leochat/core` + `@leochat/deepseek` 调用真实 API，四个场景都通过——工具调用往返（带 thinking）、服务端联网搜索（带引用）、搜索之后的下一轮对话（重发服务端块和签名）、把独立的 web_search 当客户端工具用。四次合计花费约 0.002 美元。
+
+### Q6 C2（原始参数逐字节回传）在 Messages 端点上做不到
+- **事实：** Anthropic 协议里 `tool_use.input` 是 JSON **对象**，不是字符串。adapter 只能把原始字符串解析后再发出去，序列化由 `JSON.stringify` 决定（键顺序保留，空白会被规范化）。
+- **当前做法：** 照此实现。core 里仍然以原始字符串为准；它对走 Chat Completions 的 provider（以后 pi-ai 桥接里的 OpenAI 兼容服务）才真正有意义。
+- **影响：** DeepSeek 服务端大概率也会把 input 规范化后再拼进 prompt，所以对缓存的影响应该很小，但没有实测。
+
+### Q7 图片和文件用 file_id 引用的写法没有实测
+- **当前做法：** 按 Anthropic Files API 的写法：图片 `{type:'image', source:{type:'file', file_id}}`，文档 `{type:'document', source:{type:'file', file_id}}`。DeepSeek 文档说 Messages 端点引用文件要加 `anthropic-beta: files-api-2025-04-14` 头，目前**没有加**。
+- **计划：** 做输入框第 3 期（附件）时再实测并修正。现在没有调用方用到。
+
+### Q8 联网搜索之后的下一轮对话，缓存命中是 0
+- **现象：** 第一轮搜索的请求有 1024 个 token 命中缓存；第二轮把第一轮的全部内容（含服务端搜索块、thinking 签名）原样发回，`cacheHitTokens` 却是 0，而且 inputTokens 从 3475 降到 1133，说明服务端对重发的搜索结果做了压缩或重新展开。
+- **猜测：** 服务端展开 `encrypted_content` 的方式和第一轮不同，导致前缀不一致。
+- **可选的应对：** ①接受（搜索场景的对话通常不长）；②重发时去掉 `server_tool_result` 块，只保留带引用的文字，再测缓存命中；③问 DeepSeek 官方。
+- **影响：** 搜索类长对话的成本。不影响功能，先记下，之后再实测方案 ②。
+
+### Q9 OCR 工具的文件从哪里来？
+- **当前做法：** 模型只能给出一个"文件引用"字符串，由应用传入的 `resolveFile(ref)` 去取文件内容（R2、上传目录等）。core 和 adapter 不管文件存储。
+- **备选：** 让模型直接给 URL，由工具下载后再上传（要做 SSRF 防护，Workers 里尤其麻烦）。
+- **影响：** 博客和会展目前都没有 OCR 需求；GUI 接附件时会用到。
+
+### Q10 联网搜索按哪个数字计费？
+- **当前做法：** 按 usage 里的 `web_search_requests` 计费，每次 0.00075 美元。
+- **待确认：** 同一次搜索里 `tool_search` 是 2、`web_search_requests` 是 1（§13 Spike 2 已记录），需要对一下账单。计价表集中在 `packages/deepseek/src/pricing.ts`，改起来很容易。
+
 ## 实现中做出的、值得你知道的决定（不需要确认，有异议再说）
 
 - `run()` 返回的 `result` **从不 reject**：所有错误都变成 `reason: 'error'` 的结果，并发出 `error` 事件。
