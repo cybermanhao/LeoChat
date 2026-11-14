@@ -39,6 +39,8 @@ LeoChat 重启。旧的 `@leochat/sdk` 没有被用户自己的两个 agent 项�
 | D10 | 卡片统一放在 `_meta["leochat/ui"]`，避开 MCP Apps 占用的 `_meta.ui`。会展 demo 同步修改 |
 | D11 | 工具参数统一用 zod v4 定义（core 把 zod 列为 peer 依赖），不再另外维护一套 JSON Schema 写法 |
 | D12 | 并行工具改用 `allSettled`；provider 兜底第一期交给应用层 |
+| D13 | DeepSeek adapter 默认走 Messages 端点（§13 实测） |
+| D14 | 根据同类对比（`docs/research/agent-core-comparison-2026-11.md`）采纳 C1–C8：暂停式审批必须配服务端存储（C1）；工具参数以原始 JSON 字符串为准（C2）；增加 `prepareStep`（C3）、`stopWhen`（C4）、工具执行模式（C5）、工具进度（C6）、`followUp()`（C7）、审批增强（C8） |
 
 ## 范围
 
@@ -104,7 +106,13 @@ interface BlockBase {
 
 interface TextBlock extends BlockBase { type: 'text'; text: string; citations?: Citation[] }
 interface ThinkingBlock extends BlockBase { type: 'thinking'; text: string }          // DeepSeek reasoning_content 也映射到这里
-interface ToolUseBlock extends BlockBase { type: 'tool_use'; id: string; name: string; input: unknown }
+interface ToolUseBlock extends BlockBase {
+  type: 'tool_use'; id: string; name: string;
+  /** 准确值（C2）：模型产出的原始 JSON 字符串。回传给 provider 时逐字节原样发送，以保证前缀缓存命中 */
+  arguments: string;
+  /** 由 arguments 解析出的派生值；解析失败时为 undefined */
+  input?: unknown;
+}
 interface ToolResultBlock extends BlockBase {
   type: 'tool_result';
   toolUseId: string;
@@ -203,7 +211,7 @@ class ProviderError extends Error {
 ```
 
 - **tool_calls 增量拼接**（按 index 累积）、**JSON 解析**、**错误分类**，都在 adapter 里一次性做完。两个验收项目各自写过一遍的 `streamChat`，会被这一层取代。
-- tool_use 的参数 JSON 解析失败时：`block_end` 里 `input` 为 `{}`，并在 `providerData.rawInput` 里保留原始字符串。是否需要让模型修正，由 run 循环决定（见 §5）。
+- tool_use 的参数 JSON 解析失败时：`block_end` 里 `arguments` 仍是原始字符串，`input` 为 undefined。是否需要让模型修正，由 run 循环决定（见 §5）。
 
 ## 3. 工具
 
@@ -221,6 +229,9 @@ interface Tool<S extends z.ZodType = z.ZodType, Ctx = unknown> {
   /** 由工具自己决定这次调用要不要审批（dsh 的原则：由使用方判断，审批服务只负责回答）。
    *  返回字符串时，这个字符串就是审批理由 */
   needsApproval?: boolean | ((input: z.infer<S>, ctx: ToolContext<Ctx>) => boolean | string | Promise<boolean | string>);
+  /** 执行模式（C5，参考 pi 和 dsh）。默认 'parallel'；写文件、执行 bash 这类工具用 'sequential'。
+   *  同一批调用里只要有一个 sequential，整批就串行执行 */
+  executionMode?: 'parallel' | 'sequential';
   execute(input: z.infer<S>, ctx: ToolContext<Ctx>): ToolOutput | Promise<ToolOutput>;
 }
 
@@ -243,6 +254,8 @@ interface ToolContext<Ctx> {
   app: Ctx;
   /** 发出应用自定义事件，例如博客的 command */
   emit(name: string, data: unknown): void;
+  /** 报告执行进度（C6），产生 tool_progress 事件。适合 OCR、bash 这类耗时工具 */
+  update(progress: unknown): void;
 }
 
 /** 工具来源：静态数组、MCP server，以后还可以是 skills 等 */
@@ -272,10 +285,18 @@ interface RunOptions<Ctx> {
   serverTools?: ServerToolKind[];
   thinking?: ModelRequest['thinking'];
   safetyCheck?: 'high';
-  maxSteps?: number;                 // 默认 10
+  /** 停止条件（C4，参考 Vercel），任意一个满足就停止。默认 [stepCount(10)]。
+   *  内置：stepCount(n)、hasToolCall(...names)、costAbove(usd)；也可以传自定义函数 */
+  stopWhen?: StopCondition | StopCondition[];
+  /** 每个 step 发请求前调用（C3，四家都有）。可以改写本 step 的 messages、system、model、
+   *  activeTools、采样参数；返回的 messages 会成为后续 step 的基础。Compactor 就是它的一个实现 */
+  prepareStep?(s: StepContext<Ctx>): PrepareStepResult | void | Promise<PrepareStepResult | void>;
+  maxParallelToolCalls?: number;     // C5，默认 10（与 dsh 一致）
   maxToolResultChars?: number;       // 第一期先做"超长截断"，完整的修剪放到 Compactor
   retry?: { maxAttempts: number; baseDelayMs: number; maxDelayMs: number };
   approval?: ApprovalConfig<Ctx>;    // 见 §4.1
+  /** 暂停式审批和 resume() 必须配置（C1）；其他场景可选 */
+  store?: SessionStore;
   hooks?: {
     /** 程序化的策略钩子（不是人工审批）：可以改写参数，或按规则拒绝 */
     beforeToolCall?(call: ToolUseBlock, ctx: ToolContext<Ctx>):
@@ -293,18 +314,33 @@ interface RunHandle extends AsyncIterable<AgentEvent> {
   abort(reason?: string): void;
   /** 插话（steer）：运行中途追加一条用户消息。不打断正在进行的模型请求或工具，
    *  而是在下一个 step 开始前插入 transcript（插在本轮所有 tool_result 之后，保证不变量 1）。
-   *  如果 run 在下一个 step 之前就结束了，返回 'missed'，由调用方转成排队消息 */
-  steer(message: Message): 'accepted' | 'missed';
+   *  返回值参考 Vercel 的 steering outcome（C7）。没送达的消息由调用方决定是否转成 followUp */
+  steer(message: Message): Promise<SteerOutcome>;
+  /** 后续消息（C7，参考 pi 的 followUp）：本轮自然结束（没有工具调用、也没有待插话的消息）时，
+   *  run 不结束，而是用排队的消息接着跑下一轮。用于 GUI 的排队发送和 harness 的任务队列 */
+  followUp(message: Message): void;
+  peekQueued(): { steering: Message[]; followUp: Message[] };
+  clearQueued(kind?: 'steering' | 'followUp'): void;
 }
-// 排队（queue）不需要 core 支持：由应用在 run_end 之后，用 transcript 加上排队的消息发起下一次 run()。
+type SteerOutcome =
+  | { delivered: true }
+  | { delivered: false; reason: 'finished' | 'stop_condition' | 'aborted' | 'error' | 'awaiting_approval' };
 // 插话和排队的区分参考 Codex（运行中 Enter 插话，Tab 排队）和 dsh（可以配置，Ctrl/Cmd+Enter 走另一种）。
+
+/** 从暂停状态恢复（C1）。完整状态从服务端 store 读取，客户端只提供 runId 和对各个审批的决定 */
+function resume<Ctx>(opts: Omit<RunOptions<Ctx>, 'messages'> & {
+  runId: string;
+  decisions: Record<string, ApprovalDecision>;   // key 是 approvalId（不透明 ID，不是 callId）
+}): RunHandle;
 
 interface RunResult {
   reason: 'completed' | 'max_steps' | 'aborted' | 'error' | 'awaiting_approval' | 'refusal';
   transcript: Message[];             // 完整、可以重放，包含工具调用和结果
   usage: Usage;
   costUsd?: number;
-  pending?: Array<{ callId: string; name: string; input: unknown; reason?: string }>;
+  /** 暂停时待审批的调用。只包含展示用信息和不透明的 approvalId；完整状态在服务端 store 里 */
+  pending?: Array<{ approvalId: string; toolName: string; displayInput: unknown; reason?: string }>;
+  runId: string;
 }
 ```
 
@@ -346,22 +382,34 @@ type Answerer<Ctx> = (
 interface ApprovalConfig<Ctx> {
   policy?: 'ask' | 'never';                 // 默认 ask
   answerers?: Answerer<Ctx>[];              // 链走到头还没人回答 → unavailable → 拒绝
-  /** 从暂停状态恢复时传入：对指定的调用给出一次性决定，优先于应答者链 */
-  decisions?: Record<string, 'allowed-once' | 'rejected'>;
 }
 
-/** 内置应答者 */
-const deferAnswerer: Answerer<unknown>;     // 直接返回 deferred，用于 serverless
+/** 审批决定（C8，参考 OpenAI Agents 的 approve/reject） */
+type ApprovalDecision =
+  | { outcome: 'allowed-once' }
+  | { outcome: 'allowed-for-run' }                   // 本次运行内，同一个工具后续调用都自动允许
+  | { outcome: 'rejected'; message?: string }        // message 是模型看到的拒绝说明，省略时用默认措辞
+  | { outcome: 'rejected-for-run'; message?: string };
+
+/** 内置应答者：直接返回 deferred，用于 serverless。没有配置 store 时，run() 启动就报错（C1） */
+const deferAnswerer: Answerer<unknown>;
 ```
 
 **三种用法：**
 - **GUI（等待式）：** 应答者返回一个 Promise，用户在 UI 上点"允许"或"拒绝"时 resolve。
-- **Workers（暂停式）：** `answerers: [deferAnswerer]`。run 以 `reason:'awaiting_approval'` 结束，`pending` 列出待审批的调用。用户确认后，传入同一份 transcript 和 `approval.decisions: { [callId]: 'allowed-once' }` 再跑一次。core 发现最后一条 assistant 消息里还有没出结果的 tool_use，就先处理这些调用，再继续。
+- **Workers（暂停式）：** `answerers: [deferAnswerer]` 加 `store`。run 以 `reason:'awaiting_approval'` 结束，transcript 和待审批的调用写入 store，客户端只拿到 `runId` 和每个审批的不透明 `approvalId`。用户确认后，服务端调用 `resume({ runId, decisions })`：从 store 读出状态，先处理待审批的调用，再继续。
+
+**安全要求（C1，参考 OpenAI Agents 的 HITL 安全说明和 Vercel 的 `experimental_toolApprovalSecret`）：**
+- 客户端回传的 transcript **不可信**，不能作为任何授权的依据。普通的多轮对话历史仍然可以由客户端回传（两个验收项目都是这样），但审批必须基于服务端存储的状态。
+- `approvalId` 是不透明的随机 ID，不暴露 callId，也不暴露完整参数。
+- 每个 approvalId 只能消费一次：`SessionStore.consumeApproval()` 必须是原子操作（D1 用条件更新；Durable Object 天然是串行的；KV 不保证原子性，**不能单独用来实现**）。
+- 认证审批人、校验权限（例如"这个观众能不能批准这次询盘"）是应用层的责任，在调用 `resume()` 之前完成。
+- 展示给审批人的工具名和参数，都按不可信内容处理（HTML 转义）。
 - **harness（无人值守）：** `policy: 'never'`，或者在链上挂一个 LLM 自动审查的应答者，对应 dsh 的 Auto review。
 
 **模型看到什么：** 被拒绝的调用会得到一条错误工具结果，例如 `"Tool call was not approved by the user"`。`unavailable` 和 `cancelled` 各有对应的措辞。模型看不到审批 UI，也看不到审计事件。
 
-**会展 demo：** 现在的"draft_inquiry 签发确认令牌 → send_inquiry"可以改成：`send_inquiry` 设置 `needsApproval: true`，用暂停式审批；确认卡片上的按钮对应 `CardAction` 的 `kind:'approve'`（见 §9）。确认令牌原本的作用（把确认绑定到具体的展商和正文），由 `callId` 加上不可篡改的 transcript 来保证。是否迁移，等验收时再决定。
+**会展 demo：** 现在的"draft_inquiry 签发签名的确认令牌 → send_inquiry"在安全上是正确的（令牌由服务端签发，绑定了租户、观众、展商和正文，并且幂等）。可以继续保留；也可以迁移到 `needsApproval` 加暂停式审批，前提是用 D1 实现 store，并保证 `approvalId` 只能消费一次。是否迁移，等验收时再决定。
 
 ## 5. 由 core 负责的不变量
 
@@ -370,12 +418,13 @@ const deferAnswerer: Answerer<unknown>;     // 直接返回 deferred，用于 se
 1. 每个 `tool_use` 在下一次请求之前，都必须有对应的 `tool_result`。工具被拒绝、中途中止、执行出错，都要补一条错误结果。
 2. 本轮已经流式输出的文字，要保留在 assistant 消息里，否则模型下一轮会把答案重说一遍。
 3. thinking 和 reasoning_content 按 provider 的要求回传。是否回传由 adapter 决定，core 只负责保留。
-4. 工具参数 JSON 不合法时，返回一个错误结果，提示模型修正，而不是直接崩溃。重试次数计入 `maxSteps`。
-5. 达到 `maxSteps` 时，以 `reason:'max_steps'` 正常结束，不抛异常。
+4. 工具参数 JSON 不合法时，返回一个错误结果，提示模型修正，而不是直接崩溃。重试次数计入 step 数（受 `stopWhen` 约束）。
+5. 满足 `stopWhen` 时，以 `reason:'max_steps'`（或对应的原因）正常结束，不抛异常。
 6. 中止时，进行中的模型请求和工具都会收到 signal；transcript 保持合法（满足第 1 条）。
 7. 可重试的 ProviderError 按 `retry` 配置做指数退避，并发出 `retry` 事件。遇到 `context_overflow` 时，如果配置了 compactor，就强制压缩一次再重试；没有配置就直接报错。
 8. 发给 provider 之前，去掉 `tool_result` 里的 `data` 和 `ui`。
-9. 工具调用并行执行（`Promise.allSettled`），结果按 `tool_use` 原来的顺序写入。单个工具失败不影响其他工具。这一点与现在 `dispatchMany` 用的 `Promise.all` 不同。
+9. 工具调用默认并行执行（`Promise.allSettled`，并发数不超过 `maxParallelToolCalls`）；批次里只要有一个 `executionMode:'sequential'` 的工具，整批就串行执行。结果一律按 `tool_use` 原来的顺序写入，`tool_end` 事件按完成顺序发出。单个工具失败不影响其他工具。这一点与现在 `dispatchMany` 用的 `Promise.all` 不同。
+11. 工具调用参数逐字节回传（C2）：发给 provider 的是 `ToolUseBlock.arguments` 原始字符串，绝不用解析后的对象重新序列化。
 10. 审批没拿到明确许可就拒绝：只有 `allowed-once` 才会执行，应答者出现任何异常都按 `unavailable` 处理并拒绝。
 
 ## 6. 事件（只发事实）
@@ -390,13 +439,15 @@ type AgentEvent =
   | { type: 'block_end'; messageId: string; index: number; block: Block }
   | { type: 'step_end'; stepId: string; finish: FinishReason; usage: Usage }
   | { type: 'tool_start'; callId: string; name: string; input: unknown }
-  | { type: 'approval_request'; callId: string; toolName: string; reason?: string; displayReason?: string }
-  | { type: 'approval_resolved'; callId: string; outcome: ApprovalOutcome }
+  | { type: 'approval_request'; approvalId: string; callId: string; toolName: string; reason?: string; displayReason?: string }
+  | { type: 'approval_resolved'; approvalId: string; callId: string; outcome: ApprovalOutcome; automatic: boolean }
+  | { type: 'tool_progress'; callId: string; progress: unknown }                 // C6
+  | { type: 'queued'; kind: 'steering' | 'followUp'; message: Message }          // C7
   | { type: 'tool_end'; callId: string; ok: boolean; output: ToolOutput; ms: number; internal?: { error: string } }
   | { type: 'retry'; attempt: number; delayMs: number; error: { kind: string; message: string } }
   | { type: 'compaction'; info: CompactionInfo }          // 先预留
   | { type: 'custom'; name: string; data: unknown }       // 来自 ctx.emit
-  | { type: 'user_message'; message: Message; via: 'steer' }   // 插话的消息进入 transcript 时发出
+  | { type: 'user_message'; message: Message; via: 'steer' | 'followUp' }   // 插话或后续消息进入 transcript 时发出
   | { type: 'error'; error: { kind: string; message: string; retryable: boolean } }
   | { type: 'run_end'; result: RunResult };
 ```
@@ -449,7 +500,26 @@ type ToolPartState =
 - 博客的 `searching` 和 `waiting` 事件不再需要：页面按 `tool` part 的名字和状态来渲染就行。
 - GUI 里的 zustand store 只负责 `set(s => reduce(s, e))`。
 
+## 7.5 SessionStore（第一期定义接口，并提供内存实现和 D1 实现）
+
+```ts
+interface SessionStore {
+  /** 保存暂停的运行：transcript、待审批的调用（approvalId → callId 的映射只存在服务端） */
+  savePaused(run: PausedRun): Promise<void>;
+  loadPaused(runId: string): Promise<PausedRun | null>;
+  /** 原子操作：把 approvalId 标记为已消费并返回对应的调用；已经消费过则返回 null（防重放） */
+  consumeApproval(runId: string, approvalId: string): Promise<{ callId: string } | null>;
+  /** 可选：追加事件日志，供 harness 回放和 compaction 保留原文 */
+  appendEvents?(runId: string, events: AgentEvent[]): Promise<void>;
+}
+```
+
+- 第一期提供 `memoryStore()`（测试用，以及 GUI 的本地 server）和 `d1Store(db)`（Workers）。
+- JSONL 文件实现放到 `@leochat/node`。
+
 ## 8. Compactor（第一期只定义接口）
+
+> C3：Compactor 是 `prepareStep` 的一个现成实现（`compactor` 选项等价于在 `prepareStep` 链里加上它），另外还会在 `context_overflow` 时被强制调用。
 
 ```ts
 interface Compactor {
@@ -582,7 +652,7 @@ export function runAgent({ identity, transcript, userText, env, signal }) {
       fetch: (u, i) => handleMcp(new Request(u, i), env),
       headers: async () => ({ Authorization: `Bearer ${await mintToken(env, identity)}` }),
     })],
-    maxSteps: 6,
+    stopWhen: stepCount(6),
     temperature: 0.2,
     safetyCheck: 'high',                                 // 面向公众的应用必须开启
     signal,
@@ -665,8 +735,30 @@ LeoChat 仓库是**公开**的，所以这里的"私有 git 依赖"实际含义�
 4. 只在 pnpm 10.12 上测过。LeoChat 自己锁定的是 pnpm 9.15（只用于开发 monorepo，不影响使用方）。如果使用方用 pnpm 9，需要再验证一次 `&path:` 写法。
 5. 仓库是公开的，任何人都能这样安装。如果以后要真正私有，需要把仓库改为私有，并在使用方的 CI 里配置 GitHub token。
 
+### Spike 4 实测结果：pi-ai 能否用于非 DeepSeek 的 provider（C10，2026-11-14）
+
+测试对象是 `@earendil-works/pi-ai@1.5.2`（pi-mono 改名后的包，旧名 `@mariozechner/pi-ai` 已停在 0.73）。只按需引入 `models`、`providers/deepseek`、`providers/anthropic` 三个入口，用 `wrangler dev`（本地 workerd，也就是真实的 Workers 运行时）调用 DeepSeek。
+
+| 项目 | 结果 |
+|---|---|
+| 在 workerd 里运行 | ✅ 两条路径都成功完成了一次带工具调用的流式请求 |
+| pi-ai 内置的 DeepSeek provider | ✅ 走 **openai-completions**（Chat Completions）；目录里有 `deepseek-flash` / `deepseek-v4-pro`，含价格、1M 上下文、thinking 等级映射 |
+| `anthropic-messages` 协议，指向 DeepSeek 的 `/anthropic` 端点 | ✅ 能收到 thinking 块和工具调用 |
+| 打包体积（openai 与 anthropic 两个 SDK） | 1.75 MB，gzip 后 296 KB，远低于 Workers 的上限 |
+| 费用计算 | 用的是目录里的价格。上面把 DeepSeek 套在 Claude 的模型条目上，结果费用就按 Claude 的价格算了，所以自定义模型必须自己填 `cost` |
+| **工具参数** | ❌ pi-ai 的 `ToolCall.arguments` 是**解析后的对象**，回传时用 `JSON.stringify` 重新序列化（例如 `api/openai-completions.js:1032`）。这与 C2（原始字符串逐字节回传）冲突，可能降低这些 provider 的前缀缓存命中率 |
+| 服务端工具（联网搜索、引用） | ❌ pi-ai 的 DeepSeek provider 走 Chat Completions，没有这些能力（这与 §13 Spike 2 的结论一致） |
+
+**结论（C10，待用户确认）：**
+- **DeepSeek 用自己写的原生适配器**（Messages 端点，带服务端工具、引用、原始参数回传），这一点不变。
+- **其他 provider 通过 `@leochat/pi-ai-bridge` 接入 pi-ai**：把我们的 content-block 和 pi-ai 的 Context 互相转换。这和 dsh 的做法一样。
+- 代价是：这些 provider 的工具参数会被重新序列化（C2 只在 DeepSeek 上完全满足）；多一个依赖，还要跟着 pi-ai 升级。好处是：不用自己写、自己维护 OpenAI、Anthropic、Gemini、Kimi、Bedrock 等适配器。
+- 第一期如果只需要 DeepSeek，这个桥接包可以晚一点再做；GUI 迁移时（需要支持现有的多个 provider）必须有它。
+
 ## 14. 待定问题
 
 - core 的 `run()` 要不要内置多 provider 兜底链？当前倾向不内置，第一期交给应用层。
 - `maxToolResultChars` 截断与 Compactor 里的修剪，最终是否合并成一个机制？
-- 要不要在 `RunOptions` 里提供 `prepareStep(state) → partial RunOptions`，让应用在每个 step 之前动态调整工具和 system（参考 Vercel 的同名能力）？harness 可能会用到，第一期先不做。
+- ~~要不要提供 `prepareStep`~~ → 已采纳（C3）。
+- 动态增减工具（MCP `listChanged`、harness 中途加工具）：参考 dsh 用 developer 消息加 `tool-addition` / `tool-removal` 块，不改写请求头，以保护前缀缓存（C9）。第一期不做。
+- 非 DeepSeek 的 provider 要不要交给 pi-ai（C10）：见 §13 Spike 4。
