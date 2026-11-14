@@ -148,6 +148,14 @@
 4. **1M 上下文改变了 compact 的动机**：主要目的不再是 "塞不下"，而是长任务的质量（注意力被稀释）和成本（未命中的部分很贵）。
 5. **公开部署（例如博客 agent）必须开启 `safety_check`**。
 
+## 7. 实测补充（2026-11-14）
+
+两种端点的详细对比见 `docs/superpowers/specs/2026-11-14-leochat-core-design.md` §13。要点：
+- `deepseek-chat` 已被路由到 `deepseek-flash`，`/models` 里也不再列出
+- Chat Completions 端点下，函数工具和 `deepseek_web_search` 只能在 thinking 模式下同时使用，否则返回 400
+- Messages 端点会返回完整的搜索结果块和带原文片段的引用；Chat Completions 只返回 `url_citation` 注释
+- 两种端点的 usage 字段语义不同：Chat Completions 的 `prompt_tokens` 包含缓存命中的部分，Messages 的 `input_tokens` 不含
+
 ## 来源
 
 - https://api-docs.deepseek.com/news/news261113/

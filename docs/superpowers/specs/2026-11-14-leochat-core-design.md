@@ -625,6 +625,25 @@ export function runAgent({ identity, transcript, userText, env, signal }) {
    结果决定 adapter 默认走哪个端点。
 3. **确认 `deepseek-chat` 现在的状态**（会展 demo 的默认模型）。
 
+### Spike 2、3 实测结果（2026-11-14）
+
+| 项目 | Chat Completions | Messages（`/anthropic/v1/messages`） |
+|---|---|---|
+| 服务端搜索的过程 | delta 里有 `server_tool_calls`（只有搜索词和 action） | 完整的 `server_tool_use` 块（搜索词、`kind: deep_search`） |
+| 搜索结果 | **没有结果列表**，只在文末给出 `annotations: url_citation`（url、title、start/end index） | `web_search_tool_result` 块，每条结果有 title、url、`encrypted_content` |
+| 引用 | `url_citation`（字符区间） | `citations_delta`，每条带 `cited_text` 原文片段 |
+| thinking | `reasoning_content` 字符串 | `thinking` 块，带 `signature` |
+| 函数工具和服务端工具同时使用 | **关闭 thinking 时返回 400**："client tools can only be used together with deepseek_web_search … in thinking mode" | 开启 thinking 时可以（Messages 端点默认就开启 thinking） |
+| 回传 thinking / reasoning_content | 不回传也返回 200，没有强制要求 | 去掉 thinking 块也返回 200 |
+| usage | `prompt_tokens`（**包含**缓存命中的部分）、`prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`、`completion_tokens_details.reasoning_tokens`、`server_tool_use.{tool_search,tool_fetch,tool_image_search}` | `input_tokens`（**不含**缓存读取，Anthropic 语义）、`cache_read_input_tokens`、`output_tokens_details.thinking_tokens`、`server_tool_use.{web_search_requests,tool_search,…}` |
+
+- `/models` 只列出 `deepseek-flash` 和 `deepseek-v4-pro`。`deepseek-chat` 仍然能调用，但响应里的 `model` 是 `deepseek-flash`，说明已经被路由过去。会展 demo 应该显式改用 `deepseek-flash`。
+- **结论：DeepSeek adapter 默认走 Messages 端点。** 它的输出更完整（有搜索结果列表和引用原文），而且和我们的 content-block 模型几乎一一对应。Chat Completions 的翻译逻辑保留，给通用的 OpenAI 兼容 provider（Kimi 等）使用。
+- adapter 要把两种 usage 统一成 `Usage`：`inputTokens` 一律表示**全部输入**，Messages 端点要加上 `cache_read_input_tokens`。
+- 虽然不回传 thinking 也不报错，core 仍然原样回传（不变量 3），避免影响缓存命中和推理质量。
+- 待确认：Messages 端点 usage 里 `web_search_requests`（1 次）和 `tool_search`（2 次）是什么关系、按哪个计费。可以对一下账单。
+- Spike 1（私有 git 依赖）还没做。
+
 ## 14. 待定问题
 
 - core 的 `run()` 要不要内置多 provider 兜底链？当前倾向不内置，第一期交给应用层。
