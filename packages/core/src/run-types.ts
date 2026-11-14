@@ -2,7 +2,7 @@
  * run() 的配置与句柄类型（设计文档 §4、§4.1、§7.5、§8）。
  * 第 1 步只定义类型；run() 本身在第 2 步实现。
  */
-import type { Message, ToolUseBlock } from "./blocks";
+import type { Message, ToolResultBlock, ToolUseBlock } from "./blocks";
 import type { AgentEvent, ApprovalOutcome, CompactionInfo, RunResult } from "./events";
 import type { Capabilities, ModelRequest, Provider, ToolDef } from "./provider";
 import type { AnyTool, ToolContext, ToolOutput, ToolSource } from "./tool";
@@ -92,6 +92,8 @@ export interface PausedRun {
   transcript: Message[];
   /** approvalId → callId 的映射只存在服务端 */
   approvals: Array<{ approvalId: string; callId: string; toolName: string; consumed: boolean }>;
+  /** 同一批里已经执行完的调用结果；resume 时与待审批调用的结果按原顺序合并成一条 tool 消息 */
+  partialResults: ToolResultBlock[];
   usage: Usage;
   createdAt: number;
 }
@@ -99,6 +101,8 @@ export interface PausedRun {
 export interface SessionStore {
   savePaused(run: PausedRun): Promise<void>;
   loadPaused(runId: string): Promise<PausedRun | null>;
+  /** 恢复成功、这批调用全部有了结果后删除暂停记录；之后同一个 runId 再 resume 会得到 not_found */
+  deletePaused(runId: string): Promise<void>;
   /** 原子操作：把 approvalId 标记为已消费并返回对应的调用；已经消费过则返回 null（防重放） */
   consumeApproval(runId: string, approvalId: string): Promise<{ callId: string } | null>;
   /** 可选：追加事件日志，供 harness 回放和 compaction 保留原文 */
@@ -169,7 +173,7 @@ export interface RunOptions<Ctx = unknown> {
 
 export type SteerOutcome =
   | { delivered: true }
-  | { delivered: false; reason: "finished" | "stop_condition" | "aborted" | "error" | "awaiting_approval" };
+  | { delivered: false; reason: "finished" | "stop_condition" | "aborted" | "error" | "awaiting_approval" | "cleared" };
 
 export interface RunHandle extends AsyncIterable<AgentEvent> {
   readonly runId: string;

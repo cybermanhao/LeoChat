@@ -72,12 +72,12 @@ export class ToolError extends Error {
   }
 }
 
-export function isModelVisible(tool: AnyTool<unknown>): boolean {
+export function isModelVisible<Ctx>(tool: AnyTool<Ctx>): boolean {
   return (tool.visibility ?? ["model"]).includes("model");
 }
 
 /** 生成发给模型的工具定义 */
-export function toToolDef(tool: AnyTool<unknown>): ToolDef {
+export function toToolDef<Ctx>(tool: AnyTool<Ctx>): ToolDef {
   let inputSchema: JsonSchema;
   if (tool.jsonSchemaOverride) {
     inputSchema = tool.jsonSchemaOverride;
@@ -91,7 +91,7 @@ export function toToolDef(tool: AnyTool<unknown>): ToolDef {
 export type ValidationResult = { ok: true; value: unknown } | { ok: false; error: string };
 
 /** 按工具的 zod schema 校验参数；失败时给出可以直接给模型看的错误说明 */
-export function validateToolInput(tool: AnyTool<unknown>, input: unknown): ValidationResult {
+export function validateToolInput<Ctx>(tool: AnyTool<Ctx>, input: unknown): ValidationResult {
   const r = tool.input.safeParse(input);
   if (r.success) return { ok: true, value: r.data };
   return { ok: false, error: z.prettifyError(r.error) };

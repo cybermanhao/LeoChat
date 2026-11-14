@@ -1,10 +1,19 @@
 /** 内置停止条件（C4，参考 Vercel AI SDK 的 stopWhen） */
 import type { StopCondition } from "./run-types";
 
+const STEP_COUNT = new WeakSet<StopCondition>();
+
+/** 用来把步数上限触发的停止报告为 reason: "max_steps" */
+export function isStepCountCondition(c: StopCondition): boolean {
+  return STEP_COUNT.has(c);
+}
+
 /** 已经跑满 n 个 step 时停止 */
 export function stepCount(n: number): StopCondition {
   if (!Number.isInteger(n) || n < 1) throw new RangeError(`stepCount: n must be a positive integer, got ${n}`);
-  return ({ steps }) => steps.length >= n;
+  const cond: StopCondition = ({ steps }) => steps.length >= n;
+  STEP_COUNT.add(cond);
+  return cond;
 }
 
 /** 最近一个 step 调用了指定工具之一时停止 */
