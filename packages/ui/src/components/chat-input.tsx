@@ -5,6 +5,9 @@ import { Button } from "./button";
 
 export type SendButtonState = "idle" | "sending" | "generating";
 
+/** 连按两次 Esc 停止生成的最大间隔（与 dsh 默认值一致） */
+export const ESC_STOP_SEQUENCE_MS = 500;
+
 export interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -16,11 +19,19 @@ export interface ChatInputProps {
   sendState?: SendButtonState;
   placeholder?: string;
   disabled?: boolean;
-  showAttachment?: boolean;
-  showVoice?: boolean;
+  /** 提供时才显示附件按钮（未接功能的按钮不显示） */
+  onAttach?: () => void;
+  /** 提供时才显示语音按钮（输入为空时显示） */
+  onVoice?: () => void;
   className?: string;
   /** 工具栏渲染在输入框下方 */
   toolbar?: React.ReactNode;
+}
+
+/** 输入法组字期间（中文拼音选词等）的按键不能当作发送或停止 */
+export function isImeComposing(e: React.KeyboardEvent): boolean {
+  // keyCode 229 兼容部分浏览器在 compositionend 之后紧跟的那次 keydown
+  return e.nativeEvent.isComposing || e.keyCode === 229;
 }
 
 const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -34,8 +45,8 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
       sendState: sendStateProp,
       placeholder = "Type a message...",
       disabled = false,
-      showAttachment = true,
-      showVoice = false,
+      onAttach,
+      onVoice,
       className,
       toolbar,
     },
@@ -46,6 +57,12 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const isBusy = sendState !== "idle";
 
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+    const lastEscAtRef = React.useRef<number | null>(null);
+
+    // 运行结束后清空 Esc 序列，避免跨轮次误触
+    React.useEffect(() => {
+      if (!isBusy) lastEscAtRef.current = null;
+    }, [isBusy]);
 
     // Merge forwarded ref with local ref to support both callback and object refs
     const setRefs = React.useCallback(
@@ -61,8 +78,26 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isImeComposing(e)) return;
+
+      if (e.key === "Escape") {
+        if (!isBusy || !onCancel || e.repeat) return;
+        const now = Date.now();
+        const last = lastEscAtRef.current;
+        if (last !== null && now - last <= ESC_STOP_SEQUENCE_MS) {
+          e.preventDefault();
+          lastEscAtRef.current = null;
+          onCancel();
+        } else {
+          lastEscAtRef.current = now;
+        }
+        return;
+      }
+      lastEscAtRef.current = null;
+
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
+        // 运行中允许继续输入，但暂不支持插话/排队（输入框第 1 期），草稿保留
         if (!isBusy && value.trim()) {
           onSend();
         }
@@ -86,12 +121,13 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
             toolbar && "rounded-b-none border-b-0"
           )}
         >
-          {showAttachment && (
+          {onAttach && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="h-9 w-9 shrink-0"
+              onClick={onAttach}
               disabled={disabled || isBusy}
             >
               <Paperclip className="h-5 w-5" />
@@ -99,13 +135,14 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
             </Button>
           )}
 
+          {/* 运行中不禁用：用户可以先写下一条消息 */}
           <textarea
             ref={setRefs}
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            disabled={disabled || isBusy}
+            disabled={disabled}
             rows={1}
             className={cn(
               "flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
@@ -113,12 +150,13 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
             )}
           />
 
-          {showVoice && !value && (
+          {onVoice && !value && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="h-9 w-9 shrink-0"
+              onClick={onVoice}
               disabled={disabled || isBusy}
             >
               <Mic className="h-5 w-5" />
@@ -146,6 +184,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
               size="icon"
               className="h-9 w-9 shrink-0"
               onClick={onCancel}
+              title="Stop (Esc Esc)"
             >
               <Square className="h-4 w-4" />
               <span className="sr-only">Stop generating</span>
