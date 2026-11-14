@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    // 零 Node 依赖：不加载 @types/node，只允许 ES2022 和 Web 标准 API（DOM lib 提供 fetch、AbortSignal、crypto）
+    "types": []
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
