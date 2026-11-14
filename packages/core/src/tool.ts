@@ -58,6 +58,8 @@ export function defineTool<S extends z.ZodType, Ctx = unknown>(tool: Tool<S, Ctx
 /** 工具来源：静态数组、MCP server，以后还可以是 skills 等 */
 export interface ToolSource<Ctx = unknown> {
   list(ctx: { app: Ctx; signal: AbortSignal }): Promise<AnyTool<Ctx>[]>;
+  /** 可选：运行结束时释放 list() 建立的连接（例如 MCP 客户端）。run() 结束时一定会调用 */
+  release?(): Promise<void> | void;
 }
 
 export function isToolSource<Ctx>(x: AnyTool<Ctx> | ToolSource<Ctx>): x is ToolSource<Ctx> {

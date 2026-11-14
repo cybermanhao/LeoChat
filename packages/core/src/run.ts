@@ -70,6 +70,19 @@ export function unansweredToolUses(messages: Message[]): ToolUseBlock[] {
   return last.content.filter((b): b is ToolUseBlock => b.type === "tool_use" && !answered.has(b.id));
 }
 
+/** 运行结束时释放 ToolSource 建立的连接；释放失败不影响结果 */
+async function releaseSources<Ctx>(opts: RunOptions<Ctx>): Promise<void> {
+  for (const t of opts.tools ?? []) {
+    if (isToolSource(t) && t.release) {
+      try {
+        await t.release();
+      } catch {
+        // 忽略
+      }
+    }
+  }
+}
+
 function toProviderError(e: unknown): ProviderError {
   if (isProviderError(e)) return e;
   return new ProviderError("unknown", e instanceof Error ? e.message : String(e), { cause: e });
@@ -103,7 +116,9 @@ function start<Ctx>(opts: RunOptions<Ctx>, init: Init): RunHandle {
     let r: RunResult;
     try {
       r = await loop(opts, init, runId, ac.signal, emit, steering, followUps);
+      await releaseSources(opts);
     } catch (e) {
+      await releaseSources(opts);
       // loop 内部已兜底；这里防御真正意外的异常，保证 result 不 reject
       const err = { kind: "unknown", message: e instanceof Error ? e.message : String(e) };
       emit({ type: "error", error: { ...err, retryable: false } });

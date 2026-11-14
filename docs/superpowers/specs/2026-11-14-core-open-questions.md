@@ -58,6 +58,19 @@
 - **当前做法：** 按 usage 里的 `web_search_requests` 计费，每次 0.00075 美元。
 - **待确认：** 同一次搜索里 `tool_search` 是 2、`web_search_requests` 是 1（§13 Spike 2 已记录），需要对一下账单。计价表集中在 `packages/deepseek/src/pricing.ts`，改起来很容易。
 
+## 第 5 步：mcp-kit
+
+### Q11 MCP SDK 用 v2，会展 demo 还在 v1
+- **事实：** LeoChat（`@modelcontextprotocol/client` / `server` ^2.0.0）和博客（server 2.3.1）都已经在用 SDK v2；会展 demo 用的是 v1（`@modelcontextprotocol/sdk` 1.32）。mcp-kit 按 v2 实现（2.4.0），用 `createMcpHandler` 做无状态端点、`StreamableHTTPClientTransport` 支持注入 fetch。
+- **计划：** 第 7 步验收会展 demo 时，顺便把它升级到 v2。v2 默认按 2026-07-28 协议，也兼容 2025 年的客户端（`legacy: 'stateless'`）。WorkBuddy、千问办公的接入本来就没实测过，升级后需要再测一次。
+- **需要你确认：** 可以把会展 demo 升级到 SDK v2 吗？
+
+### Q12 needsApproval 通过 MCP 暴露时无法强制
+- **事实：** 工具通过 MCP 交给外部宿主（WorkBuddy 等）时，是否询问用户由宿主决定，服务端拦不住。
+- **当前做法：** mcp-kit 照常注册这类工具，并在文档里提醒：需要服务端确认的写操作，继续用会展那种"签名确认令牌"的应用层设计。
+- **备选：** 让 `toMcpServer` 默认**不暴露** `needsApproval` 的工具，需要显式 `exposeApprovalTools: true`。更安全，但会展的 `send_inquiry` 本身就靠令牌保护，用不上这个限制。
+- **影响：** 以后把带审批的工具开放给外部宿主时的默认安全性。
+
 ## 实现中做出的、值得你知道的决定（不需要确认，有异议再说）
 
 - `run()` 返回的 `result` **从不 reject**：所有错误都变成 `reason: 'error'` 的结果，并发出 `error` 事件。
@@ -65,3 +78,4 @@
 - 工具不响应 abort 信号时，core 不会一直等它：中止后立即以"已中止"结束这次调用（工具本身可能还在后台跑完）。
 - 审批：只有真正去问应答者时才发 `approval_request`；`policy: 'never'`、"本次运行内一直允许/拒绝" 这类自动决定只发 `approval_resolved`（`automatic: true`）。
 - `SessionStore` 增加了 `deletePaused()`：恢复成功后删除暂停记录，之后再用同一个 runId 恢复会得到 `not_found`（测试发现不删会导致重放时 transcript 不合法）。
+- `ToolSource` 增加了可选的 `release()`：mcp-kit 每次 run 建立一个 MCP 客户端，run 结束时由 core 调用 `release()` 关闭连接。
