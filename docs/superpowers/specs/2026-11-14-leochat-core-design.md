@@ -69,7 +69,7 @@ packages/
 ```
 
 - **不和现有包混在一起。** `mcp-core`、`leochat-sdk` 维持现状，等迁移完成后再废弃。
-- **私有 git 依赖。** 旧 SDK 就是因为依赖 `workspace:*` 才装不上。规则是：core 没有任何内部依赖；其他包对 core 一律用 `peerDependencies`；每个包都带构建好的 `dist`。具体的安装方式（`git+ssh://…#<ref>&path:/packages/core`，或者发布到一个只放构建产物的分支）放到 Spike 1 去验证。
+- **git 依赖（已验证，见 §13 Spike 1）。** 旧 SDK 就是因为 `dependencies` 里写了 `workspace:*` 才装不上。规则是：core 没有任何内部依赖；其他包对 core 一律用 `peerDependencies`；dist 只放在发布 tag `sdk-vX.Y.Z` 上；使用方写 `github:cybermanhao/LeoChat#sdk-vX.Y.Z&path:packages/<name>`。
 - **校验库（D11）。** 工具参数统一用 zod v4 定义。zod 是纯 JS 库，可以在 Workers 和浏览器里运行，不违反"零 Node 依赖"。core 把它列为 `peerDependencies`，发给模型的 JSON Schema 由 `z.toJSONSchema()` 生成。来自 MCP server 的远程工具只有 JSON Schema，由 mcp-kit 包装成 `z.unknown()` 校验加上原始 JSON Schema 覆盖，参数校验交给远端 server 去做。
 
 ---
@@ -642,7 +642,28 @@ export function runAgent({ identity, transcript, userText, env, signal }) {
 - adapter 要把两种 usage 统一成 `Usage`：`inputTokens` 一律表示**全部输入**，Messages 端点要加上 `cache_read_input_tokens`。
 - 虽然不回传 thinking 也不报错，core 仍然原样回传（不变量 3），避免影响缓存命中和推理质量。
 - 待确认：Messages 端点 usage 里 `web_search_requests`（1 次）和 `tool_search`（2 次）是什么关系、按哪个计费。可以对一下账单。
-- Spike 1（私有 git 依赖）还没做。
+### Spike 1 实测结果（2026-11-14，pnpm 10.12.4）
+
+LeoChat 仓库是**公开**的，所以这里的"私有 git 依赖"实际含义是"不发 npm，直接从 GitHub 安装"，不涉及认证。测试方式：用本地模拟的 monorepo 测各种情况，再用真实的 GitHub 地址验证写法。
+
+| 情况 | 结果 |
+|---|---|
+| `github:cybermanhao/LeoChat#master&path:packages/shared`（真实仓库） | ✅ 能解析（约 20 秒，会下载整个仓库的压缩包） |
+| core 带构建好的 dist，deepseek 用 peer 依赖 core | ✅ 安装正常；只有一份 core 实例（`instanceof` 成立，模块只加载一次） |
+| 用 `wrangler deploy --dry-run` 打包到 Workers | ✅ core 只被打包一次；带上完整 zod 后约 770 KB，gzip 后 120 KB |
+| 子路径导出 `@leochat/core/view` | ✅ |
+| `devDependencies` 里写 `workspace:*` | ✅ 不受影响（依赖包的 devDependencies 不会被安装） |
+| **`dependencies` 里写 `workspace:*`** | ❌ `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`。**这就是旧 `@leochat/sdk` 装不上的原因** |
+| `peerDependencies` 里写 `workspace:*` | 能装上，但版本范围没有意义，不要这么写，改成 `*` 或具体范围 |
+| 不带 dist，靠 `prepare` 脚本在安装时构建 | ⚠️ pnpm 会在包目录里跑一遍 `npm install` 再构建，能成功但很慢（19 秒），而且每个使用方都要装一遍构建工具 |
+| `prepare` 加上 devDependencies 里有 `workspace:*` | ❌ npm 不认识 `workspace:` 协议（`EUNSUPPORTEDPROTOCOL`） |
+
+**结论（细化 D5）：**
+1. 包之间只能用 `peerDependencies` 互相引用，`dependencies` 里绝不能出现 `workspace:*`。用 lint 规则检查。
+2. **不依赖 `prepare`，dist 只放在发布 tag 上。** 写一个 `scripts/release-sdk.mjs`：构建 core、mcp-kit、deepseek → 在一个专门的发布分支上提交带 dist 的版本 → 打 tag `sdk-vX.Y.Z`。master 上不提交 dist。
+3. 使用方锁定到 tag：`"@leochat/core": "github:cybermanhao/LeoChat#sdk-v0.1.0&path:packages/core"`，结果可复现，pnpm 也能缓存。
+4. 只在 pnpm 10.12 上测过。LeoChat 自己锁定的是 pnpm 9.15（只用于开发 monorepo，不影响使用方）。如果使用方用 pnpm 9，需要再验证一次 `&path:` 写法。
+5. 仓库是公开的，任何人都能这样安装。如果以后要真正私有，需要把仓库改为私有，并在使用方的 CI 里配置 GitHub token。
 
 ## 14. 待定问题
 
