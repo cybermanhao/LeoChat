@@ -70,6 +70,39 @@
 - **备选：** 让 `toMcpServer` 默认**不暴露** `needsApproval` 的工具，需要显式 `exposeApprovalTools: true`。更安全，但会展的 `send_inquiry` 本身就靠令牌保护，用不上这个限制。
 - **影响：** 以后把带审批的工具开放给外部宿主时的默认安全性。
 
+## 第 7 步：两个项目的验收
+
+两个项目都没有改动原目录：会展 demo（没有 git 历史）在 scratchpad 的一份拷贝上改；博客用 `git worktree` 建了本地分支 `leochat-core-acceptance`（提交 `7cecd4a`，未推送）。
+
+| | 会展 demo | 博客 agent |
+|---|---|---|
+| 改动 | `agent.ts` 换成 `run()`，删掉 `llm.ts`；工具仍走 MCP（mcp-kit 的 v2 客户端 + demo 原有的 v1 server，经进程内 fetch 垫片） | `agent.ts` 换成 `run()`；新增 `model.ts`；13 个工具用 `jsonSchemaOverride` 原样包装；事件映射回原有的 SSE 事件和 trace span，页面不用改 |
+| 行数 | `agent.ts` + `llm.ts`：170 + 87 → 123（其中约 40 行是原样保留的 system prompt） | `agent.ts` + `llm.ts`：240 + 157 → 213 + 26（`llm.ts` 只剩一个类型引用，可以删） |
+| 测试 | 原有 34 个全部通过；类型检查通过 | 原有 299 个全部通过（agent 的 7 个测试改用 core 的 `scriptedProvider`，断言不变）；类型检查 0 错误 |
+| 真实 API | 观众、主办方、展商三种身份各问一次：工具按身份可见、卡片和 A* 路线图（`route_map`）经 `_meta["leochat/ui"]` 正常回传 | 没有单独跑（DeepSeek 适配器在第 3 步已实测） |
+
+**验收中发现并已修复的 core 问题：**
+- provider 出错时，原来先发 `step_end` 再发 `error`，导致博客的 trace 无法在 span 结束时标成失败。已改为先 `error` 后 `step_end`（提交 `6a7cd8d`）。
+- 设计文档 §6 承诺的 `eventsToSpans()` 之前没写，已补上 `@leochat/core/trace` 的 `createTraceCollector()`（提交 `bc309c1`）。博客可以改用它，减少 agent.ts 里手写的 span 映射。
+
+**验收中验证的依赖方式：** 用 `link:` 引入时，core 会从 LeoChat 的 node_modules 解析 peer 依赖 zod，出现两份 zod 的类型冲突；改用 `file:`（行为与 git 依赖一致，peer 从使用方解析）后类型检查 0 错误。说明 §13 定下的"peer 依赖 + git tag"方案是对的，只是本地联调不要用 `link:`。
+
+### Q13 博客的 Kimi 主模型暂时用不了
+- **事实：** 博客原来默认 Kimi、DeepSeek 兜底。core 目前只有 DeepSeek 适配器；Kimi 要等 C10 的 pi-ai 桥接包。验收版本里如果只配置了 Kimi 的 key，会直接报错提示。
+- **问题：** 下一步是先做 pi-ai 桥接（`@leochat/pi-ai-bridge`），还是博客就切换成 DeepSeek 为主？
+
+### Q14 两个项目都设了 `thinking: false`
+- **原因：** 会展原来用 `deepseek-chat`（非推理），博客原来也基本不用推理；Messages 端点默认开启 thinking，会增加首字延迟。为了和原来的体验一致，验收版本都关掉了。
+- **问题：** 要不要保持关闭？博客这类聊天组件开 thinking 回答质量会更好，但会慢一些。
+
+### Q15 会展 demo 的多轮对话仍然只传文字
+- **事实：** 页面发给服务端的历史是纯文字（`ChatTurn`），所以上一轮的工具结果下一轮看不到。core 已经能返回完整的 transcript，但要用上它，页面需要改成保存并回传 transcript（或者服务端用 store 保存）。
+- **问题：** 要不要在会展 demo 上做这一步？涉及页面改动，验收时没有做。
+
+### 行为变化（不需要确认，有异议再说）
+- 博客工具抛异常时，模型看到的从原来的 `String(err)` 变成固定的 "Tool execution failed"（完整错误只在服务端日志里），这是 core 的安全默认。
+- 会展 demo 的默认模型从 `deepseek-chat` 改成 `deepseek-flash`（前者已被服务端路由到后者）。
+
 ## 实现中做出的、值得你知道的决定（不需要确认，有异议再说）
 
 - `run()` 返回的 `result` **从不 reject**：所有错误都变成 `reason: 'error'` 的结果，并发出 `error` 事件。
