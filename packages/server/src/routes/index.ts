@@ -7,7 +7,16 @@ import { existsSync } from "node:fs";
 import type { ServerContext } from "../server.js";
 import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
-import type { ChatMessage, MCPServerConfig, ToolCall } from "@ai-chatbox/shared";
+import type { ChatMessage, MCPServerConfig } from "@ai-chatbox/shared";
+import { run, stepCount, type ToolUseBlock } from "@leochat/core";
+import {
+  legacyProvider,
+  mcpCoreTools,
+  pendingApprovalAnswerer,
+  toCoreMessages,
+  toLegacyMessages,
+  toLegacyToolCall,
+} from "../core-bridge.js";
 import { generateId } from "@ai-chatbox/shared";
 
 // Repo root: routes/ -> src/ -> server/ -> packages/ -> root (4 levels up)
@@ -100,6 +109,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
     }
 
     const { model, provider, stream = true, maxToolRounds, resumeTaskId, chatId: bodyChatId } = body;
+    const provider_ = provider;
 
     // Resume mode: load saved task instead of using request messages
     let inputMessages: ChatMessage[];
@@ -145,11 +155,12 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       }
     }
 
-    // Streaming response with full tool loop
+    // Streaming response: the tool loop now runs on @leochat/core run() (GUI migration step 1).
+    // Core events are translated back into the SSE payloads the current frontend parses, so the UI is unchanged.
     const MAX_TOOL_ROUNDS = Math.min(Math.max(maxToolRounds ?? 10, 1), 50);
 
     return streamSSE(c, async (stream) => {
-      // Abort detection: when the client disconnects, stop writing and cancel LLM stream
+      // Abort detection: when the client disconnects, stop writing and cancel the run
       const abortController = new AbortController();
       let aborted = false;
       stream.onAbort(() => {
@@ -186,173 +197,95 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
       });
       await safeWrite("task_started", JSON.stringify({ taskId, resumed: isResume }));
 
-      // Internal message history for tool loop
-      let internalMessages = [...inputMessages];
-      let toolRound = 0;
+      const provider = legacyProvider(llmService, provider_);
+      const legacyCalls = new Map<string, ToolUseBlock>();
+      const announced = new Set<string>();
+      const rejected = new Set<string>();
+      let toolRounds = 0;
 
-      try {
-        while (toolRound < MAX_TOOL_ROUNDS && !aborted) {
-          let currentToolCalls: ToolCall[] = [];
-          let hasToolCalls = false;
-          let completedMessage: ChatMessage | null = null;
+      const handle = run({
+        provider,
+        model: model ?? "",
+        messages: toCoreMessages(inputMessages),
+        tools: mcpCoreTools(context.sessionManager, truncateResult),
+        approval: { answerers: [pendingApprovalAnswerer(context.pendingApprovals)] },
+        stopWhen: stepCount(MAX_TOOL_ROUNDS),
+        // Checkpoint before each later step: the transcript then holds every finished tool round
+        prepareStep: async ({ stepIndex, messages }) => {
+          if (stepIndex === 0) return;
+          await context.taskStore
+            .save({ taskId, chatId, status: "running", toolRound: stepIndex, internalMessages: toLegacyMessages(messages) })
+            .catch(console.error);
+        },
+        signal: abortController.signal,
+      });
 
-          await llmService.streamChat(
-            {
-              messages: internalMessages,
-              model,
-              provider,
-              tools: tools.length > 0 ? tools : undefined,
-            },
-            {
-              onChunk: async (chunk) => {
-                await safeWrite("chunk", JSON.stringify({ ...chunk, index: Date.now() }));
-              },
-              onToolCall: async (toolCall) => {
-                if (aborted) return;
-                hasToolCalls = true;
-                currentToolCalls.push(toolCall);
+      const announce = async (callId: string) => {
+        if (announced.has(callId)) return;
+        announced.add(callId);
+        const call = legacyCalls.get(callId);
+        if (call) await safeWrite("tool_call", JSON.stringify(toLegacyToolCall(call)));
+      };
 
-                // Bash requires interactive user approval before execution
-                if (toolCall.name === "bash") {
-                  const command = (toolCall.arguments as { command?: string }).command || "";
-                  // Notify frontend: emit tool_call first so UI shows the pending tool, then request approval
-                  await safeWrite("tool_call", JSON.stringify(toolCall));
-                  await safeWrite("tool_approval_required", JSON.stringify({
-                    requiresApproval: true,
-                    id: toolCall.id,
-                    toolName: "bash",
-                    command,
-                  }));
-
-                  const approved = await new Promise<boolean>((resolve) => {
-                    context.pendingApprovals.set(toolCall.id, resolve);
-                    setTimeout(() => {
-                      if (context.pendingApprovals.has(toolCall.id)) {
-                        context.pendingApprovals.delete(toolCall.id);
-                        resolve(false);
-                      }
-                    }, 60000);
-                  });
-
-                  if (!approved) {
-                    const denied = "用户拒绝执行此命令";
-                    await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: denied }));
-                    toolCall.status = "error";
-                    toolCall.result = { error: denied };
-                    return;
-                  }
-                  // Approved — fall through to execute the tool
-                } else {
-                  await safeWrite("tool_call", JSON.stringify(toolCall));
-                }
-
-                // Execute tool
-                try {
-                  const rawResult = await context.sessionManager.callTool(
-                    toolCall.name,
-                    toolCall.arguments as Record<string, unknown>
-                  );
-                  // Truncate at source — prevents large SSE payloads and oversized final event
-                  const rawStr = typeof rawResult === "string"
-                    ? rawResult
-                    : JSON.stringify(rawResult);
-                  const truncated = truncateResult(rawStr);
-
-                  await safeWrite("tool_result", JSON.stringify({ id: toolCall.id, result: truncated }));
-
-                  toolCall.status = "completed";
-                  toolCall.result = truncated;
-                } catch (error) {
-                  console.error("[Tool Error]", error);
-                  await safeWrite("tool_error", JSON.stringify({ id: toolCall.id, error: "Tool execution failed" }));
-                  toolCall.status = "error";
-                  toolCall.result = { error: "Tool execution failed" };
-                }
-              },
-              onComplete: async (message) => {
-                completedMessage = message;
-                if (!hasToolCalls) {
-                  await safeWrite("complete", JSON.stringify(message));
-                }
-              },
-              onError: async (error) => {
-                await safeWrite("error", JSON.stringify({ error: sanitizeLLMError(error) }));
-              },
-            },
-            { signal: abortController.signal }
-          );
-
-          // If no tool calls, we're done
-          if (!hasToolCalls || aborted) {
+      for await (const e of handle) {
+        switch (e.type) {
+          case "block_delta":
+            if (e.delta.kind === "text") await safeWrite("chunk", JSON.stringify({ content: e.delta.text, index: Date.now() }));
+            else if (e.delta.kind === "thinking") await safeWrite("chunk", JSON.stringify({ content: "", reasoning: e.delta.text, index: Date.now() }));
+            break;
+          case "block_end":
+            if (e.block.type === "tool_use") legacyCalls.set(e.block.id, e.block);
+            break;
+          case "step_end":
+            if (e.finish === "tool_use") toolRounds++;
+            break;
+          case "approval_request": {
+            await announce(e.callId);
+            const command = (legacyCalls.get(e.callId)?.input as { command?: string } | undefined)?.command ?? "";
+            await safeWrite("tool_approval_required", JSON.stringify({ requiresApproval: true, id: e.callId, toolName: e.toolName, command }));
             break;
           }
-
-          // Build assistant message for history.
-          // Strip result/status from tool_calls — they don't belong in the assistant
-          // message per OpenAI spec, and keeping them was the main source of the
-          // oversized final SSE event.
-          const completedMsg = completedMessage as ChatMessage | null;
-          const assistantMessage: ChatMessage = {
-            id: `assistant-${Date.now()}-${toolRound}`,
-            role: "assistant",
-            content: completedMsg?.content || "",
-            reasoning_content: completedMsg?.reasoning_content,
-            tool_calls: currentToolCalls.map(({ id, name, arguments: args }) => ({
-              id,
-              name,
-              arguments: args,
-              status: "completed" as const,
-            })),
-            timestamp: Date.now(),
-          };
-          internalMessages.push(assistantMessage);
-
-          // Add tool result messages to history (already truncated above)
-          for (const toolCall of currentToolCalls) {
-            const rawContent = typeof toolCall.result === "string"
-              ? toolCall.result
-              : JSON.stringify(toolCall.result);
-            const toolResultMessage: ChatMessage = {
-              id: `tool-${toolCall.id}`,
-              role: "tool",
-              content: truncateResult(rawContent),
-              tool_call_id: toolCall.id,
-              timestamp: Date.now(),
-            };
-            internalMessages.push(toolResultMessage);
+          case "approval_resolved":
+            if (e.outcome !== "allowed-once") rejected.add(e.callId);
+            break;
+          case "tool_start":
+            await announce(e.callId);
+            break;
+          case "tool_end": {
+            await announce(e.callId);
+            if (e.ok) {
+              const content = e.output.content;
+              const text = typeof content === "string" ? content : (content ?? []).map((b) => (b.type === "text" ? b.text : "")).join("");
+              await safeWrite("tool_result", JSON.stringify({ id: e.callId, result: text }));
+            } else {
+              if (e.internal) console.error("[Tool Error]", e.internal.error);
+              const error = rejected.has(e.callId) ? "用户拒绝执行此命令" : "Tool execution failed";
+              await safeWrite("tool_error", JSON.stringify({ id: e.callId, error }));
+            }
+            break;
           }
-
-          toolRound++;
-
-          // Checkpoint: persist full snapshot after each tool round
-          await context.taskStore.save({
-            taskId,
-            chatId,
-            status: "running",
-            toolRound,
-            internalMessages: [...internalMessages],
-          }).catch(console.error);
+          case "error":
+            await safeWrite("error", JSON.stringify({ error: sanitizeLLMError(provider.lastError ?? new Error(e.error.message)) }));
+            break;
         }
-
-        // Send final event with complete message history (only when tool calls happened)
-        if (!aborted && toolRound > 0) {
-          await safeWrite("final", JSON.stringify({ toolRounds: toolRound, internalMessages }));
-        }
-
-        // Mark task complete
-        await context.taskStore.updateStatus(taskId, "completed").catch(console.error);
-      } catch (error) {
-        // Checkpoint with actual toolRound/internalMessages at time of failure,
-        // so resume logic has accurate progress (updateStatus would keep stale toolRound).
-        await context.taskStore.save({
-          taskId,
-          chatId,
-          status: "interrupted",
-          toolRound,
-          internalMessages: [...internalMessages],
-        }).catch(console.error);
-        await safeWrite("error", JSON.stringify({ error: sanitizeLLMError(error) }));
       }
+
+      const result = await handle.result;
+      const last = result.transcript.at(-1);
+      const finalAnswer = last?.role === "assistant" && !last.content.some((b) => b.type === "tool_use") ? last : undefined;
+      if (finalAnswer && !aborted) {
+        // Same as before: `complete` carries the final assistant message of a round without tool calls
+        await safeWrite("complete", JSON.stringify(toLegacyMessages([finalAnswer])[0]));
+      }
+      // Same as before: `final` carries the history up to (not including) the final answer, only after tool rounds
+      const history = finalAnswer ? result.transcript.slice(0, -1) : result.transcript;
+      if (!aborted && toolRounds > 0) {
+        await safeWrite("final", JSON.stringify({ toolRounds, internalMessages: toLegacyMessages(history) }));
+      }
+      const failed = result.reason === "error" || result.reason === "aborted";
+      await context.taskStore
+        .save({ taskId, chatId, status: failed ? "interrupted" : "completed", toolRound: toolRounds, internalMessages: toLegacyMessages(result.transcript) })
+        .catch(console.error);
     });
   });
 
