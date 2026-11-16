@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { MessageSquare, Server, Database, Settings } from "lucide-react";
+import { MessageSquare, Server, Settings } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import { useT } from "../../i18n";
 
@@ -30,12 +30,7 @@ export function ActivityBar() {
       icon: Server,
       path: "/mcp/servers",
     },
-    {
-      id: "knowledge",
-      label: t("nav.knowledge"),
-      icon: Database,
-      path: "/knowledge",
-    },
+    // 知识库入口暂时隐藏：页面还是占位，mem0 方向尚未立项（2026-11-16 决定）。路由和页面保留，恢复时加回这一项即可
     {
       id: "settings",
       label: t("nav.settings"),
