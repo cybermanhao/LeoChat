@@ -1,5 +1,5 @@
 /**
- * Retry and Circuit Breaker Types
+ * Retry Types
  *
  * For resilient LLM API calls with exponential backoff and jitter
  */
@@ -31,25 +31,6 @@ export interface RetryConfig {
 }
 
 /**
- * Circuit breaker configuration
- */
-export interface CircuitBreakerConfig {
-  /** Number of failures before opening circuit (default: 5) */
-  failureThreshold: number;
-
-  /** Time to wait before testing circuit in ms (default: 30000) */
-  resetTimeoutMs: number;
-
-  /** Number of successful calls to close circuit (default: 2) */
-  successThreshold: number;
-}
-
-/**
- * Circuit breaker state
- */
-export type CircuitState = "closed" | "open" | "half-open";
-
-/**
  * Retry event for observability (emitted by TaskLoop)
  */
 export interface RetryEvent {
@@ -67,19 +48,6 @@ export interface RetryEvent {
 }
 
 /**
- * Circuit breaker state change event
- */
-export interface CircuitBreakerEvent {
-  type: "circuit_state_change";
-  /** Previous circuit state */
-  previousState: CircuitState;
-  /** New circuit state */
-  newState: CircuitState;
-  /** Current failure count */
-  failureCount: number;
-}
-
-/**
  * Default retry configuration
  */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
@@ -90,13 +58,4 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   jitter: true,
   retryableStatusCodes: [429, 500, 502, 503, 504],
   attemptTimeoutMs: 300000,
-};
-
-/**
- * Default circuit breaker configuration
- */
-export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
-  failureThreshold: 5,
-  resetTimeoutMs: 30000,
-  successThreshold: 2,
 };

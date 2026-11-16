@@ -545,13 +545,6 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         );
         break;
 
-      case "circuit_state_change":
-        console.log(
-          `[Circuit] State: ${event.previousState} -> ${event.newState}, ` +
-            `failures: ${event.failureCount}`
-        );
-        break;
-
       case "checkpoint_created":
         console.log(`[Checkpoint] Created: ${event.checkpointId}, reason: ${event.reason}`);
         break;

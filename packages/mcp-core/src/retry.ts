@@ -1,21 +1,16 @@
 /**
- * Retry Utility with Exponential Backoff and Circuit Breaker
+ * Retry Utility with Exponential Backoff
  *
- * Implements resilient LLM API call patterns following 2025 best practices:
  * - Exponential backoff with full jitter
  * - Per-attempt timeouts
- * - Circuit breaker for cascading failure prevention
+ *
+ * The circuit breaker was removed on 2026-11-16 (docs/research/feature-review-vs-dsh-2026-11.md):
+ * dsh does not put one in front of LLM calls either, and for a single-user desktop app a clear
+ * failure is easier to understand than an automatic open circuit.
  */
 
-import type {
-  RetryConfig,
-  CircuitBreakerConfig,
-  CircuitState,
-} from "@ai-chatbox/shared";
-import {
-  DEFAULT_RETRY_CONFIG,
-  DEFAULT_CIRCUIT_BREAKER_CONFIG,
-} from "@ai-chatbox/shared";
+import type { RetryConfig } from "@ai-chatbox/shared";
+import { DEFAULT_RETRY_CONFIG } from "@ai-chatbox/shared";
 
 export interface RetryEventCallback {
   attempt: number;
@@ -23,12 +18,6 @@ export interface RetryEventCallback {
   delayMs: number;
   error: Error;
   statusCode?: number;
-}
-
-export interface CircuitStateChangeCallback {
-  previousState: CircuitState;
-  newState: CircuitState;
-  failureCount: number;
 }
 
 /**
@@ -125,151 +114,10 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Circuit Breaker Implementation
- *
- * State Machine:
- * - closed: Normal operation, requests pass through
- * - open: Failing, all requests rejected immediately
- * - half-open: Testing recovery, limited requests allowed
- *
- * Transitions:
- * - closed -> open: When failureCount >= failureThreshold
- * - open -> half-open: After resetTimeoutMs elapses
- * - half-open -> closed: After successThreshold successes
- * - half-open -> open: On any failure
- */
-export class CircuitBreaker {
-  private state: CircuitState = "closed";
-  private failureCount = 0;
-  private successCount = 0;
-  private lastFailureTime = 0;
-  private halfOpenPending = false;
-  private config: CircuitBreakerConfig;
-  private onStateChange?: (event: CircuitStateChangeCallback) => void;
-
-  constructor(
-    config: Partial<CircuitBreakerConfig> = {},
-    onStateChange?: (event: CircuitStateChangeCallback) => void
-  ) {
-    this.config = { ...DEFAULT_CIRCUIT_BREAKER_CONFIG, ...config };
-    this.onStateChange = onStateChange;
-  }
-
-  /**
-   * Check if a request can be attempted
-   */
-  canAttempt(): boolean {
-    if (this.state === "closed") {
-      return true;
-    }
-
-    if (this.state === "open") {
-      const elapsed = Date.now() - this.lastFailureTime;
-      if (elapsed >= this.config.resetTimeoutMs) {
-        this.transitionTo("half-open");
-        this.halfOpenPending = true;
-        return true;
-      }
-      return false;
-    }
-
-    // half-open: allow only one attempt to test recovery
-    if (this.halfOpenPending) {
-      return false;
-    }
-    this.halfOpenPending = true;
-    return true;
-  }
-
-  /**
-   * Record a successful operation
-   */
-  recordSuccess(): void {
-    if (this.state === "half-open") {
-      this.halfOpenPending = false;
-      this.successCount++;
-      if (this.successCount >= this.config.successThreshold) {
-        this.transitionTo("closed");
-        this.failureCount = 0;
-        this.successCount = 0;
-      }
-    } else if (this.state === "closed") {
-      // Reset failure count on success in closed state
-      this.failureCount = 0;
-    }
-  }
-
-  /**
-   * Record a failed operation
-   */
-  recordFailure(): void {
-    this.failureCount++;
-    this.lastFailureTime = Date.now();
-
-    if (this.state === "half-open") {
-      // Any failure in half-open immediately opens the circuit
-      this.halfOpenPending = false;
-      this.transitionTo("open");
-      this.successCount = 0;
-    } else if (
-      this.state === "closed" &&
-      this.failureCount >= this.config.failureThreshold
-    ) {
-      this.transitionTo("open");
-    }
-  }
-
-  /**
-   * Get current circuit state
-   */
-  getState(): CircuitState {
-    return this.state;
-  }
-
-  /**
-   * Get current failure count
-   */
-  getFailureCount(): number {
-    return this.failureCount;
-  }
-
-  /**
-   * Reset the circuit breaker to initial state
-   */
-  reset(): void {
-    const previousState = this.state;
-    this.state = "closed";
-    this.failureCount = 0;
-    this.successCount = 0;
-    this.lastFailureTime = 0;
-    this.halfOpenPending = false;
-
-    if (previousState !== "closed") {
-      this.onStateChange?.({
-        previousState,
-        newState: "closed",
-        failureCount: 0,
-      });
-    }
-  }
-
-  private transitionTo(newState: CircuitState): void {
-    const previousState = this.state;
-    this.state = newState;
-    this.onStateChange?.({
-      previousState,
-      newState,
-      failureCount: this.failureCount,
-    });
-  }
-}
-
-/**
  * Retry wrapper for async operations with exponential backoff
  *
  * @param operation - The async operation to retry. Receives an AbortSignal for per-attempt timeout.
  * @param config - Partial retry configuration (merged with defaults)
- * @param circuitBreaker - Optional circuit breaker instance
  * @param onRetry - Callback invoked before each retry
  * @param parentSignal - Parent abort signal (e.g., from TaskLoop's AbortController)
  * @returns The operation result
@@ -278,7 +126,6 @@ export class CircuitBreaker {
 export async function withRetry<T>(
   operation: (signal: AbortSignal) => Promise<T>,
   config: Partial<RetryConfig> = {},
-  circuitBreaker?: CircuitBreaker,
   onRetry?: (event: RetryEventCallback) => void,
   parentSignal?: AbortSignal
 ): Promise<T> {
@@ -286,13 +133,6 @@ export async function withRetry<T>(
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= fullConfig.maxAttempts; attempt++) {
-    // Check circuit breaker before attempting
-    if (circuitBreaker && !circuitBreaker.canAttempt()) {
-      throw new Error(
-        `Circuit breaker is open - service unavailable (failures: ${circuitBreaker.getFailureCount()})`
-      );
-    }
-
     // Check parent abort signal
     if (parentSignal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
@@ -315,7 +155,6 @@ export async function withRetry<T>(
       // Success - cleanup and record
       clearTimeout(timeoutId);
       parentSignal?.removeEventListener("abort", abortHandler);
-      circuitBreaker?.recordSuccess();
 
       return result;
     } catch (error) {
@@ -334,11 +173,6 @@ export async function withRetry<T>(
       const isLastAttempt = attempt >= fullConfig.maxAttempts;
       const shouldRetry = !isLastAttempt && isRetryableError(error, fullConfig);
 
-      // Record retryable failures in the circuit breaker (including the last attempt).
-      // Non-retryable errors (e.g., HTTP 404) don't indicate service unavailability.
-      if (isRetryableError(error, fullConfig)) {
-        circuitBreaker?.recordFailure();
-      }
 
       if (shouldRetry) {
         const delayMs = calculateDelay(attempt, fullConfig);
@@ -367,4 +201,4 @@ export async function withRetry<T>(
 }
 
 // Re-export defaults for convenience
-export { DEFAULT_RETRY_CONFIG, DEFAULT_CIRCUIT_BREAKER_CONFIG };
+export { DEFAULT_RETRY_CONFIG };

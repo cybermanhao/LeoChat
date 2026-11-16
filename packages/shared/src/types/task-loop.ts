@@ -1,5 +1,5 @@
 import type { ChatMessage, ToolCall, MCPTool } from "./index";
-import type { RetryConfig, CircuitBreakerConfig, CircuitState } from "./retry";
+import type { RetryConfig } from "./retry";
 import type { CheckpointReason } from "./checkpoint";
 
 /**
@@ -51,7 +51,6 @@ export type TaskLoopEvent =
   | TaskLoopErrorEvent
   | TaskLoopDoneEvent
   | TaskLoopRetryEvent
-  | TaskLoopCircuitStateEvent
   | TaskLoopCheckpointEvent
   | TaskLoopTaskStartedEvent;
 
@@ -128,16 +127,6 @@ export interface TaskLoopRetryEvent {
   statusCode?: number;
 }
 
-export interface TaskLoopCircuitStateEvent {
-  type: "circuit_state_change";
-  /** Previous circuit state */
-  previousState: CircuitState;
-  /** New circuit state */
-  newState: CircuitState;
-  /** Current failure count */
-  failureCount: number;
-}
-
 export interface TaskLoopCheckpointEvent {
   type: "checkpoint_created";
   /** Checkpoint ID */
@@ -182,7 +171,6 @@ export interface TaskLoopOptions {
 
   // 重试配置（可选）
   retryConfig?: Partial<RetryConfig>;
-  circuitBreakerConfig?: Partial<CircuitBreakerConfig>;
 
   // Checkpoint 配置（可选）
   enableCheckpoints?: boolean;         // 是否启用自动检查点

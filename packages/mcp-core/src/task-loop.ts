@@ -28,7 +28,7 @@ interface StreamingToolCallChunk {
   arguments_delta?: string;
 }
 import { createModelAdapter, type ModelAdapterInstance } from "./model-adapter";
-import { withRetry, CircuitBreaker, DEFAULT_RETRY_CONFIG } from "./retry";
+import { withRetry, DEFAULT_RETRY_CONFIG } from "./retry";
 import { getCheckpointStorage } from "./checkpoint-storage";
 
 const MAX_EPOCHS_DEFAULT = 50;
@@ -90,7 +90,6 @@ export class TaskLoop {
 
   // 重试与熔断配置
   private retryConfig: RetryConfig;
-  private circuitBreaker: CircuitBreaker;
 
   // Checkpoint 配置
   private enableCheckpoints: boolean;
@@ -140,19 +139,6 @@ export class TaskLoop {
 
     // 初始化重试配置
     this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...opts.retryConfig };
-
-    // 初始化熔断器
-    this.circuitBreaker = new CircuitBreaker(
-      opts.circuitBreakerConfig,
-      (event) => {
-        this.emit({
-          type: "circuit_state_change",
-          previousState: event.previousState,
-          newState: event.newState,
-          failureCount: event.failureCount,
-        });
-      }
-    );
 
     // 初始化 Checkpoint 配置
     this.enableCheckpoints = opts.enableCheckpoints ?? false;
@@ -461,7 +447,6 @@ export class TaskLoop {
       return await withRetry(
         (signal) => this.executeLLMRequest(uiMessageId, signal, previousToolCalls),
         this.retryConfig,
-        this.circuitBreaker,
         (event) => {
           this.emit({
             type: "retry",

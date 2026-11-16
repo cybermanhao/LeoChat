@@ -6,7 +6,6 @@ import type {
   MCPCapabilities,
 } from "@ai-chatbox/shared";
 import { createTransportAsync, type MCPTransport } from "./transports";
-import { CircuitBreaker } from "./retry";
 
 /** 重连配置 */
 export interface ReconnectConfig {
@@ -17,12 +16,14 @@ export interface ReconnectConfig {
   jitter: boolean;
 }
 
+// 与 dsh mcp-client 一致：500ms 起翻倍、上限 30s、每次断线最多连续失败 10 次；
+// 连接稳定运行超过 maxDelayMs 后，失败计数重新开始
 const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
-  maxAttempts: 5,
-  initialDelayMs: 1000,
+  maxAttempts: 10,
+  initialDelayMs: 500,
   backoffFactor: 2,
   maxDelayMs: 30000,
-  jitter: true,
+  jitter: false,
 };
 
 export interface MCPClientOptions {
@@ -53,7 +54,15 @@ export class MCPClient {
   private reconnectConfig: ReconnectConfig;
   private intentionalDisconnect = false;
   private reconnectAbortController: AbortController | null = null;
-  private circuitBreaker: CircuitBreaker;
+  /** 连续失败的重连次数；连接稳定超过 maxDelayMs 后才清零（参考 dsh 的尝试预算） */
+  private failedAttempts = 0;
+  private connectedAt = 0;
+  /**
+   * 所有同步（首次连接、listChanged 触发的刷新、重连）串行执行，参考 dsh 的连接监督器。
+   * 以前 SDK 的 autoRefresh 和我们自己的 refreshTools() 并发，导致 connect 永久挂住（见 docs/mcp-sdk-listchanged-hang.md）；
+   * 串行之后这类竞态在结构上不可能再发生。
+   */
+  private syncQueue: Promise<unknown> = Promise.resolve();
 
   constructor(options: MCPClientOptions) {
     this.config = options.config;
@@ -63,11 +72,13 @@ export class MCPClient {
     this.onReconnectAttempt = options.onReconnectAttempt;
     this.autoReconnect = options.autoReconnect ?? false;
     this.reconnectConfig = { ...DEFAULT_RECONNECT_CONFIG, ...options.reconnectConfig };
-    this.circuitBreaker = new CircuitBreaker({
-      failureThreshold: 3,
-      resetTimeoutMs: 60000,
-      successThreshold: 1,
-    });
+  }
+
+  /** 把一次同步排进串行队列；前一次失败不影响后一次执行 */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.syncQueue.then(fn, fn);
+    this.syncQueue = run.catch(() => {});
+    return run;
   }
 
   get serverId(): string {
@@ -101,11 +112,11 @@ export class MCPClient {
     }
 
     this.intentionalDisconnect = false;
-    this.circuitBreaker.reset();
+    this.failedAttempts = 0;
 
     try {
       this.setStatus("connecting");
-      await this.connectInternal();
+      await this.enqueue(() => this.connectInternal());
     } catch (error) {
       this.setStatus("error");
       this.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -157,6 +168,15 @@ export class MCPClient {
 
     // Connect
     await this.client.connect(this.transport);
+    this.connectedAt = Date.now();
+
+    // 服务端通知工具列表变化时刷新。刷新排进串行队列，不会和连接、重连或另一次刷新并发
+    const client = this.client;
+    client.setNotificationHandler("notifications/tools/list_changed", () => {
+      void this.enqueue(async () => {
+        if (this.client === client && this.status === "connected") await this.refreshTools();
+      }).catch((err) => this.onError?.(err instanceof Error ? err : new Error(String(err))));
+    });
 
     // 监听连接关闭，触发自动重连
     this.client.onclose = () => {
@@ -214,75 +234,67 @@ export class MCPClient {
    * 意外断开后的自动重连
    */
   private async handleUnexpectedClose(): Promise<void> {
-    // 清理 dead 引用
+    // 清理 dead 引用。工具列表保留（断线期间仍然列出，调用会失败），直到重连放弃
     this.client = null;
     this.transport = null;
-    this.tools = [];
 
     if (!this.autoReconnect) {
+      this.dropTools();
       this.setStatus("disconnected");
       return;
     }
+    // 上一次连接稳定运行得够久，失败计数重新开始；否则接着上次的计数（避免反复闪断时无限重连）
+    if (Date.now() - this.connectedAt >= this.reconnectConfig.maxDelayMs) this.failedAttempts = 0;
 
     this.setStatus("reconnecting");
     this.reconnectAbortController = new AbortController();
     const signal = this.reconnectAbortController.signal;
     const { maxAttempts, initialDelayMs, backoffFactor, maxDelayMs, jitter } = this.reconnectConfig;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    while (this.failedAttempts < maxAttempts) {
       // 检查是否被取消（用户主动断开）
       if (signal.aborted) {
         console.log(`[MCP] Reconnect cancelled for ${this.config.name}`);
         return;
       }
-
-      // 检查熔断器
-      if (!this.circuitBreaker.canAttempt()) {
-        console.log(`[MCP] Circuit breaker open for ${this.config.name}, stopping reconnect`);
-        this.setStatus("error");
-        this.onError?.(new Error(`Reconnect circuit breaker open after repeated failures`));
-        return;
-      }
-
+      const attempt = this.failedAttempts + 1;
       this.onReconnectAttempt?.(attempt, maxAttempts);
 
       try {
-        await this.connectInternal();
-        // 成功
-        this.circuitBreaker.recordSuccess();
+        await this.enqueue(() => this.connectInternal());
         this.reconnectAbortController = null;
         console.log(`[MCP] Reconnected successfully: ${this.config.name} (attempt ${attempt}/${maxAttempts})`);
         return;
       } catch (error) {
-        this.circuitBreaker.recordFailure();
+        this.failedAttempts++;
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.log(`[MCP] Reconnect attempt ${attempt}/${maxAttempts} failed for ${this.config.name}: ${errorMsg}`);
+        if (this.failedAttempts >= maxAttempts) break;
 
-        if (attempt < maxAttempts) {
-          // 计算退避延迟
-          const exponentialDelay = initialDelayMs * Math.pow(backoffFactor, attempt - 1);
-          const cappedDelay = Math.min(exponentialDelay, maxDelayMs);
-          const delay = jitter ? Math.random() * cappedDelay : cappedDelay;
-
-          console.log(`[MCP] Next reconnect in ${Math.round(delay)}ms`);
-
-          // 等待，支持取消
-          try {
-            await this.sleep(delay, signal);
-          } catch {
-            // AbortError — 用户取消
-            console.log(`[MCP] Reconnect cancelled for ${this.config.name}`);
-            return;
-          }
+        const cappedDelay = Math.min(initialDelayMs * Math.pow(backoffFactor, this.failedAttempts - 1), maxDelayMs);
+        const delay = jitter ? Math.random() * cappedDelay : cappedDelay;
+        console.log(`[MCP] Next reconnect in ${Math.round(delay)}ms`);
+        try {
+          await this.sleep(delay, signal);
+        } catch {
+          console.log(`[MCP] Reconnect cancelled for ${this.config.name}`);
+          return;
         }
       }
     }
 
-    // 所有重试用尽
+    // 连续失败次数用尽：移除工具，停止重连，直到用户手动连接
     this.reconnectAbortController = null;
     console.error(`[MCP] Reconnect failed for ${this.config.name} after ${maxAttempts} attempts`);
+    this.dropTools();
     this.setStatus("error");
     this.onError?.(new Error(`Failed to reconnect after ${maxAttempts} attempts`));
+  }
+
+  private dropTools(): void {
+    if (this.tools.length === 0) return;
+    this.tools = [];
+    this.onToolsUpdate?.([]);
   }
 
   private cancelReconnect(): void {
