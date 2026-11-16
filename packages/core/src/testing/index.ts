@@ -21,6 +21,9 @@ export type ScriptedTurn =
       chunkSize?: number;
       /** 每个增量之间等待的毫秒数（测试中止、插话等时序用），默认 0 */
       delayMs?: number;
+      /** 输出这么多个文字增量之后抛出 failWith（模拟流到一半断开） */
+      failAfterDeltas?: number;
+      failWith?: ProviderError;
     }
   | { error: ProviderError };
 
@@ -90,6 +93,7 @@ export function scriptedProvider(
       if ("error" in turn) throw turn.error;
 
       const size = turn.chunkSize ?? 4;
+      let deltasSent = 0;
       const delay = turn.delayMs ?? 0;
       for (const [index, block] of turn.blocks.entries()) {
         signal?.throwIfAborted();
@@ -99,6 +103,9 @@ export function scriptedProvider(
             await sleep(delay, signal);
             signal?.throwIfAborted();
             yield { type: "block_delta", index, delta: { kind: block.type, text: piece } };
+            if (turn.failAfterDeltas !== undefined && ++deltasSent >= turn.failAfterDeltas) {
+              throw turn.failWith ?? new ProviderError("network", "scripted mid-stream failure");
+            }
           }
         } else if (block.type === "tool_use") {
           yield { type: "block_start", index, block: { type: "tool_use", id: block.id, name: block.name } };

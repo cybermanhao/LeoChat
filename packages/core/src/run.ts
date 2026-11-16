@@ -325,12 +325,15 @@ async function loop<Ctx>(
   }
 
   // ── 主循环 ─────────────────────────────────────────────────────────────
+  // Q4：停止条件触发后，是否正在跑那一轮"禁用工具、让模型总结"的收尾 step
+  let finalStepReason: RunEndReason | null = null;
   for (;;) {
     if (signal.aborted) return end("aborted");
 
-    // 投递插话：插在上一批 tool_result 之后、下一次请求之前
+    // 投递插话：插在上一批 tool_result 之后、下一次请求之前（Q1：一次全部或一次一条）
     if (steering.length) {
-      for (const s of steering.splice(0)) {
+      const take = opts.steeringMode === "one-at-a-time" ? 1 : steering.length;
+      for (const s of steering.splice(0, take)) {
         transcript.push(s.message);
         emit({ type: "user_message", message: s.message, via: "steer" });
         s.resolve({ delivered: true });
@@ -365,6 +368,7 @@ async function loop<Ctx>(
       }
     }
 
+    if (finalStepReason) activeTools = [];
     const toolDefs: ToolDef[] = [...tools.values()]
       .filter((t) => isModelVisible(t) && (!activeTools || activeTools.includes(t.name)))
       .map((t) => toToolDef(t));
@@ -465,8 +469,10 @@ async function loop<Ctx>(
             continue;
           }
         }
-        // 已经有内容流式输出给用户后不再重试，避免重复的增量
-        if (pe.retryable && !emittedAny && attempt < retry.maxAttempts) {
+        // 默认：已经有内容流式输出后不再重试，避免重复的增量。
+        // Q2：retryAfterPartialOutput 打开时也重试，并先发 step_reset，让消费方丢弃这一步已显示的部分内容
+        if (pe.retryable && (!emittedAny || opts.retryAfterPartialOutput) && attempt < retry.maxAttempts) {
+          if (emittedAny) emit({ type: "step_reset", stepId, messageId });
           const delayMs = pe.retryAfterMs ?? Math.min(retry.maxDelayMs, retry.baseDelayMs * 2 ** (attempt - 1));
           emit({ type: "retry", attempt, delayMs, error: { kind: pe.kind, message: pe.message } });
           try {
@@ -503,6 +509,14 @@ async function loop<Ctx>(
     }
     if (finish === "refusal") return end("refusal");
 
+    if (finalStepReason) {
+      // 收尾 step 没有提供工具；万一模型仍然输出了 tool_use，补"未完成"结果保证 transcript 合法
+      if (calls.length) {
+        transcript.push({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.notCompleted)) });
+      }
+      return end(finalStepReason);
+    }
+
     if (calls.length) {
       const { results, deferred } = await runBatch(calls);
       const paused = await settleBatch(calls, results, deferred);
@@ -511,12 +525,21 @@ async function loop<Ctx>(
     }
 
     const stopper = stopWhen.find((c) => c({ steps, totalUsage, ...(costUsd !== undefined ? { costUsd } : {}) }));
-    if (stopper) return end(isStepCountCondition(stopper) ? "max_steps" : "stop_condition");
+    if (stopper) {
+      const reason: RunEndReason = isStepCountCondition(stopper) ? "max_steps" : "stop_condition";
+      // Q4：停在一批工具结果之后时，可选地再跑一个禁用工具的 step，让模型基于已有结果给出回答
+      if (opts.finalStepOnStop && calls.length) {
+        finalStepReason = reason;
+        continue;
+      }
+      return end(reason);
+    }
 
     if (!calls.length) {
       if (steering.length) continue;
       if (followUps.length) {
-        for (const m of followUps.splice(0)) {
+        const take = opts.followUpMode === "one-at-a-time" ? 1 : followUps.length;
+        for (const m of followUps.splice(0, take)) {
           transcript.push(m);
           emit({ type: "user_message", message: m, via: "followUp" });
         }

@@ -83,6 +83,8 @@ export type AgentEvent =
   | { type: "custom"; name: string; data: unknown }
   | { type: "queued"; kind: "steering" | "followUp"; message: Message }
   | { type: "user_message"; message: Message; via: "steer" | "followUp" }
+  /** Q2：这一步要重试，丢弃 messageId 已经显示的内容（只在 retryAfterPartialOutput 打开时出现） */
+  | { type: "step_reset"; stepId: string; messageId: string }
   | { type: "error"; error: EventError }
   | { type: "run_end"; result: RunResult };
 

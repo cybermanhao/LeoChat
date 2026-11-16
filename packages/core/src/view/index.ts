@@ -325,6 +325,9 @@ function apply(s: RunViewState, e: AgentEvent): RunViewState {
 
     case "retry":
       return { ...s, retry: { attempt: e.attempt, delayMs: e.delayMs } };
+    case "step_reset":
+      // Q2：这一步要重试，丢弃已经显示的部分内容
+      return updateMessage(s, e.messageId, (m) => ({ ...m, parts: [] }));
     case "compaction":
       return s;
     case "custom": {

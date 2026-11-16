@@ -165,6 +165,17 @@ export interface RunOptions<Ctx = unknown> {
   prepareStep?(s: StepContext<Ctx>): PrepareStepResult | void | Promise<PrepareStepResult | void>;
   /** 默认 10 */
   maxParallelToolCalls?: number;
+  /** Q1：插话一次全部投递（默认）还是一次一条 */
+  steeringMode?: "all" | "one-at-a-time";
+  /** Q1：后续消息一次全部投递（默认）还是一次一条 */
+  followUpMode?: "all" | "one-at-a-time";
+  /** Q4：停止条件在一批工具结果之后触发时，再跑一个禁用工具的 step 让模型总结。默认 false */
+  finalStepOnStop?: boolean;
+  /**
+   * Q2：已经流式输出部分内容后遇到可重试错误，是否仍然重试。默认 false。
+   * 打开后重试前会发 step_reset 事件；消费方必须据此丢弃这一步已显示的内容（view reducer 已支持）
+   */
+  retryAfterPartialOutput?: boolean;
   maxToolResultChars?: number;
   retry?: RetryConfig;
   approval?: ApprovalConfig<Ctx>;
