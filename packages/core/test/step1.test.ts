@@ -211,3 +211,17 @@ describe("runtime-agnostic guard", () => {
     }
   });
 });
+
+describe("toPublicEvent hides upstream error details", () => {
+  it("replaces provider error messages in retry, error and run_end", () => {
+    const secret = "401 from internal-host:8080, key sk-123";
+    const retry = toPublicEvent({ type: "retry", attempt: 1, delayMs: 5, error: { kind: "rate_limit", message: secret } });
+    const err = toPublicEvent({ type: "error", error: { kind: "auth", message: secret, retryable: false } });
+    const end = toPublicEvent({
+      type: "run_end",
+      result: { runId: "r", reason: "error", transcript: [], usage: { inputTokens: 0, outputTokens: 0 }, error: { kind: "auth", message: secret } },
+    });
+    for (const e of [retry, err, end]) expect(JSON.stringify(e)).not.toContain("internal-host");
+    expect(err).toMatchObject({ error: { kind: "auth", message: "Request failed (auth)" } });
+  });
+});

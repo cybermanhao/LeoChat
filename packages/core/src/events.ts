@@ -88,11 +88,33 @@ export type AgentEvent =
   | { type: "error"; error: EventError }
   | { type: "run_end"; result: RunResult };
 
-/** 去掉只应留在服务端的字段，再转发给浏览器 */
+/** 发给浏览器的通用错误说明：只带错误类型，不带上游的原始信息（可能含内部地址、模型名、限流细节） */
+export function publicErrorMessage(kind: string): string {
+  return `Request failed (${kind})`;
+}
+
+/**
+ * 去掉只应留在服务端的内容，再转发给浏览器：
+ * - tool_end.internal（工具的内部异常）
+ * - retry / error / run_end 里来自上游的原始错误信息，换成只含错误类型的通用说明
+ * 需要更具体的安全信息（例如 HTTP 状态码）时，由应用在此基础上自行替换
+ */
 export function toPublicEvent(e: AgentEvent): AgentEvent {
-  if (e.type === "tool_end" && e.internal) {
-    const { internal: _internal, ...rest } = e;
-    return rest;
+  switch (e.type) {
+    case "tool_end": {
+      if (!e.internal) return e;
+      const { internal: _internal, ...rest } = e;
+      return rest;
+    }
+    case "retry":
+      return { ...e, error: { kind: e.error.kind, message: publicErrorMessage(e.error.kind) } };
+    case "error":
+      return { ...e, error: { ...e.error, message: publicErrorMessage(e.error.kind) } };
+    case "run_end":
+      return e.result.error
+        ? { ...e, result: { ...e.result, error: { kind: e.result.error.kind, message: publicErrorMessage(e.result.error.kind) } } }
+        : e;
+    default:
+      return e;
   }
-  return e;
 }
