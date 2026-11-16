@@ -14,3 +14,5 @@ export * from "./messages";
 export * from "./ui/types";
 export { run, resume, toModelMessages, unansweredToolUses } from "./run";
 export { memoryStore, deferAnswerer, d1Store, D1_SCHEMA, type D1Like, type D1StatementLike } from "./store";
+export type { RepeatReminderOptions } from "./internal/repeat-reminder";
+export { skillCatalog, loadSkillTool, staticSkills, type SkillMeta, type SkillSource } from "./skills";

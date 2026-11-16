@@ -7,6 +7,7 @@ import type { AgentEvent, ApprovalOutcome, CompactionInfo, RunResult } from "./e
 import type { Capabilities, ModelRequest, Provider, ToolDef } from "./provider";
 import type { AnyTool, ToolContext, ToolOutput, ToolSource } from "./tool";
 import type { ServerToolKind, Usage } from "./usage";
+import type { RepeatReminderOptions } from "./internal/repeat-reminder";
 
 // ── 停止条件（C4）────────────────────────────────────────────────────────
 
@@ -176,6 +177,8 @@ export interface RunOptions<Ctx = unknown> {
    * 打开后重试前会发 step_reset 事件；消费方必须据此丢弃这一步已显示的内容（view reducer 已支持）
    */
   retryAfterPartialOutput?: boolean;
+  /** 重复工具调用提醒（参考 dsh repeat-tool-reminder）。默认开启，阈值 3/5/8；传 false 关闭 */
+  repeatToolReminder?: false | RepeatReminderOptions;
   maxToolResultChars?: number;
   retry?: RetryConfig;
   approval?: ApprovalConfig<Ctx>;

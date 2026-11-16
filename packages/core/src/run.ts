@@ -9,6 +9,7 @@ import { parseToolArguments, type Block, type Message, type ToolResultBlock, typ
 import type { AgentEvent, PendingApproval, RunEndReason, RunResult } from "./events";
 import { abortableSleep, EventChannel } from "./internal/channel";
 import { errorResult, executeBatch, MESSAGES, newApprovalState, type DeferredCall } from "./internal/execute-tools";
+import { createRepeatTracker } from "./internal/repeat-reminder";
 import { newId } from "./messages";
 import { ProviderError, isProviderError, type ModelRequest, type ToolDef } from "./provider";
 import type {
@@ -175,6 +176,8 @@ async function loop<Ctx>(
   const stopWhen = normalizeStopWhen(opts.stopWhen);
   const retry = opts.retry ?? DEFAULT_RETRY;
   const approvalState = newApprovalState();
+  // 重复工具调用提醒（参考 dsh，默认开启）
+  let repeat: ReturnType<typeof createRepeatTracker> | null = null;
   const steps: StepRecord[] = [];
   let transcript: Message[] = [];
   let totalUsage: Usage = emptyUsage();
@@ -197,6 +200,12 @@ async function loop<Ctx>(
     emit({ type: "error", error: { kind, message, retryable } });
     return end("error", { error: { kind, message } });
   };
+
+  try {
+    repeat = opts.repeatToolReminder === false ? null : createRepeatTracker(opts.repeatToolReminder ?? {});
+  } catch (e) {
+    return fail("config", e instanceof Error ? e.message : String(e));
+  }
 
   // C1：用到暂停式审批就必须有 store
   if (opts.approval?.answerers?.includes(deferAnswerer as never) && !opts.store) {
@@ -336,6 +345,7 @@ async function loop<Ctx>(
       for (const s of steering.splice(0, take)) {
         transcript.push(s.message);
         emit({ type: "user_message", message: s.message, via: "steer" });
+        repeat?.reset();
         s.resolve({ delivered: true });
       }
     }
@@ -519,6 +529,9 @@ async function loop<Ctx>(
 
     if (calls.length) {
       const { results, deferred } = await runBatch(calls);
+      for (const r of repeat?.observe(calls, results) ?? []) {
+        emit({ type: "custom", name: "leochat.repeat_tool_reminder", data: r });
+      }
       const paused = await settleBatch(calls, results, deferred);
       if (paused) return paused;
       if (signal.aborted) return end("aborted");
@@ -542,6 +555,7 @@ async function loop<Ctx>(
         for (const m of followUps.splice(0, take)) {
           transcript.push(m);
           emit({ type: "user_message", message: m, via: "followUp" });
+          repeat?.reset();
         }
         continue;
       }
