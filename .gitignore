@@ -92,3 +92,9 @@ playwright-report/
 blob-report/
 .playwright-mcp/
 packages/server/.playwright-mcp/
+
+# Local server data (conversation logs, tasks) created by dev runs
+packages/server/data/
+packages/server/tasks/
+apps/electron/tasks/
+apps/electron/data/

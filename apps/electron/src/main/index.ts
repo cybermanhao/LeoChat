@@ -36,7 +36,8 @@ const sessionManager = createSessionManager({
 });
 
 // Create and start the server (share sessionManager with HTTP routes)
-const server = createServer(sessionManager);
+// 任务和会话数据放在应用数据目录（以前 TaskStore 默认写到当前工作目录的 ./tasks）
+const server = createServer(sessionManager, undefined, app.getPath("userData"));
 
 /** Returns `preferred` if free, otherwise lets the OS pick a random free port. */
 function findFreePort(preferred: number): Promise<number> {

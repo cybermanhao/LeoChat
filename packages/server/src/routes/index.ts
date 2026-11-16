@@ -17,6 +17,7 @@ import {
   toLegacyMessages,
   toLegacyToolCall,
 } from "../core-bridge.js";
+import { createConversationRoutes } from "./conversations.js";
 import { generateId } from "@ai-chatbox/shared";
 
 // Repo root: routes/ -> src/ -> server/ -> packages/ -> root (4 levels up)
@@ -90,6 +91,9 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
   const app = new Hono();
   const llmService = injectedLLM ?? new LLMService();
   const imageProxy = new ImageProxyService();
+
+  // GUI 迁移第二步：会话与运行接口（直接发 core 事件）
+  app.route("/", createConversationRoutes(context, llmService, truncateResult, sanitizeLLMError));
 
   // Chat endpoint with streaming - supports full tool loop
   app.post("/chat", async (c) => {
