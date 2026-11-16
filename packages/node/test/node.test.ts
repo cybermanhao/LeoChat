@@ -136,3 +136,71 @@ describe("stdioMcpTools", () => {
     expect(JSON.stringify(result.content)).toContain("hello-stdio");
   }, 30_000);
 });
+
+describe("conversationLog", () => {
+  it("creates, appends ops, replays the transcript, renames, lists by recency, deletes", async () => {
+    const { conversationLog } = await import("../src/index");
+    let t = 1000;
+    const log = await conversationLog(dir, { now: () => t++ });
+    const a = await log.create("first");
+    const b = await log.create("second");
+    await log.append(a.id, { kind: "append", message: userMessage("hi", "m1") });
+    await log.append(a.id, { kind: "append", message: { id: "m2", role: "assistant", content: [{ type: "text", text: "hello" }] } });
+    await log.append(a.id, { kind: "reset", messages: [userMessage("summary", "s1")] });
+    await log.append(a.id, { kind: "append", message: userMessage("again", "m3") });
+    await log.setTitle(a.id, "renamed");
+    const loaded = await log.load(a.id);
+    expect(loaded!.transcript.map((m) => m.id)).toEqual(["s1", "m3"]);
+    expect(loaded!.meta.title).toBe("renamed");
+    expect((await log.list()).map((c) => c.id)).toEqual([a.id, b.id]);
+    await log.delete(b.id);
+    expect((await log.list()).map((c) => c.id)).toEqual([a.id]);
+    expect(await log.load(b.id)).toBeNull();
+  });
+
+  it("survives a torn last line and rebuilds a lost index from the logs", async () => {
+    const { conversationLog } = await import("../src/index");
+    const { appendFile } = await import("node:fs/promises");
+    const log = await conversationLog(dir);
+    const c = await log.create("x");
+    await log.append(c.id, { kind: "append", message: userMessage("kept", "m1") });
+    await appendFile(join(dir, `${c.id}.jsonl`), '{"t":"op","op":{"kind":"append","mess'); // 崩溃时写了一半
+    expect((await log.load(c.id))!.transcript.map((m) => m.id)).toEqual(["m1"]);
+    await rm(join(dir, "index.json"));
+    const fresh = await conversationLog(dir);
+    expect((await fresh.list()).map((m) => m.id)).toEqual([c.id]);
+  });
+
+  it("works as run({ persist }) and resumes an interrupted tool call without re-running it", async () => {
+    const { conversationLog } = await import("../src/index");
+    const log = await conversationLog(dir);
+    const conv = await log.create();
+    let executions = 0;
+    const tool = defineTool({ name: "pay", description: "", input: z.object({}), execute: () => (executions++, { content: "paid" }) });
+    // 第一次运行：模型调用工具，但在工具执行时进程"崩溃"（中止）
+    const first = run({
+      provider: scriptedProvider([toolTurn([{ id: "c1", name: "pay", args: {} }])]),
+      model: "m",
+      messages: [userMessage("pay the bill", "u1")],
+      tools: [defineTool({ name: "pay", description: "", input: z.object({}), execute: () => new Promise<never>(() => {}) })],
+      persist: log.persistFor(conv.id),
+    });
+    await log.append(conv.id, { kind: "append", message: userMessage("pay the bill", "u1") });
+    for await (const e of first) if (e.type === "tool_start") break; // 模拟进程在工具执行中途退出：不再处理后续
+    first.abort();
+    await first.result;
+    // 重启：从日志恢复，继续对话
+    const restored = (await log.load(conv.id))!.transcript;
+    const r = await run({
+      provider: scriptedProvider([textTurn("Not sure if it went through; please check.")]),
+      model: "m",
+      messages: [...restored, userMessage("did it work?", "u2")],
+      tools: [tool],
+      persist: log.persistFor(conv.id),
+    }).result;
+    expect(executions).toBe(0); // 中断的工具调用不会被重新执行
+    expect(r.reason).toBe("completed");
+    const toolResults = r.transcript.filter((m) => m.role === "tool").flatMap((m) => m.content) as ToolResultBlock[];
+    expect(toolResults.every((b) => b.isError)).toBe(true);
+  });
+});

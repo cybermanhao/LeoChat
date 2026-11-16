@@ -7,3 +7,4 @@
 export { jsonlStore, type JsonlStore, type JsonlStoreOptions } from "./jsonl-store";
 export { fsSkills, parseSkillMd, type ParsedSkill } from "./fs-skills";
 export { stdioMcpTools, type StdioMcpOptions } from "./stdio-mcp";
+export { conversationLog, type ConversationLog, type ConversationMeta } from "./conversation-log";
