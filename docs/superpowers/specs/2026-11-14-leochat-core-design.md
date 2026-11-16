@@ -517,7 +517,9 @@ interface SessionStore {
 - 第一期提供 `memoryStore()`（测试用，以及 GUI 的本地 server）和 `d1Store(db)`（Workers）。
 - JSONL 文件实现放到 `@leochat/node`。
 
-## 8. Compactor（第一期只定义接口）
+## 8. Compactor
+
+> 2026-11-16：默认实现 `createCompactor()` 已完成（提交 `841230b`），细节和实测结果见 `2026-11-14-core-open-questions.md` 的 Compaction 一节。下面是最初的接口设计。
 
 > C3：Compactor 是 `prepareStep` 的一个现成实现（`compactor` 选项等价于在 `prepareStep` 链里加上它），另外还会在 `context_overflow` 时被强制调用。
 
