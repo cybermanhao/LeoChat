@@ -62,7 +62,18 @@
 | 会话标题自动生成（用首条消息让模型起标题） | GUI 历史列表体验 | GUI 迁移时 |
 | `goal` / `schedule` / `jobs` / `todo` | 长任务、定时、后台任务 | harness 阶段 |
 
-## 需要你拍板的
+## 决定与执行（2026-11-16，用户全部同意）
+
+| # | 决定 | 状态 |
+|---|---|---|
+| 1 | 去掉 LLM 熔断器；MCP 连接改成 dsh 式监督器 | ✅ 提交 `8374092`：同步串行（结构上消除 listChanged 卡死）、开始处理 `tools/list_changed`、500ms→30s 退避、单次断线最多 10 次失败、稳定 30s 后重置计数、断线期间保留工具；熔断器从 MCPClient、TaskLoop、shared 类型里全部删除。已用真实的 leochat-mcp 验证 |
+| 2 | 界面操作工具改成本地 server 里的进程内工具 | ⏸ 放到 GUI 迁移时做：现在 GUI 还跑在旧 TaskLoop 上，现在挪等于做两遍 |
+| 3 | Skills 按需加载 | ✅ 提交 `456162a`：core 提供 `skillCatalog()` + `loadSkillTool()` + `staticSkills()`；磁盘来源以后放进 `@leochat/node` |
+| 4 | 停止 OCR 实验发布线 | ✅ 记录决定，分支和已发布版本保持原样，不再继续发布；需要 OCR 时用 DeepSeek OCR / Files API |
+| 5 | 隐藏 KnowledgeBase 占位页 | ✅ 提交 `aa91055`：只去掉导航入口，路由和页面保留 |
+| 6 | 重复调用提醒进 core | ✅ 提交 `456162a`：默认开启，阈值 3/5/8，与 dsh 一致 |
+
+## 需要你拍板的（已于 2026-11-16 全部同意，见上表）
 
 1. **熔断器：** LLM 请求的熔断器（`retry.ts`）是否同意去掉？MCP 连接的熔断改成 dsh 式的"退避重连 + 失败次数上限"。
 2. **界面操作工具：** 是否把 `update_theme` 等工具从 leochat-mcp 独立进程挪到 GUI 本地 server 里的进程内工具？
