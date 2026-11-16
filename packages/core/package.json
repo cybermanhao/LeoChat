@@ -13,6 +13,10 @@
       "types": "./dist/view/index.d.ts",
       "default": "./dist/view/index.js"
     },
+    "./trace": {
+      "types": "./dist/trace/index.d.ts",
+      "default": "./dist/trace/index.js"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
