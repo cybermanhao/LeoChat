@@ -360,6 +360,17 @@ export async function* mapMessagesStream(records: AsyncIterable<{ event?: string
 
 export const FILES_BETA = "files-api-2025-04-14";
 
+const CJK = /[　-〿぀-ヿ㐀-䶿一-鿿가-힯＀-￯]/g;
+
+/**
+ * DeepSeek 分词的估算：中文约每字 0.6 token（2026-11-16 用真实 usage 校准：7838 个中文字 ≈ 4560 token），
+ * 其余约每 4 个字符 1 token
+ */
+export function estimateDeepSeekTokens(text: string): number {
+  const cjk = text.match(CJK)?.length ?? 0;
+  return Math.ceil(cjk * 0.6 + (text.length - cjk) / 4);
+}
+
 /** 消息里是否引用了 Files API 上传的文件（图片 file_id 或文档 file 块，含工具结果里的图片） */
 export function referencesUploadedFiles(messages: Message[]): boolean {
   const isFileImage = (b: { type: string; source?: { kind: string } }) => b.type === "image" && b.source?.kind === "file_id";
@@ -376,6 +387,7 @@ export function deepseek(opts: DeepSeekOptions): Provider {
     id: "deepseek",
     capabilities: deepseekCapabilities,
     price: priceUsage,
+    estimateTokens: estimateDeepSeekTokens,
     async *stream(req: ModelRequest, signal?: AbortSignal): AsyncIterable<ProviderEvent> {
       let res: Response;
       try {

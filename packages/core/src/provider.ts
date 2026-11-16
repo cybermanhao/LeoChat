@@ -66,6 +66,11 @@ export interface Provider {
   stream(req: ModelRequest, signal?: AbortSignal): AsyncIterable<ProviderEvent>;
   /** 可选：按 usage 计算费用（美元）。DeepSeek 要区分忙时和闲时 */
   price?(model: string, usage: Usage, at: Date): number | undefined;
+  /**
+   * 可选：按这个 provider 的分词器估算一段文字的 token 数（压缩器用来判断何时触发）。
+   * 不提供时用 core 的保守估算（中文每字 1 token）。各家分词差别很大，例如 DeepSeek 中文约每字 0.6 token
+   */
+  estimateTokens?(text: string): number;
 }
 
 export type ProviderErrorKind =

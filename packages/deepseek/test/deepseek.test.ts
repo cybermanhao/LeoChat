@@ -332,3 +332,12 @@ describe("end to end with run()", () => {
     expect(r.costUsd).toBeGreaterThan(0);
   });
 });
+
+describe("estimateDeepSeekTokens", () => {
+  it("counts Chinese at ~0.6 tokens per character (calibrated against real usage)", async () => {
+    const { estimateDeepSeekTokens } = await import("../src/index");
+    expect(estimateDeepSeekTokens("推荐展商推荐展商推荐")).toBe(6);
+    expect(estimateDeepSeekTokens("abcdefgh")).toBe(2);
+    expect(deepseek({ apiKey: "k" }).estimateTokens?.("中文")).toBe(2);
+  });
+});

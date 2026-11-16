@@ -126,6 +126,8 @@ export interface Compactor {
     model: string;
     system?: string;
     tools?: ToolDef[];
+    /** 本 step 请求的输出上限，用于计算触发阈值（窗口 − 输出预留 − 余量） */
+    maxOutputTokens?: number;
     /** context_overflow 时为 true */
     force?: boolean;
     signal: AbortSignal;

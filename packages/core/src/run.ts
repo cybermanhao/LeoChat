@@ -393,6 +393,7 @@ async function loop<Ctx>(
         model,
         ...(system !== undefined ? { system } : {}),
         tools: toolDefs,
+        ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
         force,
         signal,
       });
