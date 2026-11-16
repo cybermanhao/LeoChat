@@ -6,7 +6,7 @@
  * 卡片放在工具结果的 _meta["leochat/ui"]，结构化数据放在 _meta["leochat/data"]（D10）；
  * 工具的 visibility 映射到 MCP Apps 的 _meta.ui.visibility。
  */
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { Client, StreamableHTTPClientTransport, type Transport } from "@modelcontextprotocol/client";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import {
   ToolError,
@@ -183,18 +183,21 @@ function fromMcpResult(r: McpCallResult): ToolOutput {
   };
 }
 
-/** 把一个 Streamable HTTP MCP server 当作 ToolSource。每次 run 建立一个客户端，run 结束时释放 */
-export function mcpTools<Ctx = unknown>(opts: McpToolsOptions<Ctx>): ToolSource<Ctx> {
+export interface McpTransportToolsOptions<Ctx> {
+  /** 每次 run 建立一个新的传输（HTTP、stdio……）。Node 专属的 stdio 传输由 @leochat/node 提供 */
+  createTransport(app: Ctx): Transport | Promise<Transport>;
+  /** 给工具名加前缀，避免多个 server 重名 */
+  prefix?: string;
+  clientName?: string;
+}
+
+/** 任意传输的 MCP server → ToolSource。每次 run 建立一个客户端，run 结束时释放 */
+export function mcpToolsFromTransport<Ctx = unknown>(opts: McpTransportToolsOptions<Ctx>): ToolSource<Ctx> {
   const clients: Client[] = [];
   return {
     async list({ app }) {
-      const headers = opts.headers ? await opts.headers(app) : {};
       const client = new Client({ name: opts.clientName ?? "leochat-core", version: "0.0.1" });
-      const transport = new StreamableHTTPClientTransport(new URL(opts.url), {
-        ...(opts.fetch ? { fetch: opts.fetch } : {}),
-        requestInit: { headers },
-      });
-      await client.connect(transport);
+      await client.connect(await opts.createTransport(app));
       clients.push(client);
       const { tools } = (await client.listTools()) as { tools: McpToolDef[] };
       return tools.map((t) => {
@@ -217,4 +220,19 @@ export function mcpTools<Ctx = unknown>(opts: McpToolsOptions<Ctx>): ToolSource<
       for (const c of clients.splice(0)) await c.close().catch(() => {});
     },
   };
+}
+
+/** 把一个 Streamable HTTP MCP server 当作 ToolSource。每次 run 建立一个客户端，run 结束时释放 */
+export function mcpTools<Ctx = unknown>(opts: McpToolsOptions<Ctx>): ToolSource<Ctx> {
+  return mcpToolsFromTransport<Ctx>({
+    ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+    ...(opts.clientName !== undefined ? { clientName: opts.clientName } : {}),
+    async createTransport(app) {
+      const headers = opts.headers ? await opts.headers(app) : {};
+      return new StreamableHTTPClientTransport(new URL(opts.url), {
+        ...(opts.fetch ? { fetch: opts.fetch } : {}),
+        requestInit: { headers },
+      });
+    },
+  });
 }

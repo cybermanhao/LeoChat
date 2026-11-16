@@ -292,6 +292,37 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
 
+  packages/node:
+    dependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.3.1
+        version: 2.4.0
+    devDependencies:
+      '@leochat/core':
+        specifier: workspace:*
+        version: link:../core
+      '@leochat/mcp-kit':
+        specifier: workspace:*
+        version: link:../mcp-kit
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.7
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.2
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.7)(jsdom@25.0.1)(lightningcss@1.30.2)
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
   packages/server:
     dependencies:
       '@ai-chatbox/mcp-core':

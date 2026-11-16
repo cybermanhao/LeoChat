@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 发布 @leochat/core、@leochat/deepseek、@leochat/mcp-kit 到 git tag（设计文档 §13 Spike 1 的结论）。
+ * 发布 @leochat/core、@leochat/deepseek、@leochat/mcp-kit、@leochat/node 到 git tag（设计文档 §13 Spike 1 的结论）。
  *
  * 做法：
  *   1. 检查包之间只用 peerDependencies 引用（dependencies 里出现 workspace:* 会让 git 依赖装不上）
@@ -18,7 +18,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, m
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const PACKAGES = ["core", "deepseek", "mcp-kit"];
+const PACKAGES = ["core", "deepseek", "mcp-kit", "node"];
 const BRANCH = "sdk-release";
 const root = resolve(import.meta.dirname, "..");
 
@@ -104,7 +104,7 @@ try {
     [
       "# LeoChat SDK release branch",
       "",
-      "Built output of `@leochat/core`, `@leochat/deepseek` and `@leochat/mcp-kit`, published as git tags (`sdk-vX.Y.Z`).",
+      "Built output of `@leochat/core`, `@leochat/deepseek`, `@leochat/mcp-kit` and `@leochat/node`, published as git tags (`sdk-vX.Y.Z`).",
       "Do not commit here by hand: run `node scripts/release-sdk.mjs <version>` on master.",
       "",
       "```json",

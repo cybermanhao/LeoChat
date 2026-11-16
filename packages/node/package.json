@@ -1,0 +1,41 @@
+{
+  "name": "@leochat/node",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Node.js-only adapters for @leochat/core: JSONL session store, filesystem skills, stdio MCP servers.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.3.1"
+  },
+  "peerDependencies": {
+    "@leochat/core": "*",
+    "@leochat/mcp-kit": "*",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@leochat/core": "workspace:*",
+    "@leochat/mcp-kit": "workspace:*",
+    "@types/node": "^22.10.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.0",
+    "zod": "^4.3.6"
+  }
+}
