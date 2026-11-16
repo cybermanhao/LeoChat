@@ -55,12 +55,24 @@ export interface ToMcpServerOptions<Ctx> {
   app: Ctx;
   /** 按身份过滤：只注册返回 true 的工具，tools/list 因身份而异 */
   filter?: (tool: AnyTool<Ctx>, app: Ctx) => boolean;
+  /**
+   * 是否暴露设置了 needsApproval 的工具（Q12）。默认**不暴露**：
+   * 通过 MCP 交给外部宿主后，是否询问用户由宿主决定，服务端无法强制审批。
+   * 传 true 表示全部暴露；传数组表示只暴露列出的工具名（例如自带签名确认令牌的写操作）。
+   */
+  exposeApprovalTools?: boolean | string[];
+}
+
+function exposable<Ctx>(tool: AnyTool<Ctx>, expose: boolean | string[] | undefined): boolean {
+  if (!tool.needsApproval) return true;
+  if (expose === true) return true;
+  return Array.isArray(expose) && expose.includes(tool.name);
 }
 
 /**
  * 把工具注册到一个新的 McpServer。
- * 注意：needsApproval 在 MCP 上无法强制（由调用方宿主决定是否询问用户），
- * 需要服务端确认的写操作请沿用"签名确认令牌"一类的应用层设计（见设计文档 §4.1）。
+ * 带 needsApproval 的工具默认不注册（见 exposeApprovalTools）。需要服务端确认的写操作，
+ * 请沿用"签名确认令牌"一类的应用层设计（见设计文档 §4.1），再显式暴露。
  */
 export async function toMcpServer<Ctx>(opts: ToMcpServerOptions<Ctx>): Promise<McpServer> {
   const server = new McpServer(
@@ -73,6 +85,7 @@ export async function toMcpServer<Ctx>(opts: ToMcpServerOptions<Ctx>): Promise<M
   const tools = await resolveTools(opts.tools, opts.app, new AbortController().signal);
   for (const tool of tools) {
     if (opts.filter && !opts.filter(tool, opts.app)) continue;
+    if (!exposable(tool, opts.exposeApprovalTools)) continue;
     server.registerTool(
       tool.name,
       {

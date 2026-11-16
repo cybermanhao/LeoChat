@@ -85,6 +85,36 @@ describe("toMcpHandler", () => {
   });
 });
 
+describe("exposeApprovalTools (Q12)", () => {
+  const send = defineTool<z.ZodObject<Record<string, never>>, App>({
+    name: "send_inquiry",
+    description: "",
+    input: z.object({}),
+    needsApproval: true,
+    execute: () => ({ content: "sent" }),
+  });
+  const namesFor = async (expose?: boolean | string[]) => {
+    const h = toMcpHandler<App>({
+      name: "t",
+      version: "0",
+      tools: [searchExhibitors, send] as AnyTool<App>[],
+      resolveApp: () => TOKENS["tok-visitor"]!,
+      ...(expose !== undefined ? { exposeApprovalTools: expose } : {}),
+    });
+    const s = mcpTools<App>({ url: "https://internal.invalid/mcp", fetch: ((u: RequestInfo | URL, i?: RequestInit) => h(new Request(u, i))) as typeof fetch });
+    const tools = await s.list({ app: TOKENS["tok-visitor"]!, signal: new AbortController().signal });
+    await s.release?.();
+    return tools.map((t) => t.name).sort();
+  };
+
+  it("hides tools that need approval unless the server config exposes them", async () => {
+    expect(await namesFor()).toEqual(["search_exhibitors"]);
+    expect(await namesFor(true)).toEqual(["search_exhibitors", "send_inquiry"]);
+    expect(await namesFor(["send_inquiry"])).toEqual(["search_exhibitors", "send_inquiry"]);
+    expect(await namesFor(["other"])).toEqual(["search_exhibitors"]);
+  });
+});
+
 describe("mcpTools inside run()", () => {
   it("round-trips data and cards through _meta, and maps errors without leaking internals", async () => {
     const provider = scriptedProvider([
