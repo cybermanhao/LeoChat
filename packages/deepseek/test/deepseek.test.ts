@@ -100,7 +100,7 @@ describe("mapMessagesStream (recorded DeepSeek responses)", () => {
         cacheHitTokens: 1024,
         cacheMissTokens: 2564,
         reasoningTokens: 229,
-        serverToolCalls: { web_search: 1, read_url: 0, image_search: 0 },
+        serverToolCalls: { web_search: 2, read_url: 0, image_search: 0 }, // 计费数字 tool_search=2（一次搜索两个查询词）
       },
     });
     expect(evs.at(-1)).toEqual({ type: "finish", reason: "end_turn" });
@@ -186,6 +186,25 @@ describe("request mapping", () => {
         { type: "deepseek_web_search", name: "deepseek_web_search" },
         { type: "deepseek_read_url", name: "deepseek_read_url" },
       ],
+    });
+  });
+});
+
+describe("Files API header (Q7)", () => {
+  it("adds anthropic-beta only when the request references uploaded files", async () => {
+    const { fetch, calls } = mockFetch([sseResponse(toolCallSse), sseResponse(toolCallSse)]);
+    const p = deepseek({ apiKey: "k", fetch });
+    const drainAll = async (messages: Message[]) => {
+      for await (const _ of p.stream({ model: "deepseek-flash", messages })) void _;
+    };
+    await drainAll([userMessage("plain")]);
+    await drainAll([userMessage([{ type: "text", text: "read this" }, { type: "file", fileId: "file-api-1" }])]);
+    const h = (i: number) => calls[i]!.init.headers as Record<string, string>;
+    expect(h(0)["anthropic-beta"]).toBeUndefined();
+    expect(h(1)["anthropic-beta"]).toBe("files-api-2025-04-14");
+    expect((calls[1]!.body.messages as Array<{ content: unknown[] }>)[0]!.content[1]).toEqual({
+      type: "document",
+      source: { type: "file", file_id: "file-api-1" },
     });
   });
 });

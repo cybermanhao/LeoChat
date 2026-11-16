@@ -43,7 +43,9 @@ export function priceUsage(model: string, usage: Usage, at: Date): number | unde
   const hit = usage.cacheHitTokens ?? 0;
   const miss = usage.cacheMissTokens ?? Math.max(0, usage.inputTokens - hit);
   const tokens = (hit * base.cacheHit + miss * base.cacheMiss + usage.outputTokens * base.output) * k;
-  // 服务端工具调用费用。按 web_search_requests 计；它与 tool_search 的关系待对账单确认（见设计文档 §13）
-  const tools = (usage.serverToolCalls?.web_search ?? 0) * TOOL_FEES.search + (usage.serverToolCalls?.read_url ?? 0) * TOOL_FEES.fetch;
+  // 服务端工具费用：搜索（文字和图片）每千次 0.75 美元，抓取每千次 0.75 美元。
+  // 计数来自 usage 里的 tool_search / tool_image_search / tool_fetch（见 provider.ts toUsage）
+  const st = usage.serverToolCalls;
+  const tools = ((st?.web_search ?? 0) + (st?.image_search ?? 0)) * TOOL_FEES.search + (st?.read_url ?? 0) * TOOL_FEES.fetch;
   return tokens / 1_000_000 + tools;
 }

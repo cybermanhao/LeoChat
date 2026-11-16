@@ -14,4 +14,6 @@ export {
 } from "./provider";
 export { deepseekSearch, deepseekFetch, deepseekOcr, type DeepSeekToolOptions, type OcrFileResolver } from "./tools";
 export { priceUsage, isPeak, OFF_PEAK_RATES, TOOL_FEES } from "./pricing";
+export { deepseekFiles, type FilePurpose, type UploadedFile, type DeepSeekFilesOptions } from "./files";
+export { FILES_BETA, referencesUploadedFiles } from "./provider";
 export { parseSse, type SseRecord } from "./sse";

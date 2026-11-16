@@ -208,8 +208,10 @@ export function toUsage(u: Json): Usage {
   const st = u.server_tool_use as Json | undefined;
   if (st) {
     out.serverToolCalls = {
-      web_search: num(st.web_search_requests),
-      read_url: num(st.web_fetch_requests),
+      // 计费数字（官方 web_tools 文档）：tool_search 按查询词数计，tool_fetch 按成功抓取的页面数计；
+      // web_search_requests / web_fetch_requests 只是结果块的数量，用于展示，不计费
+      web_search: num(st.tool_search),
+      read_url: num(st.tool_fetch),
       image_search: num(st.tool_image_search),
     };
   }
@@ -356,6 +358,16 @@ export async function* mapMessagesStream(records: AsyncIterable<{ event?: string
 
 // ── Provider ─────────────────────────────────────────────────────────────
 
+export const FILES_BETA = "files-api-2025-04-14";
+
+/** 消息里是否引用了 Files API 上传的文件（图片 file_id 或文档 file 块，含工具结果里的图片） */
+export function referencesUploadedFiles(messages: Message[]): boolean {
+  const isFileImage = (b: { type: string; source?: { kind: string } }) => b.type === "image" && b.source?.kind === "file_id";
+  return messages.some((m) =>
+    m.content.some((b) => b.type === "file" || isFileImage(b) || (b.type === "tool_result" && b.content.some(isFileImage))),
+  );
+}
+
 export function deepseek(opts: DeepSeekOptions): Provider {
   const base = (opts.baseURL ?? "https://api.deepseek.com").replace(/\/+$/, "");
   const doFetch = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
@@ -373,6 +385,8 @@ export function deepseek(opts: DeepSeekOptions): Provider {
             Authorization: `Bearer ${opts.apiKey}`,
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
+            // Q7：引用上传文件（file_id）时，Messages 端点要求这个头（官方 Files API / File Parsing 文档）
+            ...(referencesUploadedFiles(req.messages) ? { "anthropic-beta": FILES_BETA } : {}),
           },
           body: JSON.stringify(buildBody(req, defaultMaxTokens)),
           ...(signal ? { signal } : {}),
