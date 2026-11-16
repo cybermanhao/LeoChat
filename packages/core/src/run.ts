@@ -477,8 +477,10 @@ async function loop<Ctx>(
           }
           continue;
         }
+        // 先发 error 再发 step_end：消费方在 step_end 时就能知道这一步失败了（例如把 trace span 标成 error）
+        emit({ type: "error", error: { kind: pe.kind, message: pe.message, retryable: pe.retryable } });
         emit({ type: "step_end", stepId, finish: "other", usage: stepUsage });
-        return fail(pe.kind, pe.message, pe.retryable);
+        return end("error", { error: { kind: pe.kind, message: pe.message } });
       }
     }
 

@@ -291,6 +291,10 @@ describe("run(): stopping, retry, abort", () => {
     expect(r.reason).toBe("error");
     expect(r.error).toEqual({ kind: "auth", message: "bad key" });
     expect(events.some((e) => e.type === "error")).toBe(true);
+    // error 在 step_end 之前，消费方在 step_end 时就知道这一步失败了
+    const types = events.map((e) => e.type);
+    expect(types.indexOf("error")).toBeLessThan(types.indexOf("step_end"));
+    expect(types.filter((t) => t === "error")).toHaveLength(1);
   });
 
   it("context_overflow forces one compaction, then retries", async () => {
