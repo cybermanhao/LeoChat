@@ -1,0 +1,35 @@
+{
+  "name": "@leochat/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runtime-agnostic agent loop for LeoChat (Node, Workers, browser). Zero runtime dependencies besides the zod peer.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./view": {
+      "types": "./dist/view/index.d.ts",
+      "default": "./dist/view/index.js"
+    },
+    "./trace": {
+      "types": "./dist/trace/index.d.ts",
+      "default": "./dist/trace/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "leochat": {
+    "sourceCommit": "1351a1a",
+    "tag": "sdk-v0.1.0"
+  }
+}

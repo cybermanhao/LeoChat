@@ -1,0 +1,24 @@
+{
+  "name": "@leochat/deepseek",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSeek provider for @leochat/core (Messages endpoint, server tools, citations) plus Search/Fetch/OCR tools.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@leochat/core": "^0.1.0",
+    "zod": "^4.0.0"
+  },
+  "leochat": {
+    "sourceCommit": "1351a1a",
+    "tag": "sdk-v0.1.0"
+  }
+}
