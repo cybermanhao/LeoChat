@@ -97,17 +97,12 @@ function fromMcpResult(r) {
     ...data !== void 0 ? { data } : {}
   };
 }
-function mcpTools(opts) {
+function mcpToolsFromTransport(opts) {
   const clients = [];
   return {
     async list({ app }) {
-      const headers = opts.headers ? await opts.headers(app) : {};
       const client = new Client({ name: opts.clientName ?? "leochat-core", version: "0.0.1" });
-      const transport = new StreamableHTTPClientTransport(new URL(opts.url), {
-        ...opts.fetch ? { fetch: opts.fetch } : {},
-        requestInit: { headers }
-      });
-      await client.connect(transport);
+      await client.connect(await opts.createTransport(app));
       clients.push(client);
       const { tools } = await client.listTools();
       return tools.map((t) => {
@@ -132,7 +127,20 @@ function mcpTools(opts) {
     }
   };
 }
+function mcpTools(opts) {
+  return mcpToolsFromTransport({
+    ...opts.prefix !== void 0 ? { prefix: opts.prefix } : {},
+    ...opts.clientName !== void 0 ? { clientName: opts.clientName } : {},
+    async createTransport(app) {
+      const headers = opts.headers ? await opts.headers(app) : {};
+      return new StreamableHTTPClientTransport(new URL(opts.url), {
+        ...opts.fetch ? { fetch: opts.fetch } : {},
+        requestInit: { headers }
+      });
+    }
+  });
+}
 
-export { DATA_META_KEY, mcpTools, toMcpHandler, toMcpServer };
+export { DATA_META_KEY, mcpTools, mcpToolsFromTransport, toMcpHandler, toMcpServer };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

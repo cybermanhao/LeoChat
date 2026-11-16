@@ -1,5 +1,15 @@
+import { Transport } from '@modelcontextprotocol/client';
 import { McpServer } from '@modelcontextprotocol/server';
 import { AnyTool, ToolSource } from '@leochat/core';
+
+/**
+ * @leochat/mcp-kit（设计文档 §10）
+ * - toMcpServer / toMcpHandler：把 core 的工具暴露成 MCP server（无状态、Web 标准 Request/Response，Workers 可直接用）
+ * - mcpTools：把一个 MCP server 当作 core 的 ToolSource
+ *
+ * 卡片放在工具结果的 _meta["leochat/ui"]，结构化数据放在 _meta["leochat/data"]（D10）；
+ * 工具的 visibility 映射到 MCP Apps 的 _meta.ui.visibility。
+ */
 
 declare const DATA_META_KEY = "leochat/data";
 interface ToMcpServerOptions<Ctx> {
@@ -40,7 +50,16 @@ interface McpToolsOptions<Ctx> {
     prefix?: string;
     clientName?: string;
 }
+interface McpTransportToolsOptions<Ctx> {
+    /** 每次 run 建立一个新的传输（HTTP、stdio……）。Node 专属的 stdio 传输由 @leochat/node 提供 */
+    createTransport(app: Ctx): Transport | Promise<Transport>;
+    /** 给工具名加前缀，避免多个 server 重名 */
+    prefix?: string;
+    clientName?: string;
+}
+/** 任意传输的 MCP server → ToolSource。每次 run 建立一个客户端，run 结束时释放 */
+declare function mcpToolsFromTransport<Ctx = unknown>(opts: McpTransportToolsOptions<Ctx>): ToolSource<Ctx>;
 /** 把一个 Streamable HTTP MCP server 当作 ToolSource。每次 run 建立一个客户端，run 结束时释放 */
 declare function mcpTools<Ctx = unknown>(opts: McpToolsOptions<Ctx>): ToolSource<Ctx>;
 
-export { DATA_META_KEY, type McpToolsOptions, type ToMcpHandlerOptions, type ToMcpServerOptions, mcpTools, toMcpHandler, toMcpServer };
+export { DATA_META_KEY, type McpToolsOptions, type McpTransportToolsOptions, type ToMcpHandlerOptions, type ToMcpServerOptions, mcpTools, mcpToolsFromTransport, toMcpHandler, toMcpServer };
