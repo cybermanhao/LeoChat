@@ -186,10 +186,26 @@ export interface RunOptions<Ctx = unknown> {
   approval?: ApprovalConfig<Ctx>;
   /** 暂停式审批和 resume() 必须配置（C1） */
   store?: SessionStore;
+  /**
+   * 持久化钩子（参考 dsh 的检查点策略）。每次修改 transcript 时 core 都会 await 它，写盘成功才继续：
+   * 带 tool_use 的 assistant 消息在工具执行前落盘，工具结果在下一次请求前落盘，未完成的流式输出不落盘。
+   * 抛错会以 reason:'error'、kind:'persist' 结束运行（失败即阻止）。调用方自己负责持久化传入的初始 messages
+   */
+  persist?(op: TranscriptOp): Promise<void>;
   hooks?: RunHooks<Ctx>;
   compactor?: Compactor;
   signal?: AbortSignal;
   providerOptions?: Record<string, unknown>;
+}
+
+/** transcript 的修改操作：把这些操作依次重放到初始 messages 上，就能得到当前 transcript */
+export type TranscriptOp = { kind: "append"; message: Message } | { kind: "reset"; messages: Message[] };
+
+/** 把一串 TranscriptOp 重放到初始消息上（恢复会话时用） */
+export function applyTranscriptOps(initial: Message[], ops: Iterable<TranscriptOp>): Message[] {
+  let out = [...initial];
+  for (const op of ops) out = op.kind === "append" ? [...out, op.message] : [...op.messages];
+  return out;
 }
 
 export type SteerOutcome =

@@ -18,6 +18,7 @@ import type {
   RunHandle,
   RunOptions,
   SteerOutcome,
+  TranscriptOp,
   StepRecord,
 } from "./run-types";
 import { isStepCountCondition, normalizeStopWhen } from "./stop";
@@ -86,6 +87,14 @@ async function releaseSources<Ctx>(opts: RunOptions<Ctx>): Promise<void> {
   }
 }
 
+/** 持久化失败：按 dsh 的"失败即阻止"原则结束运行 */
+class PersistError extends Error {
+  constructor(readonly original: unknown) {
+    super(original instanceof Error ? original.message : String(original));
+    this.name = "PersistError";
+  }
+}
+
 function toProviderError(e: unknown): ProviderError {
   if (isProviderError(e)) return e;
   return new ProviderError("unknown", e instanceof Error ? e.message : String(e), { cause: e });
@@ -123,7 +132,7 @@ function start<Ctx>(opts: RunOptions<Ctx>, init: Init): RunHandle {
     } catch (e) {
       await releaseSources(opts);
       // loop 内部已兜底；这里防御真正意外的异常，保证 result 不 reject
-      const err = { kind: "unknown", message: e instanceof Error ? e.message : String(e) };
+      const err = { kind: e instanceof PersistError ? "persist" : "unknown", message: e instanceof Error ? e.message : String(e) };
       emit({ type: "error", error: { ...err, retryable: false } });
       r = { runId, reason: "error", transcript: [], usage: emptyUsage(), error: err };
       emit({ type: "run_end", result: r });
@@ -183,6 +192,26 @@ async function loop<Ctx>(
   let totalUsage: Usage = emptyUsage();
   let costUsd: number | undefined;
   let lastUsage: Usage | undefined;
+
+  // 持久化（参考 dsh session-checkpoint-policy）：每次修改 transcript 都先 await opts.persist，写盘成功才继续。
+  // 因此带 tool_use 的 assistant 消息在工具执行前已落盘，工具结果在下一次请求前已落盘；未完成的流式输出不落盘。
+  const persist = async (op: TranscriptOp) => {
+    if (!opts.persist) return;
+    try {
+      await opts.persist(op);
+    } catch (e) {
+      throw new PersistError(e);
+    }
+  };
+  const append = async (m: Message) => {
+    transcript.push(m);
+    await persist({ kind: "append", message: m });
+  };
+  const reset = async (ms: Message[]) => {
+    // 各自持有一份数组：之后 append 修改 transcript 时，不能连带改掉已经交给 persist 的那份
+    transcript = [...ms];
+    await persist({ kind: "reset", messages: [...ms] });
+  };
 
   const end = (reason: RunEndReason, extra: Partial<RunResult> = {}): RunResult => {
     const r: RunResult = {
@@ -280,7 +309,7 @@ async function loop<Ctx>(
     }
     const order = new Map(calls.map((c, i) => [c.id, i]));
     results.sort((a, b) => (order.get(a.toolUseId) ?? 0) - (order.get(b.toolUseId) ?? 0));
-    transcript.push({ id: newId("msg_"), role: "tool", content: results });
+    await append({ id: newId("msg_"), role: "tool", content: results });
     return null;
   };
 
@@ -329,7 +358,7 @@ async function loop<Ctx>(
     // 客户端回传的历史不可信（C1）：末尾没有结果的 tool_use 不执行，只补"未完成"的错误结果
     const dangling = unansweredToolUses(transcript);
     if (dangling.length) {
-      transcript.push({ id: newId("msg_"), role: "tool", content: dangling.map((c) => errorResult(c, MESSAGES.notCompleted)) });
+      await append({ id: newId("msg_"), role: "tool", content: dangling.map((c) => errorResult(c, MESSAGES.notCompleted)) });
     }
   }
 
@@ -343,7 +372,7 @@ async function loop<Ctx>(
     if (steering.length) {
       const take = opts.steeringMode === "one-at-a-time" ? 1 : steering.length;
       for (const s of steering.splice(0, take)) {
-        transcript.push(s.message);
+        await append(s.message);
         emit({ type: "user_message", message: s.message, via: "steer" });
         repeat?.reset();
         s.resolve({ delivered: true });
@@ -369,7 +398,7 @@ async function loop<Ctx>(
         signal,
       });
       if (r) {
-        if (r.messages) transcript = r.messages;
+        if (r.messages) await reset(r.messages);
         if (r.system !== undefined) system = r.system;
         if (r.model !== undefined) model = r.model;
         if (r.activeTools) activeTools = r.activeTools;
@@ -398,7 +427,7 @@ async function loop<Ctx>(
         signal,
       });
       if (!c) return false;
-      transcript = c.messages;
+      await reset(c.messages);
       emit({ type: "compaction", info: c.info });
       return true;
     };
@@ -502,7 +531,7 @@ async function loop<Ctx>(
     }
 
     const assistant: Message = { id: messageId, role: "assistant", content: blocks };
-    if (blocks.length) transcript.push(assistant);
+    if (blocks.length) await append(assistant);
     lastUsage = stepUsage;
     totalUsage = addUsage(totalUsage, stepUsage);
     const stepCost = opts.provider.price?.(model, stepUsage, new Date());
@@ -514,7 +543,7 @@ async function loop<Ctx>(
     if (aborted) {
       // 已完成的 tool_use 也要有结果，保证 transcript 合法（不变量 1、6）
       if (calls.length) {
-        transcript.push({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.aborted)) });
+        await append({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.aborted)) });
       }
       return end("aborted");
     }
@@ -523,7 +552,7 @@ async function loop<Ctx>(
     if (finalStepReason) {
       // 收尾 step 没有提供工具；万一模型仍然输出了 tool_use，补"未完成"结果保证 transcript 合法
       if (calls.length) {
-        transcript.push({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.notCompleted)) });
+        await append({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.notCompleted)) });
       }
       return end(finalStepReason);
     }
@@ -554,7 +583,7 @@ async function loop<Ctx>(
       if (followUps.length) {
         const take = opts.followUpMode === "one-at-a-time" ? 1 : followUps.length;
         for (const m of followUps.splice(0, take)) {
-          transcript.push(m);
+          await append(m);
           emit({ type: "user_message", message: m, via: "followUp" });
           repeat?.reset();
         }
