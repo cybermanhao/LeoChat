@@ -13,6 +13,9 @@ import { legacyProvider, mcpCoreTools, pendingApprovalAnswerer, type LegacyLLM }
 
 const MAX_TEXT = 100_000;
 const MAX_SYSTEM = 50_000;
+/** 前端"不限轮数"对应的上限 */
+const MAX_STEPS = 1000;
+const MAX_TOOLS = 500;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 async function readJson<T>(c: { req: { json<U>(): Promise<U> } }): Promise<T | null> {
@@ -68,11 +71,19 @@ export function createConversationRoutes(
   app.post("/conversations/:id/runs", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number }>(c);
+    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number; temperature?: number; tools?: unknown }>(c);
     if (!body || typeof body.text !== "string" || !body.text.trim()) return c.json({ error: "text is required" }, 400);
     if (body.text.length > MAX_TEXT) return c.json({ error: "text too long" }, 400);
     if (body.system !== undefined && (typeof body.system !== "string" || body.system.length > MAX_SYSTEM)) {
       return c.json({ error: "invalid system prompt" }, 400);
+    }
+    // 可用工具白名单（GUI 发送用户启用的工具名）；不传表示全部
+    let allow: Set<string> | undefined;
+    if (body.tools !== undefined) {
+      if (!Array.isArray(body.tools) || body.tools.length > MAX_TOOLS || !body.tools.every((t) => typeof t === "string" && t.length <= 256)) {
+        return c.json({ error: "invalid tools" }, 400);
+      }
+      allow = new Set(body.tools as string[]);
     }
     const conversations = await log();
     const conv = await conversations.load(id);
@@ -83,14 +94,16 @@ export function createConversationRoutes(
     await conversations.append(id, { kind: "append", message });
     if (!conv.meta.title) await conversations.setTitle(id, body.text.trim().replace(/\s+/g, " ").slice(0, 40));
 
-    const maxSteps = Math.min(Math.max(body.maxSteps ?? 10, 1), 50);
+    const maxSteps = Math.min(Math.max(Math.floor(Number(body.maxSteps) || 10), 1), MAX_STEPS);
+    const temperature = typeof body.temperature === "number" && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : undefined;
     const provider = legacyProvider(llm, body.provider);
     const handle = run({
       provider,
       model: body.model ?? "",
       ...(body.system ? { system: body.system } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
       messages: [...conv.transcript, message],
-      tools: mcpCoreTools(context.sessionManager, truncate),
+      tools: mcpCoreTools(context.sessionManager, truncate, allow),
       approval: { answerers: [pendingApprovalAnswerer(context.pendingApprovals)] },
       compactor: createCompactor(),
       stopWhen: stepCount(maxSteps),

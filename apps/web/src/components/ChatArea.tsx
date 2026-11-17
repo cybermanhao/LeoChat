@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChatInput,
-  ChatMessage as ChatMessageComponent,
   MessageActions,
   MCPQuickPanel,
   Button,
@@ -19,17 +18,18 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import type { DisplayMessage, ToolCall } from "@ai-chatbox/shared";
 import { Sparkles, Trash2, RefreshCw, Thermometer, Layers } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
 import { usePromptStore } from "../stores/prompt";
-import { mcpApi, chatApi } from "../lib/api";
+import { mcpApi } from "../lib/api";
 import { assembleSystemPrompt } from "../lib/prompt-assembly";
 import { executeLeoCardAction } from "../lib/card-actions";
 import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
+import { ViewMessageItem, messageText } from "./chat/ViewMessageItem";
+import { ApprovalBanner, QueuedBar } from "./chat/RunBanners";
 
 /**
  * parseActionTags/parseCardTags 对整段文本做正则扫描——流式输出时，每个 token 到达
@@ -90,8 +90,7 @@ export function ChatArea() {
   const { t } = useT();
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const conversations = useChatStore((s) => s.conversations);
-  const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const view = useChatStore((s) => s.view);
   const input = useChatStore((s) => s.input);
   const isGenerating = useChatStore((s) => s.isGenerating);
   const setInput = useChatStore((s) => s.setInput);
@@ -107,10 +106,7 @@ export function ChatArea() {
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const unlimitedEpochs = useChatStore((s) => s.unlimitedEpochs);
   const setUnlimitedEpochs = useChatStore((s) => s.setUnlimitedEpochs);
-  const toolCallStates = useChatStore((s) => s.toolCallStates);
-  const pendingApprovals = useChatStore((s) => s.pendingApprovals);
-  const resumeFromTask = useChatStore((s) => s.resumeFromTask);
-  const discardPendingTask = useChatStore((s) => s.discardPendingTask);
+  const queueFollowUp = useChatStore((s) => s.queueFollowUp);
   const executeAction = useChatStore((s) => s.executeAction);
   const uiMode = useChatStore((s) => s.uiMode);
   const temperature = useChatStore((s) => s.temperature);
@@ -119,8 +115,12 @@ export function ChatArea() {
   const setContextLevel = useChatStore((s) => s.setContextLevel);
 
   // 直接计算 messages，确保响应式更新
-  const currentConversation = conversations.find((c) => c.id === currentConversationId);
-  const messages = currentConversation?.displayMessages || [];
+  const messages = view.messages;
+  // 等待审批的工具调用（由 core 的视图状态推导，不再单独维护队列）
+  const awaitingApproval = useMemo(
+    () => messages.flatMap((m) => m.parts).filter((p) => p.type === "tool" && p.state === "awaiting-approval"),
+    [messages],
+  );
 
   // 滚动到底部
   const scrollToBottom = useCallback(() => {
@@ -147,37 +147,7 @@ export function ChatArea() {
     if (isGenerating && lastMessage?.role === "assistant") {
       scrollToBottom();
     }
-  }, [isGenerating, lastMessage?.contentItems, scrollToBottom]);
-
-  // 将 toolCallStates 转换为 UI 组件需要的格式
-  const getToolCallStatesForMessage = useCallback(
-    (message: DisplayMessage) => {
-      // 从 contentItems 中查找 tool-call 类型的内容项
-      const toolCallItems = message.contentItems.filter(item => item.type === 'tool-call');
-
-      if (toolCallItems.length === 0) return [];
-
-      return toolCallItems.map((item) => {
-        const toolCall = item.content as ToolCall;
-        const state = toolCallStates[toolCall.id];
-        // ContentItem 用 'completed'，ToolCallState 用 'success'，需要转换
-        // 重启后 toolCallStates 为空，从持久化的 contentItems.status 恢复显示状态
-        const persistedStatus = item.status === "completed" ? "success" : item.status;
-        return {
-          id: toolCall.id,
-          name: toolCall.name || '',
-          status: (state?.status || persistedStatus || "pending") as "pending" | "running" | "success" | "error",
-          arguments: toolCall.arguments,
-          result: state?.result ?? (typeof toolCall.result === "string" ? toolCall.result : undefined),
-          error: state?.error ?? (toolCall as ToolCall & { error?: string }).error,
-          duration: state?.endTime && state?.startTime
-            ? state.endTime - state.startTime
-            : (toolCall as ToolCall & { duration?: number }).duration,
-        };
-      });
-    },
-    [toolCallStates]
-  );
+  }, [isGenerating, lastMessage?.parts, scrollToBottom]);
 
   // MCP Store
   const mcpSources = useMCPStore((s) => s.sources);
@@ -390,6 +360,14 @@ export function ChatArea() {
       clearCurrentConversation();
     }
   }, [clearCurrentConversation]);
+
+  // 运行中：Enter 插话，Ctrl/Cmd+Enter 排队
+  const handleSteer = () => {
+    if (input.trim()) sendMessage(input);
+  };
+  const handleQueue = () => {
+    if (input.trim()) queueFollowUp(input);
+  };
 
   const handleSend = () => {
     if (input.trim() && !isGenerating) {
@@ -624,6 +602,8 @@ export function ChatArea() {
       onSend={handleSend}
       onCancel={cancelGeneration}
       isLoading={isGenerating}
+      onSteer={handleSteer}
+      onQueue={handleQueue}
       placeholder={assembledPrompt ? t("chat.placeholderWithPrompt") : t("chat.placeholderDefault")}
       toolbar={toolbar}
     />
@@ -690,57 +670,45 @@ export function ChatArea() {
         className="flex-1 overflow-y-auto p-4 scrollbar-thin"
       >
         <div className="mx-auto max-w-3xl space-y-4">
-          {messages.map((message, index) => (
-            <ChatMessageComponent
-              key={message.id}
-              message={message}
-              isStreaming={
-                isGenerating &&
-                index === messages.length - 1 &&
-                message.role === "assistant"
-              }
-              toolCallStates={getToolCallStatesForMessage(message)}
-              onCardAction={executeLeoCardAction}
-              actions={
-                message.role === "assistant" ? (
-                  <MessageActions
-                    content={message.contentItems
-                      .filter(item => item.type === 'text')
-                      .map(item => item.content as string)
-                      .join(' ')}
-                    enableMarkdown={enableMarkdown}
-                    onMarkdownToggle={() => setEnableMarkdown(!enableMarkdown)}
-                  />
-                ) : undefined
-              }
-              renderContent={(content, isLastTextItem) => {
-                const isStreamingMsg = isGenerating && index === messages.length - 1 && message.role === "assistant";
-                return (
+          {messages.map((message, index) => {
+            const streaming = isGenerating && index === messages.length - 1 && message.role === "assistant";
+            return (
+              <ViewMessageItem
+                key={message.id}
+                message={message}
+                isStreaming={streaming}
+                onCardAction={executeLeoCardAction}
+                actions={
+                  message.role === "assistant" ? (
+                    <MessageActions
+                      content={messageText(message)}
+                      enableMarkdown={enableMarkdown}
+                      onMarkdownToggle={() => setEnableMarkdown(!enableMarkdown)}
+                    />
+                  ) : undefined
+                }
+                renderText={(text, partStreaming) => (
                   <ParsedMessageText
-                    content={content}
-                    isStreaming={isStreamingMsg && isLastTextItem}
+                    content={text}
+                    isStreaming={streaming && partStreaming}
                     enableMarkdown={enableMarkdown}
                     onAction={executeAction}
                   />
-                );
-              }}
-            />
-          ))}
+                )}
+              />
+            );
+          })}
+          {view.error && !isGenerating && (
+            <p className="text-center text-xs text-muted-foreground">本次回复出错（{view.error.kind}），可以重新发送。</p>
+          )}
         </div>
       </div>
 
-      {/* Resume banner — shown when a previous task was interrupted */}
-      {currentConversation?.pendingTaskId && !isGenerating && (
-        <ResumeTaskBanner
-          onResume={() => resumeFromTask(currentConversationId!, currentConversation.pendingTaskId!)}
-          onDiscard={() => discardPendingTask(currentConversationId!)}
-        />
-      )}
+      {/* 排队中的插话 / 后续消息 */}
+      <QueuedBar steering={view.queued.steering} followUp={view.queued.followUp} />
 
-      {/* Bash Approval Queue — one banner per pending command */}
-      {pendingApprovals.map((approval) => (
-        <BashApprovalBanner key={approval.id} approval={approval} />
-      ))}
+      {/* 等待审批的工具调用，每个一条 */}
+      {awaitingApproval.map((p) => (p.type === "tool" ? <ApprovalBanner key={p.callId} part={p} /> : null))}
 
       {/* Input Area - 固定在底部 */}
       <div className="flex-shrink-0 border-t p-4">
@@ -755,138 +723,6 @@ export function ChatArea() {
         currentProvider={currentProvider}
         onSelect={handleModelSelect}
       />
-    </div>
-  );
-}
-
-// ── Resume Task Banner ────────────────────────────────────────────────────────
-
-function ResumeTaskBanner({ onResume, onDiscard }: { onResume: () => void; onDiscard: () => void }) {
-  const [loading, setLoading] = useState<"resume" | "discard" | null>(null);
-
-  const handleResume = () => {
-    if (loading) return;
-    setLoading("resume");
-    onResume();
-  };
-
-  const handleDiscard = () => {
-    if (loading) return;
-    setLoading("discard");
-    onDiscard();
-  };
-
-  return (
-    <div className="flex-shrink-0 border-t border-primary/20 bg-primary/5 px-4 py-3">
-      <div className="mx-auto max-w-3xl">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">上次任务未完成</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              检测到一个中断的任务，可以从断点继续，也可以放弃。
-            </p>
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button
-              disabled={loading !== null}
-              onClick={handleDiscard}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading === "discard" ? "..." : "放弃"}
-            </button>
-            <button
-              disabled={loading !== null}
-              onClick={handleResume}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading === "resume" ? "..." : "从断点继续"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Bash Approval Banner ──────────────────────────────────────────────────────
-
-import type { PendingApproval } from "../stores/chat-types";
-
-function BashApprovalBanner({ approval }: { approval: PendingApproval }) {
-  const [loading, setLoading] = useState<"allow" | "allow-session" | "deny" | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(60);
-  const allowToolForSession = useChatStore((s) => s.allowToolForSession);
-  const clearPendingApproval = useChatStore((s) => s.clearPendingApproval);
-
-  // Countdown timer
-  useEffect(() => {
-    if (secondsLeft <= 0) return;
-    const id = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
-    return () => clearTimeout(id);
-  }, [secondsLeft]);
-
-  const respond = async (approved: boolean) => {
-    if (loading) return;
-    setLoading(approved ? "allow" : "deny");
-    try {
-      await chatApi.approveToolCall(approval.id, approved);
-    } catch (e) {
-      // 404 常见于：后端自己的 60 秒超时刚好在这个点自动拒绝了，
-      // approval 已经不在了——这种情况下横幅也该消失，而不是卡在这。
-      console.error("[BashApproval]", e);
-    } finally {
-      // 不管成功/失败/404，横幅的去留不应该继续依赖后续某个异步 SSE 事件
-      // 是否回来——点了就该立刻消失，避免"批准/拒绝后卡住不动"。
-      clearPendingApproval(approval.id);
-    }
-  };
-
-  const respondForSession = () => {
-    if (loading) return;
-    setLoading("allow-session");
-    allowToolForSession(approval.id, approval.toolName);
-  };
-
-  return (
-    <div className="flex-shrink-0 border-t border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
-      <div className="mx-auto max-w-3xl">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              AI 请求执行 Bash 命令
-            </p>
-            <pre className="mt-1.5 max-h-32 overflow-y-auto rounded bg-muted px-3 py-2 text-xs font-mono text-foreground whitespace-pre-wrap break-all">
-              {approval.command}
-            </pre>
-            <p className="mt-1 text-xs text-muted-foreground">
-              超时自动拒绝（剩余 {secondsLeft}s）
-            </p>
-          </div>
-          <div className="flex gap-2 flex-shrink-0 mt-0.5">
-            <button
-              disabled={loading !== null}
-              onClick={() => respond(false)}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading === "deny" ? "..." : "拒绝"}
-            </button>
-            <button
-              disabled={loading !== null}
-              onClick={respondForSession}
-              className="rounded-md border border-primary/50 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading === "allow-session" ? "..." : "本次会话允许"}
-            </button>
-            <button
-              disabled={loading !== null}
-              onClick={() => respond(true)}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading === "allow" ? "..." : "允许"}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -69,6 +69,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.71.1(react@19.2.3))
+      '@leochat/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       react:
         specifier: ^19.0.0
         version: 19.2.3

@@ -155,3 +155,37 @@ describe("conversations API", () => {
     expect((await json(app, "GET", `/conversations/${conv.id}`)).status).toBe(404);
   });
 });
+
+describe("tool allow-list", () => {
+  it("only offers the tools the GUI enabled (bash stays off unless enabled)", async () => {
+    const seen: unknown[] = [];
+    let i = 0;
+    const llm = {
+      streamChat: vi.fn(async (req: { tools?: Array<{ function: { name: string } }> }, cbs: StreamCallbacks) => {
+        seen.push((req.tools ?? []).map((t) => t.function.name));
+        i++;
+        await cbs.onChunk({ content: "ok", index: 0 });
+        await cbs.onComplete({ id: "a", role: "assistant", content: "ok", timestamp: 1 });
+      }),
+      chat: vi.fn(),
+    };
+    const context = {
+      sessionManager: {
+        getToolsForLLM: () => ["bash", "read_file"].map((name) => ({ type: "function", function: { name, description: "", parameters: { type: "object" } } })),
+        callTool: vi.fn(),
+      },
+      startTime: Date.now(),
+      pendingApprovals: pending,
+      taskStore: new TaskStore(join(dir, "tasks")),
+      conversations: conversationLog(join(dir, "conversations")),
+    } as unknown as ServerContext;
+    const app = new Hono();
+    app.route("/api", createRoutes(context, llm as never));
+    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
+    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x", tools: ["read_file"] }));
+    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "y", tools: [] }));
+    expect(seen).toEqual([["read_file"], []]);
+    expect((await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "z", tools: "bash" })).status).toBe(400);
+    expect(i).toBe(2);
+  });
+});

@@ -1,49 +1,11 @@
-import type {
-  ChatMessage,
-  CardStatus,
-  TaskLoopEvent,
-  ToolCall,
-  LLMConfig,
-  MCPTool,
-  DisplayMessage,
-  ContextMessage,
-} from "@ai-chatbox/shared";
+import type { LLMConfig, MCPTool } from "@ai-chatbox/shared";
+import type { RunViewState } from "@leochat/core/view";
+import type { ConversationMeta } from "../lib/agent-api";
 
 export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
-export interface Conversation {
-  id: string;
-  title: string;
-  displayMessages: DisplayMessage[];
-  contextMessages: ContextMessage[];
-  internalMessages?: ChatMessage[];
-  createdAt: number;
-  updatedAt: number;
-  /** Backend task ID for an in-progress or interrupted generation — used for checkpoint resume */
-  pendingTaskId?: string;
-}
-
-export type ToolCallStatusType = "pending" | "running" | "success" | "error";
-
-export interface ToolCallState {
-  id: string;
-  name: string;
-  status: ToolCallStatusType;
-  arguments?: Record<string, unknown>;
-  result?: string;
-  error?: string;
-  uiCommandExecuted?: boolean;
-  startTime: number;
-  endTime?: number;
-  duration?: number;
-}
-
-/** TaskLoop 实例接口（最小化，避免导入依赖） */
-export interface TaskLoopInstance {
-  abort: () => void;
-  start: (content: string) => Promise<void>;
-  subscribe: (listener: (event: TaskLoopEvent) => void) => () => void;
-}
+/** 会话列表项。会话内容（transcript）保存在本地 server 的 JSONL 日志里，前端只持有当前会话的视图状态 */
+export type Conversation = ConversationMeta;
 
 // ─── Settings slice ──────────────────────────────────────────────
 
@@ -79,60 +41,43 @@ export interface SettingsSlice {
 export interface ConversationsSlice {
   conversations: Conversation[];
   currentConversationId: string | null;
+  /** 当前会话的视图（core 的 reduce() 推导） */
+  view: RunViewState;
+  /** 正在加载当前会话的内容 */
+  loadingConversation: boolean;
   input: string;
 
   setInput: (input: string) => void;
-  createConversation: () => string;
-  setCurrentConversation: (id: string) => void;
-  deleteConversation: (id: string) => void;
-  clearAllConversations: () => void;
-  clearCurrentConversation: () => void;
-
-  _addMessage: (chatId: string, message: DisplayMessage, contextMessage: ContextMessage) => void;
-  _updateMessage: (chatId: string, messageId: string, patch: Partial<DisplayMessage>) => void;
-  _patchLastAssistantMessage: (
-    chatId: string,
-    delta: { content_delta?: string; reasoning_delta?: string; tool_calls?: ToolCall[] }
-  ) => void;
-}
-
-// ─── Bash approval (tool-call permission gate) ───────────────────
-
-export interface PendingApproval {
-  id: string;
-  toolName: string;
-  command: string;
+  /** 从 server 拉会话列表（启动时调用） */
+  loadConversations: () => Promise<void>;
+  /** 在 server 上建一个新会话并切换过去 */
+  createConversation: () => Promise<string>;
+  setCurrentConversation: (id: string | null) => Promise<void>;
+  deleteConversation: (id: string) => Promise<void>;
+  clearAllConversations: () => Promise<void>;
+  /** 清空当前会话：删掉它，回到空白状态 */
+  clearCurrentConversation: () => Promise<void>;
 }
 
 // ─── Generation slice ────────────────────────────────────────────
 
 export interface GenerationSlice {
   isGenerating: boolean;
-  cardStatus: CardStatus;
-  toolCallStates: Record<string, ToolCallState>;
-  activeTaskLoop: TaskLoopInstance | null;
-  pendingApprovals: PendingApproval[];
-  /** Tools allowed for the entire session — not persisted, resets on page reload */
+  /** 进行中的运行 id（插话 / 排队 / 中止用） */
+  activeRunId: string | null;
+  /** 本次会话内总是允许的工具（不持久化，刷新即清空） */
   sessionAllowedTools: Set<string>;
+  /** 已经回答过、等待 server 确认的审批（防止重复点击） */
+  answeredApprovals: Set<string>;
 
+  /** 空闲时开始新的运行；运行中时作为插话（steer）送入当前运行 */
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
+  /** 运行中排队：本轮结束后接着处理 */
+  queueFollowUp: (content: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
-  /** Approve this call AND mark toolName as auto-approved for the rest of the session */
-  allowToolForSession: (approvalId: string, toolName: string) => void;
-  /**
-   * Drop a pending approval from the queue right away, independent of whether the
-   * backend's tool_result/tool_error event for it ever arrives. The banner used to
-   * only disappear once that async SSE event came back and matched the id — if it
-   * got lost/raced (e.g. the backend's own 60s auto-timeout firing around the same
-   * moment as a manual click), the banner would stay stuck forever.
-   */
-  clearPendingApproval: (approvalId: string) => void;
-  /** Resume an interrupted task from its last backend checkpoint */
-  resumeFromTask: (chatId: string, taskId: string) => Promise<void>;
-  /** Discard a pending task — clears the resume prompt without resuming */
-  discardPendingTask: (chatId: string) => void;
-  _handleTaskLoopEvent: (chatId: string, event: TaskLoopEvent) => void;
+  /** 回答审批；forSession 表示本次会话内这个工具都自动允许 */
+  respondApproval: (callId: string, toolName: string, approved: boolean, forSession?: boolean) => Promise<void>;
 }
 
 // ─── Combined store ──────────────────────────────────────────────

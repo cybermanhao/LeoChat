@@ -1,238 +1,105 @@
-import type { ToolCall } from "@ai-chatbox/shared";
-import { generateId } from "@ai-chatbox/shared";
-import type { Conversation, ConversationsSlice, SliceCreator } from "./chat-types";
+import { initialViewState } from "@leochat/core/view";
+import { agentApi } from "../lib/agent-api";
+import type { ConversationsSlice, SliceCreator } from "./chat-types";
 
-export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => ({
-  conversations: [],
-  currentConversationId: null,
-  input: "",
+/**
+ * 会话列表与当前会话。会话内容由本地 server 保存（每个会话一份 JSONL 日志），
+ * 切换会话时从 server 读取 transcript，再用 core 的 initialViewState() 生成视图。
+ */
+export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => {
+  /** 防止快速切换时，较早的加载结果覆盖较晚的 */
+  let loadSeq = 0;
 
-  get displayMessages() {
-    const state = get();
-    if (!state) return [];
-    const { conversations, currentConversationId } = state;
-    const current = conversations.find((c) => c.id === currentConversationId);
-    return current?.displayMessages || [];
-  },
+  return {
+    conversations: [],
+    currentConversationId: null,
+    view: initialViewState(),
+    loadingConversation: false,
+    input: "",
 
-  get contextMessages() {
-    const state = get();
-    if (!state) return [];
-    const { conversations, currentConversationId } = state;
-    const current = conversations.find((c) => c.id === currentConversationId);
-    return current?.contextMessages || [];
-  },
+    setInput: (input) => set({ input }),
 
-  setInput: (input) => set({ input }),
-
-  createConversation: () => {
-    const id = generateId();
-    const conversation: Conversation = {
-      id,
-      title: "New Chat",
-      displayMessages: [],
-      contextMessages: [],
-      internalMessages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    set((state) => ({
-      conversations: [conversation, ...state.conversations],
-      currentConversationId: id,
-    }));
-    return id;
-  },
-
-  setCurrentConversation: (id) => {
-    get().cancelGeneration?.();
-    set({
-      currentConversationId: id,
-      cardStatus: "stable",
-      toolCallStates: {},
-      isGenerating: false,
-      activeTaskLoop: null,
-    });
-  },
-
-  deleteConversation: (id) => {
-    const wasCurrent = get().currentConversationId === id;
-    if (wasCurrent && get().isGenerating) {
-      get().cancelGeneration?.();
-    }
-    set((state) => {
-      const filtered = state.conversations.filter((c) => c.id !== id);
-      let newCurrentId = state.currentConversationId;
-      if (state.currentConversationId === id) {
-        newCurrentId = filtered[0]?.id || null;
-      }
-      return {
-        conversations: filtered,
-        currentConversationId: newCurrentId,
-        ...(wasCurrent && state.isGenerating
-          ? { isGenerating: false, activeTaskLoop: null, cardStatus: "stable", toolCallStates: {} }
-          : {}),
-      };
-    });
-  },
-
-  clearAllConversations: () => set({ conversations: [], currentConversationId: null }),
-
-  clearCurrentConversation: () => {
-    const { currentConversationId, isGenerating, cancelGeneration } = get();
-    if (!currentConversationId) return;
-    if (isGenerating) cancelGeneration?.();
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === currentConversationId
-          ? { ...c, displayMessages: [], contextMessages: [], internalMessages: [], updatedAt: Date.now() }
-          : c
-      ),
-      isGenerating: false,
-      activeTaskLoop: null,
-      cardStatus: "stable",
-      toolCallStates: {},
-    }));
-  },
-
-  _addMessage: (chatId, displayMessage, contextMessage) => {
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              displayMessages: [...c.displayMessages, displayMessage],
-              contextMessages: [...c.contextMessages, contextMessage],
-              updatedAt: Date.now(),
-            }
-          : c
-      ),
-    }));
-  },
-
-  _updateMessage: (chatId, messageId, patch) => {
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              displayMessages: c.displayMessages.map((m) =>
-                m.id === messageId ? { ...m, ...patch } : m
-              ),
-              contextMessages: c.contextMessages.map((m) =>
-                m.id === messageId ? { ...m, ...patch } : m
-              ),
-            }
-          : c
-      ),
-    }));
-  },
-
-  _patchLastAssistantMessage: (chatId, delta) => {
-    set((state) => {
-      const conv = state.conversations.find((c) => c.id === chatId);
-      if (!conv) return state;
-
-      const lastIndex = conv.displayMessages.length - 1;
-      const lastMsg = conv.displayMessages[lastIndex];
-      if (!lastMsg || lastMsg.role !== "assistant") return state;
-
-      const updatedMsg = { ...lastMsg };
-
-      // 增量更新 contentItems
-      if (delta.content_delta) {
-        const lastIdx = updatedMsg.contentItems.length - 1;
-        const lastItem = updatedMsg.contentItems[lastIdx];
-        if (lastItem && lastItem.type === "text" && typeof lastItem.content === "string") {
-          updatedMsg.contentItems = updatedMsg.contentItems.map((item, i) =>
-            i === lastIdx
-              ? { ...item, content: item.content + (delta.content_delta || ""), timestamp: Date.now() }
-              : item
-          );
-        } else {
-          updatedMsg.contentItems = [
-            ...updatedMsg.contentItems,
-            {
-              id: generateId(),
-              type: "text",
-              content: delta.content_delta,
-              timestamp: Date.now(),
-            },
-          ];
+    loadConversations: async () => {
+      try {
+        const conversations = await agentApi.listConversations();
+        set({ conversations });
+        const current = get().currentConversationId;
+        if (current && conversations.some((c) => c.id === current)) {
+          if (get().view.messages.length === 0) await get().setCurrentConversation(current);
+        } else if (current) {
+          set({ currentConversationId: null, view: initialViewState() });
         }
+      } catch (e) {
+        console.warn("[conversations] load failed", e);
       }
+    },
 
-      if (delta.reasoning_delta) {
-        updatedMsg.reasoning_content =
-          (updatedMsg.reasoning_content || "") + delta.reasoning_delta;
+    createConversation: async () => {
+      if (get().isGenerating) get().cancelGeneration();
+      const meta = await agentApi.createConversation();
+      loadSeq++;
+      set((s) => ({
+        conversations: [meta, ...s.conversations.filter((c) => c.id !== meta.id)],
+        currentConversationId: meta.id,
+        view: initialViewState(),
+        loadingConversation: false,
+      }));
+      return meta.id;
+    },
+
+    setCurrentConversation: async (id) => {
+      if (get().isGenerating) get().cancelGeneration();
+      const seq = ++loadSeq;
+      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null });
+      if (!id) return;
+      try {
+        const { meta, transcript } = await agentApi.loadConversation(id);
+        if (seq !== loadSeq) return;
+        set((s) => ({
+          view: initialViewState(transcript),
+          loadingConversation: false,
+          conversations: s.conversations.map((c) => (c.id === id ? meta : c)),
+        }));
+      } catch (e) {
+        if (seq !== loadSeq) return;
+        console.warn("[conversations] open failed", e);
+        set((s) => ({
+          loadingConversation: false,
+          currentConversationId: null,
+          conversations: s.conversations.filter((c) => c.id !== id),
+        }));
       }
+    },
 
-      if (delta.tool_calls) {
-        const existingToolCallIds = new Set(
-          updatedMsg.contentItems
-            .filter((item) => item.type === "tool-call")
-            .map((item) => (item.content as ToolCall).id)
-        );
+    deleteConversation: async (id) => {
+      const wasCurrent = get().currentConversationId === id;
+      if (wasCurrent && get().isGenerating) get().cancelGeneration();
+      await agentApi.deleteConversation(id).catch((e) => console.warn("[conversations] delete failed", e));
+      const remaining = get().conversations.filter((c) => c.id !== id);
+      set({ conversations: remaining });
+      if (wasCurrent) await get().setCurrentConversation(remaining[0]?.id ?? null);
+    },
 
-        for (const toolCall of delta.tool_calls) {
-          if (!existingToolCallIds.has(toolCall.id)) {
-            updatedMsg.contentItems = [
-              ...updatedMsg.contentItems,
-              {
-                id: generateId(),
-                type: "tool-call",
-                content: toolCall,
-                timestamp: Date.now(),
-                status: "pending",
-              },
-            ];
-          }
-        }
-      }
+    clearAllConversations: async () => {
+      if (get().isGenerating) get().cancelGeneration();
+      const ids = get().conversations.map((c) => c.id);
+      await Promise.all(ids.map((id) => agentApi.deleteConversation(id).catch(() => {})));
+      loadSeq++;
+      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false });
+    },
 
-      // 同时更新 contextMessages
-      const lastContextMsg = conv.contextMessages[conv.contextMessages.length - 1];
-      if (lastContextMsg && lastContextMsg.role === "assistant") {
-        const updatedContextMsg = { ...lastContextMsg };
-
-        if (delta.content_delta) {
-          updatedContextMsg.content = (updatedContextMsg.content || "") + delta.content_delta;
-        }
-
-        if (delta.tool_calls) {
-          const existingIds = new Set((updatedContextMsg.tool_calls || []).map((tc) => tc.id));
-          const newToolCalls = delta.tool_calls.filter((tc) => !existingIds.has(tc.id));
-          updatedContextMsg.tool_calls = [...(updatedContextMsg.tool_calls || []), ...newToolCalls];
-        }
-
-        return {
-          conversations: state.conversations.map((c) =>
-            c.id === chatId
-              ? {
-                  ...c,
-                  displayMessages: c.displayMessages.map((m, i) =>
-                    i === lastIndex ? updatedMsg : m
-                  ),
-                  contextMessages: c.contextMessages.map((m, i) =>
-                    i === c.contextMessages.length - 1 ? updatedContextMsg : m
-                  ),
-                }
-              : c
-          ),
-        };
-      }
-
-      return {
-        conversations: state.conversations.map((c) =>
-          c.id === chatId
-            ? {
-                ...c,
-                displayMessages: c.displayMessages.map((m, i) =>
-                  i === lastIndex ? updatedMsg : m
-                ),
-              }
-            : c
-        ),
-      };
-    });
-  },
-});
+    clearCurrentConversation: async () => {
+      const id = get().currentConversationId;
+      if (!id) return;
+      if (get().isGenerating) get().cancelGeneration();
+      await agentApi.deleteConversation(id).catch(() => {});
+      loadSeq++;
+      set((s) => ({
+        conversations: s.conversations.filter((c) => c.id !== id),
+        currentConversationId: null,
+        view: initialViewState(),
+        loadingConversation: false,
+      }));
+    },
+  };
+};

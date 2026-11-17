@@ -1,627 +1,225 @@
-import type {
-  ChatMessage,
-  CardStatus,
-  TaskLoopEvent,
-  ToolCall,
-  LLMConfig,
-  DisplayMessage,
-  ContextMessage,
-} from "@ai-chatbox/shared";
-import type { TaskLoop } from "@ai-chatbox/mcp-core";
-import { LLM_PROVIDERS, getModelContextLimit, CONTEXT_LEVEL_MAP, normalizeLeoCard } from "@ai-chatbox/shared";
+import type { AgentEvent, Message, RunResult } from "@leochat/core";
+import { appendUserMessage, reduce } from "@leochat/core/view";
 import { processToolResultForUICommands, executeUICommand } from "../lib/ui-commands";
 import type { CommandName } from "../lib/ui-commands";
 import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
-import { getServerBaseUrl } from "../lib/api";
+import { agentApi } from "../lib/agent-api";
+import { chatApi } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
-import { patchIncompleteToolCalls } from "./context-repair";
 import type { GenerationSlice, SliceCreator } from "./chat-types";
 
-// TaskLoop 懒加载，避免构建顺序问题
-let TaskLoopConstructor: typeof TaskLoop | null = null;
-async function getTaskLoop() {
-  if (!TaskLoopConstructor) {
-    // @ts-ignore - mcp-core 在运行时可用
-    const mod = await import("@ai-chatbox/mcp-core");
-    TaskLoopConstructor = mod.TaskLoop;
-  }
-  return TaskLoopConstructor;
+/** 工具输出里的文字（UI 命令、卡片都从这里解析） */
+export function toolOutputText(output: { content?: unknown } | undefined): string {
+  const content = output?.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b): b is { type: "text"; text: string } => !!b && typeof b === "object" && (b as { type?: unknown }).type === "text")
+    .map((b) => b.text)
+    .join("");
 }
 
-const VITE_BACKEND_URL =
-  typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
+const localId = (prefix: string) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
-export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => ({
-  isGenerating: false,
-  cardStatus: "stable" as CardStatus,
-  toolCallStates: {},
-  activeTaskLoop: null,
-  pendingApprovals: [],
-  sessionAllowedTools: new Set<string>(),
+const KNOWN_COMMANDS: ReadonlySet<string> = new Set<CommandName>([
+  "update_theme", "show_notification", "show_confirm",
+  "open_panel", "close_panel", "copy_to_clipboard",
+  "open_url", "scroll_to_message", "set_input", "send_message",
+]);
 
-  sendMessage: async (content, systemPrompt) => {
-    if (get().isGenerating) {
-      console.warn("[chat-generation] Already generating, ignoring sendMessage");
-      return;
-    }
-    // 立刻同步置位，不要等到 TaskLoop 建好之后——下面马上有个 await（动态 import
-    // TaskLoop），在这个 await 落地之前 isGenerating 仍然是 false。如果这段时间
-    // 窗口内 sendMessage 被第二次调用（双击发送、回车连续触发等），两次调用都会
-    // 在上面的守卫检查里看到 false，都放行，各自起一个 TaskLoop、各自打一次
-    // /api/chat——后建的会覆盖 activeTaskLoop，先建的那个请求在后端变成孤儿，
-    // 继续占着它触发的 bash 审批 id 不放，导致"批准/拒绝后卡住不消失"之类的问题。
-    set({ isGenerating: true });
+export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => {
+  /** 当前运行的标识：切换会话或取消后，旧运行剩下的事件一律丢弃 */
+  let runToken = 0;
+  let controller: AbortController | null = null;
+  /** 运行已经开始、但还没收到 run_start（不知道 runId）时的插话，拿到 runId 后再送 */
+  let earlySteers: string[] = [];
 
-    const {
-      currentConversationId,
-      currentProvider,
-      currentModel,
-      providerKeys,
-      mcpTools,
-      maxEpochs,
-      unlimitedEpochs,
-      contextLevel,
-      temperature,
-      uiMode,
-    } = get();
-
-    const convId = currentConversationId || get().createConversation();
-
-    const conv = get().conversations.find((c) => c.id === convId);
-    const history = conv?.contextMessages || [];
-    const historyWithoutSystem = patchIncompleteToolCalls(
-      history.filter((m) => m.role !== "system")
-    );
-
-    const providerConfig = LLM_PROVIDERS[currentProvider];
-    const llmConfig: LLMConfig = {
-      provider: currentProvider,
-      model: currentModel,
-      apiKey: providerKeys[currentProvider] || "",
-      baseURL: providerConfig?.baseURL,
-      temperature,
-    };
-
-    // 简单模式不暴露上下文档位设置给用户调，但不能真的是 0（无限制）——
-    // MCP 工具（尤其是 Gmail/Calendar/Drive 这类返回大段真实数据的）会让发给
-    // LLM 的历史消息体积跟着无限增长，给一个不会日常感知到、但能挡住失控增长
-    // 的默认上限。专业模式仍按用户自己的档位设置。
-    // （注：这不是那次白屏卡死的修复——那个根因是渲染层未 memo 的正则/JSON
-    // 解析，见 ChatArea.tsx 的 ParsedMessageText 和 tool-call-block.tsx。）
-    const SIMPLE_MODE_DEFAULT_CONTEXT_LENGTH = 50;
-    const contextLength = uiMode === "simple" ? SIMPLE_MODE_DEFAULT_CONTEXT_LENGTH : (CONTEXT_LEVEL_MAP[contextLevel] ?? 30);
-    const modelContextLimit = getModelContextLimit(currentModel);
-
-    let taskLoop: TaskLoop;
-    let unsubscribe: () => void;
-    try {
-      const TaskLoopClass = await getTaskLoop();
-      taskLoop = new TaskLoopClass({
-        chatId: convId,
-        history: historyWithoutSystem,
-        llmConfig,
-        mcpTools,
-        maxEpochs: unlimitedEpochs ? 1000 : maxEpochs,
-        parallelToolCalls: true,
-        useBackendProxy: true,
-        backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
-        systemPrompt,
-        contextLength: contextLength > 0 ? contextLength : undefined,
-        modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
-        onToolCall: async (toolName: string, _args: Record<string, unknown>) => {
-          throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
-        },
-      });
-
-      unsubscribe = taskLoop.subscribe((event: TaskLoopEvent) => {
-        if (get().activeTaskLoop !== taskLoop) return;
-        get()._handleTaskLoopEvent(convId, event);
-      });
-    } catch (error) {
-      // 建 TaskLoop 这一步本身失败（懒加载 import 炸了、拿后端端口失败等）——
-      // 上面已经同步置了 isGenerating:true，这里必须自己收尾，不然会卡死在
-      // "生成中" 状态，永远进不了后面 try/finally 里正常的复位逻辑。
-      console.error("[chat-generation] Failed to start TaskLoop:", error);
-      set({ isGenerating: false });
-      return;
-    }
-
-    set({
-      input: "",
-      isGenerating: true,
-      cardStatus: "connecting",
-      activeTaskLoop: taskLoop,
-    });
-
-    if (history.length === 0) {
-      set((state) => ({
-        conversations: state.conversations.map((c) =>
-          c.id === convId
-            ? {
-                ...c,
-                title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
-                updatedAt: Date.now(),
-              }
-            : c
-        ),
-      }));
-    }
-
-    try {
-      await taskLoop.start(content);
-    } catch (error) {
-      console.error("TaskLoop error:", error);
-      const isAbort = (error as Error).name === "AbortError";
-      set((state) => ({
-        toolCallStates: {},
-        conversations: state.conversations.map((c) => {
-          if (c.id !== convId) return c;
-          const msgs = c.displayMessages;
-          let lastAssistantIdx = -1;
-          for (let i = msgs.length - 1; i >= 0; i--) {
-            if (msgs[i].role === "assistant") { lastAssistantIdx = i; break; }
-          }
-          if (lastAssistantIdx < 0) return { ...c };
-          const lastMsg = msgs[lastAssistantIdx];
-          const hasContent = lastMsg.contentItems.some(
-            (item) =>
-              (item.type === "text" && (item.content as string).trim().length > 0) ||
-              item.type === "tool-call"
-          );
-          const patchedDisplay = hasContent
-            ? msgs.map((m, i) => i === lastAssistantIdx ? { ...m, interrupted: isAbort } : m)
-            : msgs.filter((_, i) => i !== lastAssistantIdx);
-          return { ...c, displayMessages: patchedDisplay };
-        }),
-      }));
-    } finally {
-      unsubscribe();
-      if (get().activeTaskLoop === taskLoop) {
-        set({
-          isGenerating: false,
-          activeTaskLoop: null,
-        });
+  /** 事件带来的副作用（视图之外的部分） */
+  const sideEffects = (e: AgentEvent) => {
+    switch (e.type) {
+      case "run_start": {
+        set({ activeRunId: e.runId });
+        const pending = earlySteers;
+        earlySteers = [];
+        for (const t of pending) agentApi.steer(e.runId, t).catch((err) => console.warn("[steer]", err));
+        break;
       }
-    }
-  },
-
-  cancelGeneration: () => {
-    const { activeTaskLoop, currentConversationId } = get();
-    if (activeTaskLoop) {
-      activeTaskLoop.abort();
-    }
-    // 主动取消不保留断点 — 用户明确停止，无需恢复提示
-    if (currentConversationId) {
-      set((state) => ({
-        conversations: state.conversations.map((c) =>
-          c.id === currentConversationId ? { ...c, pendingTaskId: undefined } : c
-        ),
-      }));
-    }
-  },
-
-  discardPendingTask: (chatId) => {
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === chatId ? { ...c, pendingTaskId: undefined } : c
-      ),
-    }));
-  },
-
-  resumeFromTask: async (chatId, taskId) => {
-    if (get().isGenerating) return;
-
-    const {
-      currentProvider,
-      currentModel,
-      providerKeys,
-      mcpTools,
-      maxEpochs,
-      contextLevel,
-      temperature,
-    } = get();
-
-    const providerConfig = LLM_PROVIDERS[currentProvider];
-    const llmConfig: LLMConfig = {
-      provider: currentProvider,
-      model: currentModel,
-      apiKey: providerKeys[currentProvider] || "",
-      baseURL: providerConfig?.baseURL,
-      temperature,
-    };
-
-    const contextLength = CONTEXT_LEVEL_MAP[contextLevel] ?? 30;
-    const modelContextLimit = getModelContextLimit(currentModel);
-
-    const TaskLoopClass = await getTaskLoop();
-    const taskLoop = new TaskLoopClass({
-      chatId,
-      history: [],          // 后端从 taskId 加载历史，前端 history 不会被发送
-      llmConfig,
-      mcpTools,
-      maxEpochs,
-      parallelToolCalls: true,
-      useBackendProxy: true,
-      backendURL: VITE_BACKEND_URL || await getServerBaseUrl(),
-      resumeTaskId: taskId, // 触发后端 resume 路径
-      contextLength: contextLength > 0 ? contextLength : undefined,
-      modelContextLimit: modelContextLimit > 0 ? modelContextLimit : undefined,
-      onToolCall: async (toolName: string) => {
-        throw new Error(`Non-MCP tool call not supported in web context: ${toolName}`);
-      },
-    });
-
-    const unsubscribe = taskLoop.subscribe((event) => {
-      if (get().activeTaskLoop !== taskLoop) return;
-      get()._handleTaskLoopEvent(chatId, event);
-    });
-
-    set({ isGenerating: true, cardStatus: "connecting", activeTaskLoop: taskLoop });
-
-    try {
-      await taskLoop.start(""); // 空 input — resume 模式不添加 user 消息
-    } catch (error) {
-      console.error("[resumeFromTask]", error);
-    } finally {
-      unsubscribe();
-      if (get().activeTaskLoop === taskLoop) {
-        set((state) => ({
-          isGenerating: false,
-          activeTaskLoop: null,
-          // Ensure pendingTaskId is cleared regardless of how the task ended
-          conversations: state.conversations.map((c) =>
-            c.id === chatId ? { ...c, pendingTaskId: undefined } : c
-          ),
-        }));
-      }
-    }
-  },
-
-  clearPendingApproval: (id) => {
-    set((state) => ({
-      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== id),
-    }));
-  },
-
-  allowToolForSession: (id, toolName) => {
-    set((state) => ({
-      sessionAllowedTools: new Set([...state.sessionAllowedTools, toolName]),
-      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== id),
-    }));
-    import("../lib/api").then(({ chatApi }) => {
-      chatApi.approveToolCall(id, true).catch((e) => console.warn("[allowForSession]", e));
-    });
-  },
-
-  executeAction: (actionName, attributes) => {
-    // Strip display-only attribute; remaining keys become the payload
-    const { label: _label, ...payload } = attributes;
-
-    // Coerce string values: "true"/"false" → boolean, numeric strings → number
-    const coercedPayload: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(payload)) {
-      if (v === "true") coercedPayload[k] = true;
-      else if (v === "false") coercedPayload[k] = false;
-      else if (v !== "" && !isNaN(Number(v))) coercedPayload[k] = Number(v);
-      else coercedPayload[k] = v;
-    }
-
-    // Known UI command → delegate to executeUICommand
-    const KNOWN_COMMANDS: ReadonlySet<string> = new Set<CommandName>([
-      "update_theme", "show_notification", "show_confirm",
-      "open_panel", "close_panel", "copy_to_clipboard",
-      "open_url", "scroll_to_message", "set_input", "send_message",
-    ]);
-
-    if (KNOWN_COMMANDS.has(actionName)) {
-      Promise.resolve(
-        executeUICommand({
-          __ui_command__: true,
-          command: actionName as CommandName,
-          payload: coercedPayload as never,
-        })
-      ).catch((e) => console.warn("[executeAction]", e));
-      return;
-    }
-
-    // Unknown command → dispatch custom event for external handlers
-    window.dispatchEvent(
-      new CustomEvent(LEO_ACTION_EVENT, {
-        detail: { name: actionName, attributes: coercedPayload },
-      })
-    );
-  },
-
-  _handleTaskLoopEvent: (chatId, event) => {
-    switch (event.type) {
-      case "add": {
-        const displayMessage: DisplayMessage = {
-          id: event.message.id,
-          role: event.message.role,
-          contentItems: event.message.contentItems || [
-            {
-              id: `${event.message.id}-text`,
-              type: "text",
-              content: event.message.content || "",
-              timestamp: event.message.timestamp,
-            },
-          ],
-          timestamp: event.message.timestamp,
-          reasoning_content: event.message.reasoning_content,
-          metadata: event.message.metadata,
-        };
-
-        const contextMessage: ContextMessage = {
-          id: event.message.id,
-          role: event.message.role,
-          content: event.message.content || "",
-          tool_calls: event.message.tool_calls,
-          tool_call_id: event.message.tool_call_id,
-          timestamp: event.message.timestamp,
-          metadata: event.message.metadata,
-        };
-
-        get()._addMessage(chatId, displayMessage, contextMessage);
-        if (event.cardStatus) {
-          set({ cardStatus: event.cardStatus });
+      case "approval_request":
+        if (get().sessionAllowedTools.has(e.toolName)) {
+          chatApi.approveToolCall(e.callId, true).catch((err) => console.warn("[sessionAllow]", err));
         }
         break;
-      }
-
-      case "update":
-        get()._patchLastAssistantMessage(chatId, event.delta);
-        break;
-
-      case "status":
-        if (event.cardStatus) {
-          set({ cardStatus: event.cardStatus });
-        }
-        if (event.status === "completed") {
-          set({ isGenerating: false, cardStatus: "stable" });
+      case "tool_end":
+        if (e.ok) {
+          processToolResultForUICommands(toolOutputText(e.output)).catch((err) => console.warn("[UICommand]", err));
         }
         break;
-
-      case "toolcall": {
-        set((state) => ({
-          toolCallStates: {
-            ...state.toolCallStates,
-            [event.toolCall.id]: {
-              id: event.toolCall.id,
-              name: event.toolCall.name,
-              status: "running",
-              arguments: event.toolCall.arguments as Record<string, unknown>,
-              startTime: Date.now(),
-            },
-          },
-        }));
-        break;
-      }
-
-      case "toolresult": {
-        // Remove this tool's approval from the queue once result arrives
-        set((state) => ({
-          pendingApprovals: state.pendingApprovals.filter((a) => a.id !== event.toolCallId),
-        }));
-        const rawResult =
-          typeof event.result === "string" ? event.result : JSON.stringify(event.result, null, 2);
-        const endTime = Date.now();
-        const finalStatus = event.error ? "error" : "success";
-        const contentItemStatus = event.error ? "error" : "completed";
-
-        set((state) => {
-          const prevState = state.toolCallStates[event.toolCallId];
-          return {
-            toolCallStates: {
-              ...state.toolCallStates,
-              [event.toolCallId]: {
-                ...prevState,
-                status: finalStatus,
-                result: event.error ? undefined : rawResult,
-                error: event.error,
-                endTime,
-                duration: event.duration,
-              },
-            },
-            conversations: state.conversations.map((c) =>
-              c.id !== chatId
-                ? c
-                : {
-                    ...c,
-                    displayMessages: c.displayMessages.map((msg) => ({
-                      ...msg,
-                      contentItems: msg.contentItems.map((item) => {
-                        if (item.type !== "tool-call") return item;
-                        const tc = item.content as ToolCall;
-                        if (tc.id !== event.toolCallId) return item;
-                        // Persist result into contentItem so it survives toolCallStates reset
-                        return {
-                          ...item,
-                          status: contentItemStatus,
-                          content: {
-                            ...tc,
-                            result: event.error ? undefined : rawResult,
-                            error: event.error,
-                          } as ToolCall,
-                        };
-                      }),
-                    })),
-                  }
-            ),
-          };
-        });
-
-        // 异步处理 UI 命令
-        processToolResultForUICommands(event.result).then(({ uiCommandExecuted }) => {
-          if (uiCommandExecuted) {
-            set((state) => ({
-              toolCallStates: {
-                ...state.toolCallStates,
-                [event.toolCallId]: {
-                  ...state.toolCallStates[event.toolCallId],
-                  uiCommandExecuted: true,
-                },
-              },
-            }));
-          }
-        }).catch((e) => console.warn("[UICommand]", e));
-
-        // 检测结构化卡片 payload 并追加 leo-card 内容项
-        attachLeoCardIfPresent(set, chatId, event.toolCallId, event.result);
-        break;
-      }
-
-      case "task_started":
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === chatId ? { ...c, pendingTaskId: event.taskId } : c
-          ),
-        }));
-        break;
-
-      case "approval_required":
-        if (get().sessionAllowedTools.has(event.toolName)) {
-          // Auto-approve — user already said "allow for session" for this tool
-          import("../lib/api").then(({ chatApi }) => {
-            chatApi.approveToolCall(event.id, true).catch((e) => console.warn("[sessionAllow]", e));
-          });
-        } else {
-          set((state) => ({
-            pendingApprovals: [
-              ...state.pendingApprovals,
-              { id: event.id, toolName: event.toolName, command: event.command },
-            ],
-          }));
-        }
-        break;
-
       case "error":
-        set({ cardStatus: "stable", isGenerating: false, pendingApprovals: [] });
-        handleApiError(event.error.message, get().currentProvider);
+        handleApiError(e.error.message, get().currentProvider);
         break;
+      case "run_end":
+        if (e.result.reason === "completed") sendOSNotification("LeoChat", "AI 回复完成");
+        break;
+    }
+  };
 
-      case "done": {
-        if (event.internalMessages) {
-          const rawContextMessages = (event.internalMessages || []).map((msg: ChatMessage) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content || "",
-            tool_calls: msg.tool_calls,
-            tool_call_id: msg.tool_call_id,
-            timestamp: msg.timestamp,
-            metadata: msg.metadata,
-          }));
-          // Always sanitize before storing — guards against orphaned tool_calls
-          // from interrupted generations or edge cases in the backend loop.
-          const safeContextMessages = patchIncompleteToolCalls(rawContextMessages);
-          set((state) => ({
-            cardStatus: "stable",
-            isGenerating: false,
-            pendingApprovals: [],
-            conversations: state.conversations.map((c) =>
-              c.id === chatId
-                ? { ...c, contextMessages: safeContextMessages, pendingTaskId: undefined }
-                : c
-            ),
-          }));
-        } else {
-          set((state) => ({
-            cardStatus: "stable",
-            isGenerating: false,
-            pendingApprovals: [],
-            conversations: state.conversations.map((c) =>
-              c.id === chatId ? { ...c, pendingTaskId: undefined } : c
-            ),
-          }));
+  return {
+    isGenerating: false,
+    activeRunId: null,
+    sessionAllowedTools: new Set<string>(),
+    answeredApprovals: new Set<string>(),
+
+    sendMessage: async (content, systemPrompt) => {
+      const text = content.trim();
+      if (!text) return;
+
+      // 运行中：作为插话送进当前运行（在下一个 step 边界生效）
+      if (get().isGenerating) {
+        const runId = get().activeRunId;
+        set({ input: "" });
+        if (!runId) {
+          earlySteers.push(text);
+          return;
         }
-        sendOSNotification("LeoChat", "AI 回复完成");
-        break;
+        await agentApi.steer(runId, text).catch((e) => console.warn("[steer]", e));
+        return;
       }
 
-      case "retry":
-        console.log(
-          `[Retry] Attempt ${event.attempt}/${event.maxAttempts}, ` +
-            `delay: ${event.delayMs}ms, error: ${event.error.message}`
+      // 同步置位，防止双击发送起两个运行
+      set({ isGenerating: true });
+      const token = ++runToken;
+
+      let convId = get().currentConversationId;
+      try {
+        // 不能用 createConversation()：它会先取消进行中的运行，而这里已经把自己标成了生成中
+        if (!convId) {
+          const meta = await agentApi.createConversation();
+          convId = meta.id;
+          set((s) => ({ conversations: [meta, ...s.conversations], currentConversationId: meta.id }));
+        }
+        if (token !== runToken) return; // 建会话期间被取消
+      } catch (e) {
+        console.error("[chat-generation] create conversation failed", e);
+        set({ isGenerating: false });
+        handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
+        return;
+      }
+
+      const userMsg: Message = { id: localId("msg_local_"), role: "user", content: [{ type: "text", text: content }] };
+      set((s) => ({
+        input: "",
+        view: appendUserMessage(s.view, userMsg),
+        answeredApprovals: new Set(),
+        conversations: s.conversations.map((c) =>
+          c.id === convId ? { ...c, title: c.title || text.replace(/\s+/g, " ").slice(0, 40), updatedAt: Date.now() } : c,
+        ),
+      }));
+
+      const { currentProvider, currentModel, maxEpochs, unlimitedEpochs, temperature, mcpTools } = get();
+      controller = new AbortController();
+      const own = controller;
+      let leftover: string[] = [];
+      try {
+        const events = agentApi.run(
+          convId,
+          {
+            text: content,
+            ...(systemPrompt ? { system: systemPrompt } : {}),
+            ...(currentModel ? { model: currentModel } : {}),
+            provider: currentProvider,
+            maxSteps: unlimitedEpochs ? 1000 : maxEpochs,
+            temperature,
+            tools: mcpTools.map((t) => t.name),
+          },
+          own.signal,
         );
-        break;
-
-      case "checkpoint_created":
-        console.log(`[Checkpoint] Created: ${event.checkpointId}, reason: ${event.reason}`);
-        break;
-    }
-  },
-});
-
-/**
- * 从工具结果中检测并追加 LeoCard 到最后一条 assistant 消息。
- * 抽出来避免 _handleTaskLoopEvent 过长。
- */
-function attachLeoCardIfPresent(
-  set: Parameters<SliceCreator<GenerationSlice>>[0],
-  chatId: string,
-  toolCallId: string,
-  result: unknown
-): void {
-  let cardSource: unknown = result;
-
-  if (typeof cardSource === "string") {
-    try {
-      cardSource = JSON.parse(cardSource);
-    } catch {
-      /* 非 JSON，忽略 */
-    }
-  }
-
-  // 尝试从 MCP content[].text 格式中提取
-  if (typeof cardSource === "object" && cardSource !== null && "content" in cardSource) {
-    const mcpContent = (cardSource as { content: unknown[] }).content;
-    if (Array.isArray(mcpContent)) {
-      for (const item of mcpContent) {
-        if (typeof item === "object" && item !== null && "type" in item && "text" in item) {
-          const textItem = item as { type: string; text: string };
-          if (textItem.type === "text") {
-            const innerCard = normalizeLeoCard(textItem.text);
-            if (innerCard) {
-              cardSource = innerCard;
-              break;
-            }
-          }
+        for await (const e of events) {
+          if (token !== runToken) break;
+          set((s) => ({ view: reduce(s.view, e) }));
+          sideEffects(e);
         }
+      } catch (e) {
+        if (token === runToken && !own.signal.aborted) {
+          console.error("[chat-generation] run failed", e);
+          handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
+        }
+      } finally {
+        leftover = earlySteers;
+        earlySteers = [];
+        if (token === runToken) {
+          set({ isGenerating: false, activeRunId: null });
+          controller = null;
+        }
+        // 会话按最近更新排序
+        set((s) => {
+          const conv = s.conversations.find((c) => c.id === convId);
+          if (!conv) return {};
+          return { conversations: [{ ...conv, updatedAt: Date.now() }, ...s.conversations.filter((c) => c.id !== convId)] };
+        });
       }
-    }
-  }
+      // 运行没能开始（例如出错）时，之前的插话作为新消息发出，不丢
+      if (leftover.length && token === runToken) await get().sendMessage(leftover.join("\n"));
+    },
 
-  const card = normalizeLeoCard(cardSource);
-  if (!card) return;
+    queueFollowUp: async (content) => {
+      const text = content.trim();
+      const runId = get().activeRunId;
+      if (!text) return;
+      if (!runId) {
+        await get().sendMessage(text);
+        return;
+      }
+      set({ input: "" });
+      await agentApi.followUp(runId, text).catch((e) => console.warn("[followUp]", e));
+    },
 
-  const cardItemId = `${toolCallId}-card-${card.id}`;
-  set((state) => ({
-    conversations: state.conversations.map((c) => {
-      if (c.id !== chatId) return c;
-      const lastAssistantIdx = c.displayMessages.reduce(
-        (acc, m, i) => (m.role === "assistant" ? i : acc),
-        -1
-      );
-      if (lastAssistantIdx === -1) return c;
-      return {
-        ...c,
-        displayMessages: c.displayMessages.map((msg, i) => {
-          if (i !== lastAssistantIdx) return msg;
-          if (msg.contentItems.some((item) => item.id === cardItemId)) return msg;
-          return {
-            ...msg,
-            contentItems: [
-              ...msg.contentItems,
-              {
-                id: cardItemId,
-                type: "leo-card" as const,
-                content: card,
-                timestamp: Date.now(),
-              },
-            ],
-          };
-        }),
-      };
-    }),
-  }));
-}
+    cancelGeneration: () => {
+      if (!get().isGenerating) return;
+      earlySteers = [];
+      const runId = get().activeRunId;
+      runToken++;
+      if (runId) agentApi.abort(runId).catch(() => {});
+      controller?.abort();
+      controller = null;
+      // 本地收尾：断开后收不到 run_end，用一个合成的 run_end 结束视图里的流式状态
+      set((s) => {
+        const result: RunResult = { runId: runId ?? "", reason: "aborted", transcript: [], usage: s.view.usage };
+        return { isGenerating: false, activeRunId: null, view: s.view.active ? reduce(s.view, { type: "run_end", result }) : s.view };
+      });
+    },
+
+    respondApproval: async (callId, toolName, approved, forSession) => {
+      if (get().answeredApprovals.has(callId)) return;
+      set((s) => ({
+        answeredApprovals: new Set([...s.answeredApprovals, callId]),
+        ...(forSession && approved ? { sessionAllowedTools: new Set([...s.sessionAllowedTools, toolName]) } : {}),
+      }));
+      try {
+        await chatApi.approveToolCall(callId, approved);
+      } catch (e) {
+        // 404 常见于 server 的 60 秒超时刚好先自动拒绝了；视图会随 approval_resolved 更新
+        console.warn("[approval]", e);
+      }
+    },
+
+    executeAction: (actionName, attributes) => {
+      // label 只用于显示，其余属性作为参数
+      const { label: _label, ...payload } = attributes;
+      const coerced: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(payload)) {
+        if (v === "true") coerced[k] = true;
+        else if (v === "false") coerced[k] = false;
+        else if (v !== "" && !isNaN(Number(v))) coerced[k] = Number(v);
+        else coerced[k] = v;
+      }
+      if (KNOWN_COMMANDS.has(actionName)) {
+        Promise.resolve(
+          executeUICommand({ __ui_command__: true, command: actionName as CommandName, payload: coerced as never }),
+        ).catch((e) => console.warn("[executeAction]", e));
+        return;
+      }
+      window.dispatchEvent(new CustomEvent(LEO_ACTION_EVENT, { detail: { name: actionName, attributes: coerced } }));
+    },
+  };
+};

@@ -26,6 +26,10 @@ export interface ChatInputProps {
   className?: string;
   /** 工具栏渲染在输入框下方 */
   toolbar?: React.ReactNode;
+  /** 运行中按 Enter：插话，在下一个步骤边界送达（输入框第 1 期，参考 dsh / codex） */
+  onSteer?: () => void;
+  /** 运行中按 Ctrl/Cmd+Enter：排队，本轮结束后接着处理 */
+  onQueue?: () => void;
 }
 
 /** 输入法组字期间（中文拼音选词等）的按键不能当作发送或停止 */
@@ -49,6 +53,8 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
       onVoice,
       className,
       toolbar,
+      onSteer,
+      onQueue,
     },
     ref
   ) => {
@@ -97,10 +103,15 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        // 运行中允许继续输入，但暂不支持插话/排队（输入框第 1 期），草稿保留
-        if (!isBusy && value.trim()) {
+        if (!value.trim()) return;
+        if (!isBusy) {
           onSend();
+        } else if ((e.ctrlKey || e.metaKey) && onQueue) {
+          onQueue();
+        } else if (!e.ctrlKey && !e.metaKey && onSteer) {
+          onSteer();
         }
+        // 没有提供 onSteer / onQueue 时，运行中按 Enter 只保留草稿
       }
     };
 

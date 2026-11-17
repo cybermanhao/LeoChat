@@ -80,10 +80,20 @@ function AppInit({ children }: { children: React.ReactNode }) {
     // @ts-ignore - Vite env types
     if (import.meta.env.DEV) {
       window.__devClearHistory = () => {
-        useChatStore.getState().clearAllConversations();
+        void useChatStore.getState().clearAllConversations();
         console.log("[Dev] All chat history cleared");
       };
     }
+  }, []);
+
+  // 会话保存在本地 server：等持久化的设置（含当前会话 id）恢复后，再拉会话列表
+  useEffect(() => {
+    const load = () => void useChatStore.getState().loadConversations();
+    if (useChatStore.persist.hasHydrated()) {
+      load();
+      return;
+    }
+    return useChatStore.persist.onFinishHydration(load);
   }, []);
 
   // 初始化国际化系统

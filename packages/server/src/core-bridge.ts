@@ -252,8 +252,10 @@ export interface LegacySessionManager {
 /** 需要人工审批的工具（与原来的行为一致：只有 bash） */
 export const APPROVAL_TOOLS = new Set(["bash"]);
 
-export function mcpCoreTools(sessionManager: LegacySessionManager, truncate: (s: string) => string): AnyTool[] {
-  return sessionManager.getToolsForLLM().map((t) =>
+/** allow 给出时只提供这些名字的工具（GUI 里用户禁用的工具，例如默认关闭的 bash，不交给模型） */
+export function mcpCoreTools(sessionManager: LegacySessionManager, truncate: (s: string) => string, allow?: ReadonlySet<string>): AnyTool[] {
+  const all = sessionManager.getToolsForLLM();
+  return (allow ? all.filter((t) => allow.has(t.function.name)) : all).map((t) =>
     defineTool({
       name: t.function.name,
       description: t.function.description ?? "",
