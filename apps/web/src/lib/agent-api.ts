@@ -4,6 +4,7 @@
  */
 import type { AgentEvent, Goal, Message } from "@leochat/core";
 import { getServerBaseUrl } from "./api";
+import type { LoopRule } from "./loop-command";
 
 export interface ConversationMeta {
   id: string;
@@ -43,6 +44,18 @@ export interface LoadedConversation {
 }
 
 export type GoalAction = "edit" | "pause" | "resume" | "complete" | "clear";
+
+/** 定时提醒（/loop），与 server 的 Schedule 相同的结构（只列出界面用到的字段） */
+export interface ScheduleView {
+  id: string;
+  conversationId: string;
+  title: string;
+  prompt: string;
+  rule: LoopRule;
+  timeZone: string;
+  state: "active" | "ended";
+  nextAt: number | null;
+}
 
 const VITE_BACKEND_URL = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
 
@@ -122,6 +135,22 @@ export const agentApi = {
       ...(signal ? { signal } : {}),
     });
     if (!res.ok || !res.body) throw new Error(`goal run failed: ${res.status}`);
+    yield* parseEventStream(res.body);
+  },
+
+  listSchedules: (conversationId: string) =>
+    call<{ schedules: ScheduleView[] }>("GET", `/schedules?conversationId=${encodeURIComponent(conversationId)}`).then((r) => r.schedules),
+  createSchedule: (conversationId: string, input: { prompt: string; rule: LoopRule; title?: string; timeZone?: string; settings?: RunSettings }) =>
+    call<{ schedule: ScheduleView }>("POST", `/conversations/${encodeURIComponent(conversationId)}/schedules`, input).then((r) => r.schedule),
+  deleteSchedule: (id: string) => call<unknown>("DELETE", `/schedules/${encodeURIComponent(id)}`),
+
+  /** 观察会话（长连接）：收到 server 自己发起的运行（定时提醒）的事件 */
+  async *watch(conversationId: string, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/watch`, {
+      headers: { Accept: "text/event-stream" },
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`watch failed: ${res.status}`);
     yield* parseEventStream(res.body);
   },
 

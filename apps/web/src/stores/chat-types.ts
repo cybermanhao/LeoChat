@@ -1,7 +1,8 @@
 import type { LLMConfig, MCPTool } from "@ai-chatbox/shared";
 import type { Goal } from "@leochat/core";
 import type { RunViewState } from "@leochat/core/view";
-import type { ConversationMeta } from "../lib/agent-api";
+import type { ConversationMeta, ScheduleView } from "../lib/agent-api";
+import type { LoopRule } from "../lib/loop-command";
 
 export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
 
@@ -51,6 +52,8 @@ export interface ConversationsSlice {
   loadingConversation: boolean;
   /** 当前会话的目标（/goal）；没有时为 null */
   goal: Goal | null;
+  /** 当前会话的定时提醒（/loop） */
+  schedules: ScheduleView[];
   input: string;
 
   setInput: (input: string) => void;
@@ -95,6 +98,12 @@ export interface GenerationSlice {
   resumeGoal: (opts?: { extraRounds?: number; systemPrompt?: string }) => Promise<void>;
   completeGoal: () => Promise<void>;
   clearGoal: () => Promise<void>;
+  /** 开始 / 停止观察会话：收到 server 自己发起的运行（定时提醒到期）；断线自动重连 */
+  watchConversation: (id: string | null) => void;
+  /** /loop：给当前会话建一个定时提醒（没有会话就先建一个）；成功返回 true */
+  createSchedule: (prompt: string, rule: LoopRule, systemPrompt?: string) => Promise<boolean>;
+  deleteSchedule: (id: string) => Promise<void>;
+  refreshSchedules: () => Promise<void>;
   /** 回答审批；forSession 表示本次会话内这个工具都自动允许 */
   respondApproval: (callId: string, toolName: string, approved: boolean, forSession?: boolean) => Promise<void>;
 }

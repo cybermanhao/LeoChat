@@ -8,6 +8,7 @@ import { resetStateBypassOnboarding } from "./helpers";
  */
 test.skip(!process.env.LEOCHAT_E2E_LIVE, "needs a live model; set LEOCHAT_E2E_LIVE=1");
 test.setTimeout(180_000);
+test.describe.configure({ retries: 1 });
 
 const input = (page: Page) => page.locator("textarea").first();
 const messages = (page: Page) => page.locator("[data-message-id]");
@@ -50,6 +51,8 @@ test("Enter during a run steers into it instead of starting a new run", async ({
 });
 
 test("web search (DeepSeek native) shows the search and its sources", async ({ page }) => {
+  // 是否真的去搜索由模型决定，偶尔会直接回答；允许重试一次
+  test.info().annotations.push({ type: "flaky", description: "model may skip the search" });
   await page.goto("/");
   await resetStateBypassOnboarding(page);
   await page.getByRole("button", { name: "联网" }).click();

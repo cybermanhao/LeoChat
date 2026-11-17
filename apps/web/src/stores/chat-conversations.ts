@@ -16,6 +16,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     view: initialViewState(),
     loadingConversation: false,
     goal: null,
+    schedules: [],
     input: "",
 
     setInput: (input) => set({ input }),
@@ -45,14 +46,16 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         view: initialViewState(),
         loadingConversation: false,
         goal: null,
+        schedules: [],
       }));
+      get().watchConversation(meta.id);
       return meta.id;
     },
 
     setCurrentConversation: async (id) => {
       get().leaveConversation();
       const seq = ++loadSeq;
-      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null, goal: null });
+      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null, goal: null, schedules: [] });
       if (!id) return;
       try {
         const { meta, transcript, goal, goalRunning } = await agentApi.loadConversation(id);
@@ -65,6 +68,9 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         }));
         // 目标正在 server 上推进：连上，继续显示进度
         if (goalRunning) void get().attachGoal();
+        // 定时提醒：列表 + 观察 server 发起的运行
+        void get().refreshSchedules();
+        get().watchConversation(id);
       } catch (e) {
         if (seq !== loadSeq) return;
         console.warn("[conversations] open failed", e);
@@ -90,7 +96,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
       const ids = get().conversations.map((c) => c.id);
       await Promise.all(ids.map((id) => agentApi.deleteConversation(id).catch(() => {})));
       loadSeq++;
-      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false, goal: null });
+      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false, goal: null, schedules: [] });
     },
 
     clearCurrentConversation: async () => {
@@ -105,6 +111,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         view: initialViewState(),
         loadingConversation: false,
         goal: null,
+        schedules: [],
       }));
     },
   };

@@ -18,6 +18,10 @@ const api = vi.hoisted(() => ({
   createGoal: vi.fn(),
   updateGoal: vi.fn(),
   runGoal: vi.fn(),
+  watch: vi.fn(),
+  listSchedules: vi.fn(),
+  createSchedule: vi.fn(),
+  deleteSchedule: vi.fn(),
 }));
 const approveToolCall = vi.hoisted(() => vi.fn());
 const executeUI = vi.hoisted(() => vi.fn());
@@ -28,6 +32,7 @@ vi.mock("../../lib/api", () => ({ chatApi: { approveToolCall } }));
 vi.mock("../../lib/ui-commands", () => ({ processToolResultForUICommands: processUI, executeUICommand: executeUI }));
 vi.mock("../../lib/api-error", () => ({ handleApiError: vi.fn() }));
 vi.mock("../../lib/os-notification", () => ({ sendOSNotification: vi.fn() }));
+vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
 import { createConversationsSlice } from "../chat-conversations";
 import { createGenerationSlice } from "../chat-generation";
@@ -82,6 +87,11 @@ beforeEach(() => {
   api.followUp.mockResolvedValue({ result: null });
   api.abort.mockResolvedValue({});
   approveToolCall.mockResolvedValue(undefined);
+  // 默认：watch 连上后什么也不发，提醒列表为空
+  api.watch.mockImplementation(async function* (_id: string, signal: AbortSignal) {
+    await new Promise<void>((r) => signal.addEventListener("abort", () => r(), { once: true }));
+  });
+  api.listSchedules.mockResolvedValue([]);
 });
 
 describe("conversations slice", () => {
@@ -347,5 +357,63 @@ Round: ${n}/256
       { action: "resume", revision: 10 },
     ]);
     expect(api.runGoal).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("/loop in the store", () => {
+  it("a run the server starts (reminder) shows up through watch: user message, streaming state, then idle", async () => {
+    const { get } = makeStore();
+    let push: (e: AgentEvent) => void = () => {};
+    const queue: AgentEvent[] = [];
+    let wake: (() => void) | null = null;
+    push = (e) => {
+      queue.push(e);
+      wake?.();
+    };
+    api.watch.mockImplementation(async function* (_id: string, signal: AbortSignal) {
+      while (!signal.aborted) {
+        const e = queue.shift();
+        if (e) yield e;
+        else await new Promise<void>((r) => (wake = r));
+      }
+    });
+    api.loadConversation.mockResolvedValue({ meta: meta("c1"), transcript: [], goal: null, goalRunning: false });
+    api.listSchedules.mockResolvedValue([{ id: "s1", conversationId: "c1", title: "mail", prompt: "mail", rule: { kind: "daily", time: "09:00" }, timeZone: "Asia/Shanghai", state: "active", nextAt: 1 }]);
+    await get().setCurrentConversation("c1");
+    await vi.waitFor(() => expect(get().schedules).toHaveLength(1));
+
+    push({ type: "user_message", message: { id: "rem", role: "user", content: [{ type: "text", text: "[定时提醒] ..." }] }, via: "followUp" });
+    push({ type: "run_start", runId: "srv_run", at: 1 });
+    await vi.waitFor(() => expect(get().isGenerating).toBe(true));
+    expect(get().activeRunId).toBe("srv_run");
+    for (const e of textRun("Morning summary.", "srv_run").slice(1)) push(e);
+    await vi.waitFor(() => expect(get().isGenerating).toBe(false));
+    expect(get().view.messages.map((m) => m.id)).toEqual(["rem", "a1"]);
+    expect(api.listSchedules.mock.calls.length).toBeGreaterThanOrEqual(2); // run_end 后刷新提醒列表
+
+    // 离开会话：停止观察
+    api.loadConversation.mockResolvedValue({ meta: meta("c2"), transcript: [], goal: null, goalRunning: false });
+    await get().setCurrentConversation("c2");
+    expect(api.watch.mock.calls.at(-1)![0]).toBe("c2");
+  });
+
+  it("createSchedule saves the current run settings and deleteSchedule removes it", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    api.createSchedule.mockImplementation(async (id: string, input: { prompt: string; rule: unknown }) => ({
+      id: "s9", conversationId: id, title: input.prompt, prompt: input.prompt, rule: input.rule, timeZone: "UTC", state: "active", nextAt: 2,
+    }));
+    api.deleteSchedule.mockResolvedValue({});
+    expect(await get().createSchedule("check mail", { kind: "interval", everySeconds: 1800 }, "sys")).toBe(true);
+    expect(api.createSchedule.mock.calls[0]![1]).toMatchObject({
+      prompt: "check mail",
+      rule: { kind: "interval", everySeconds: 1800 },
+      settings: { system: "sys", model: "deepseek-chat", tools: ["read_file"] },
+    });
+    expect(get().schedules.map((x) => x.id)).toEqual(["s9"]);
+    await get().deleteSchedule("s9");
+    expect(get().schedules).toEqual([]);
+    api.createSchedule.mockRejectedValueOnce(new Error("400"));
+    expect(await get().createSchedule("x", { kind: "daily", time: "09:00" })).toBe(false);
   });
 });

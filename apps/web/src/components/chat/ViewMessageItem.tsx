@@ -3,7 +3,7 @@
  * 取代旧的 contentItems 渲染。
  */
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, Globe, Loader2, Paperclip, ExternalLink, Target } from "lucide-react";
+import { ChevronRight, Globe, Loader2, Paperclip, ExternalLink, Target, AlarmClock } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage, LeoCardView, ToolCallBlock, cn, type ToolCallStatus } from "@ai-chatbox/ui";
 import { normalizeLeoCard, type LeoCard, type LeoCardAction } from "@ai-chatbox/shared";
 import type { ToolPartState, ViewMessage, ViewPart } from "@leochat/core/view";
@@ -170,6 +170,27 @@ export function goalRoundOf(m: ViewMessage): { round: number; maxRounds: number 
   return r ? { round: Number(r[1]), maxRounds: Number(r[2]) } : null;
 }
 
+/** 定时提醒消息（server 的 renderReminder）："[定时提醒]" 开头，正文在第一个空行之后 */
+export function reminderOf(text: string): { prompt: string } | null {
+  if (!text.startsWith("[定时提醒]")) return null;
+  const i = text.indexOf("\n\n");
+  return { prompt: i >= 0 ? text.slice(i + 2) : text.slice("[定时提醒]".length).trim() };
+}
+
+function UserText({ text }: { text: string }) {
+  const reminder = reminderOf(text);
+  if (!reminder) return <div className="whitespace-pre-wrap text-sm">{text}</div>;
+  return (
+    <div className="text-sm" data-reminder>
+      <div className="mb-1 inline-flex items-center gap-1 rounded bg-primary-foreground/15 px-1.5 py-0.5 text-xs">
+        <AlarmClock className="h-3 w-3" />
+        定时提醒
+      </div>
+      <div className="whitespace-pre-wrap">{reminder.prompt}</div>
+    </div>
+  );
+}
+
 export interface ViewMessageItemProps {
   message: ViewMessage;
   /** 这条消息是否还在生成（显示占位光标） */
@@ -231,7 +252,7 @@ export const ViewMessageItem = memo(function ViewMessageItem({ message, isStream
                 if (!p.text) return null;
                 return (
                   <div key={i} className="px-4 py-2">
-                    {isUser ? <div className="whitespace-pre-wrap text-sm">{p.text}</div> : renderText(p.text, p.streaming)}
+                    {isUser ? <UserText text={p.text} /> : renderText(p.text, p.streaming)}
                   </div>
                 );
               case "reasoning":

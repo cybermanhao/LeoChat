@@ -31,6 +31,9 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ViewMessageItem, messageText } from "./chat/ViewMessageItem";
 import { ApprovalBanner, QueuedBar } from "./chat/RunBanners";
 import { GoalBar } from "./chat/GoalBar";
+import { ScheduleBar } from "./chat/ScheduleBar";
+import { parseLoopCommand } from "../lib/loop-command";
+import { showToast } from "../stores/toast";
 
 /**
  * parseActionTags/parseCardTags 对整段文本做正则扫描——流式输出时，每个 token 到达
@@ -97,6 +100,9 @@ export function ChatArea() {
   const setInput = useChatStore((s) => s.setInput);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const startGoal = useChatStore((s) => s.startGoal);
+  const createSchedule = useChatStore((s) => s.createSchedule);
+  const hasSchedules = useChatStore((s) => s.schedules.length > 0);
+  const hasGoal = useChatStore((s) => s.goal !== null);
   const cancelGeneration = useChatStore((s) => s.cancelGeneration);
   const clearCurrentConversation = useChatStore((s) => s.clearCurrentConversation);
   const currentProvider = useChatStore((s) => s.currentProvider);
@@ -387,6 +393,13 @@ export function ChatArea() {
         if (objective) void startGoal(objective, assembledPrompt ? { systemPrompt: assembledPrompt } : {});
         return;
       }
+      // /loop <间隔或时间> <内容>：定时提醒（harness 第二期）
+      const loop = parseLoopCommand(input);
+      if (loop) {
+        if (!loop.ok) showToast(loop.error, "destructive");
+        else void createSchedule(loop.prompt, loop.rule, assembledPrompt || undefined);
+        return;
+      }
       sendMessage(input, assembledPrompt);
     }
   };
@@ -644,7 +657,8 @@ export function ChatArea() {
   );
 
   // 空状态：居中显示欢迎信息和输入框（仅在没有消息且不在生成中时显示）
-  if (messages.length === 0 && !isGenerating) {
+  // 空白欢迎页：没有消息、没在生成，也没有定时提醒或目标（否则需要显示对应的状态条）
+  if (messages.length === 0 && !isGenerating && !hasSchedules && !hasGoal) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-hidden p-4">
         <div className="w-full max-w-2xl space-y-8">
@@ -743,6 +757,9 @@ export function ChatArea() {
 
       {/* 等待审批的工具调用，每个一条 */}
       {awaitingApproval.map((p) => (p.type === "tool" ? <ApprovalBanner key={p.callId} part={p} /> : null))}
+
+      {/* 定时提醒（/loop） */}
+      <ScheduleBar />
 
       {/* 目标（/goal）状态条 */}
       <GoalBar {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />

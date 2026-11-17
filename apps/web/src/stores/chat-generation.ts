@@ -5,6 +5,7 @@ import type { CommandName } from "../lib/ui-commands";
 import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
 import { agentApi, type GoalAction, type RunSettings } from "../lib/agent-api";
+import { showToast } from "./toast";
 import { chatApi } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
 import type { ChatState, GenerationSlice, SliceCreator } from "./chat-types";
@@ -31,7 +32,9 @@ const KNOWN_COMMANDS: ReadonlySet<string> = new Set<CommandName>([
 ]);
 
 /** 只走副作用、不进视图的 custom 事件 */
-const NON_VIEW_CUSTOM = new Set(["goal", "goal_round", "ui_command"]);
+const NON_VIEW_CUSTOM = new Set(["goal", "goal_round", "ui_command", "ping"]);
+/** watch 断线后多久重连 */
+const WATCH_RETRY_MS = 3_000;
 
 /** 从当前设置组装运行设置（普通运行和目标运行共用） */
 function runSettings(s: ChatState, systemPrompt?: string): RunSettings {
@@ -53,6 +56,10 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
   let controller: AbortController | null = null;
   /** 运行已经开始、但还没收到 run_start（不知道 runId）时的插话，拿到 runId 后再送 */
   let earlySteers: string[] = [];
+  /** watch 长连接（server 发起的运行：定时提醒） */
+  let watchCtl: AbortController | null = null;
+  /** 当前的生成状态来自 watch（server 发起的运行），而不是自己发起的 */
+  let watchRun = false;
 
   /** 事件带来的副作用（视图之外的部分） */
   const sideEffects = (e: AgentEvent) => {
@@ -102,6 +109,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         break;
       case "run_end":
         if (e.result.reason === "completed" && !get().goalAttached) sendOSNotification("LeoChat", "AI 回复完成");
+        // 模型可能用 schedule_create / schedule_delete 改了提醒，一次性提醒也可能已结束
+        void get().refreshSchedules();
         break;
     }
   };
@@ -146,6 +155,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         const meta = await agentApi.createConversation();
         convId = meta.id;
         set((s) => ({ conversations: [meta, ...s.conversations], currentConversationId: meta.id }));
+        get().watchConversation(meta.id);
       }
       return token === runToken ? convId : null;
     } catch (e) {
@@ -258,6 +268,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     },
 
     leaveConversation: () => {
+      get().watchConversation(null);
       if (!get().isGenerating) return;
       if (get().goalAttached) {
         // 目标在 server 上继续推进，回到这个会话时会自动连上
@@ -327,6 +338,77 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
 
     clearGoal: async () => {
       await updateGoal("clear");
+    },
+
+    watchConversation: (id) => {
+      watchCtl?.abort();
+      watchCtl = null;
+      if (watchRun) {
+        watchRun = false;
+        set({ isGenerating: false, activeRunId: null });
+      }
+      if (!id) return;
+      const ctl = new AbortController();
+      watchCtl = ctl;
+      void (async () => {
+        while (!ctl.signal.aborted) {
+          try {
+            for await (const e of agentApi.watch(id, ctl.signal)) {
+              if (ctl.signal.aborted || get().currentConversationId !== id) return;
+              if (e.type === "run_start" && !get().isGenerating) {
+                // server 自己发起了一次运行（定时提醒到期）：像自己的运行一样显示，可以插话、停止
+                watchRun = true;
+                set({ isGenerating: true, answeredApprovals: new Set() });
+              }
+              if (!(e.type === "custom" && NON_VIEW_CUSTOM.has(e.name))) set((s) => ({ view: reduce(s.view, e) }));
+              sideEffects(e);
+              if (e.type === "run_end" && watchRun) {
+                watchRun = false;
+                set({ isGenerating: false, activeRunId: null });
+              }
+            }
+          } catch {
+            /* 断线：稍后重连 */
+          }
+          if (ctl.signal.aborted) return;
+          await new Promise((r) => setTimeout(r, WATCH_RETRY_MS));
+        }
+      })();
+    },
+
+    createSchedule: async (prompt, rule, systemPrompt) => {
+      let convId = get().currentConversationId;
+      try {
+        if (!convId) convId = await get().createConversation();
+        const schedule = await agentApi.createSchedule(convId, {
+          prompt,
+          rule,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          settings: runSettings(get(), systemPrompt),
+        });
+        if (get().currentConversationId === convId) set((s) => ({ schedules: [...s.schedules, schedule], input: "" }));
+        return true;
+      } catch (e) {
+        console.warn("[schedule] create failed", e);
+        showToast("定时提醒创建失败，请检查时间格式", "destructive");
+        return false;
+      }
+    },
+
+    deleteSchedule: async (id) => {
+      await agentApi.deleteSchedule(id).catch((e) => console.warn("[schedule] delete failed", e));
+      set((s) => ({ schedules: s.schedules.filter((x) => x.id !== id) }));
+    },
+
+    refreshSchedules: async () => {
+      const convId = get().currentConversationId;
+      if (!convId) return;
+      try {
+        const schedules = await agentApi.listSchedules(convId);
+        if (get().currentConversationId === convId) set({ schedules });
+      } catch {
+        /* 保留旧列表 */
+      }
     },
 
     respondApproval: async (callId, toolName, approved, forSession) => {
