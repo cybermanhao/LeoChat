@@ -193,17 +193,27 @@ export function legacyProvider(llm: LegacyLLM, providerName?: LLMProvider): Lega
         },
       );
 
-      while (true) {
-        if (queue.length) {
-          yield queue.shift()!;
-          continue;
+      // 中止时立刻结束，不等上游返回（上游连接卡住时，暂停 / 停止也不会跟着卡住）
+      const onAbort = () => {
+        done = true;
+        wake?.();
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        while (true) {
+          if (queue.length && !signal?.aborted) {
+            yield queue.shift()!;
+            continue;
+          }
+          if (done) break;
+          await new Promise<void>((r) => (wake = r));
+          wake = null;
         }
-        if (done) break;
-        await new Promise<void>((r) => (wake = r));
-        wake = null;
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
       }
-      await running;
       signal?.throwIfAborted();
+      await running;
       if (failure !== undefined) {
         self.lastError = failure;
         throw classify(failure);
