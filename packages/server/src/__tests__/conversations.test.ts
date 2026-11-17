@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialViewState, reduce } from "@leochat/core/view";
-import type { AgentEvent } from "@leochat/core";
+import type { AgentEvent, Message } from "@leochat/core";
 import {
   agentIdle,
   gated,
@@ -31,6 +31,16 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
+
+/** 客户端的做法：reset 时用其中的 transcript 重建视图，之后的事件依次 reduce */
+function rebuild(events: AgentEvent[]) {
+  let view = initialViewState();
+  for (const e of events) {
+    if (isCustom(e, "reset")) view = initialViewState((e.data as { transcript: Message[] }).transcript);
+    else view = reduce(view, e);
+  }
+  return view;
+}
 
 const inboxOf = (events: AgentEvent[]) =>
   (events.filter((e) => isCustom(e, "inbox")).at(-1)! as { data: { nextTurn: Array<{ text: string }>; nextStep: unknown[] } }).data;
@@ -122,9 +132,9 @@ describe("messages go through the inbox", () => {
     await new Promise((r) => setTimeout(r, 50));
     g.release();
     const events = await late;
-    let view = initialViewState();
-    for (const e of events) view = reduce(view, e);
-    expect(view.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    // 客户端的做法：reset 时用其中的 transcript 重建视图，之后的事件依次 reduce
+    const view = rebuild(events);
+    expect(view.messages.map((m) => m.role)).toEqual(["user", "assistant"]); // 不重复
     expect(JSON.stringify(view.messages[1]!.parts)).toContain("partial output");
   });
 
@@ -224,5 +234,28 @@ describe("tools and errors", () => {
     expect((await req(app, "GET", "/conversations/conv_missing/events")).status).toBe(404);
     expect((await req(app, "DELETE", `/conversations/${id}`)).status).toBe(200);
     expect((await req(app, "GET", `/conversations/${id}`)).status).toBe(404);
+  });
+});
+
+describe("reset event", () => {
+  it("an idle stream starts with the whole transcript; a mid-turn connect does not duplicate persisted steps", async () => {
+    const g = gated("second step");
+    const { app } = makeApp(dir, [text("first answer"), tool("t1", "read_file", {}), g.round], { tools: ["read_file"] });
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "one");
+    await l.until(turnsDone(1));
+    const idle = await listen(app, id);
+    expect(idle.events[0]).toMatchObject({ type: "custom", name: "reset" });
+    expect((idle.events[0] as { data: { transcript: unknown[] } }).data.transcript).toHaveLength(2);
+    await idle.close();
+
+    await say(app, id, "two");
+    await l.until((ev) => ev.some((e) => e.type === "tool_end")); // 第一步（含工具结果）已写盘
+    const late = await listen(app, id);
+    g.release();
+    const view = rebuild(await late.until(turnsDone(1)));
+    expect(view.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "assistant"]);
+    expect(view.messages.filter((m) => m.parts.some((p) => p.type === "tool"))).toHaveLength(1);
   });
 });

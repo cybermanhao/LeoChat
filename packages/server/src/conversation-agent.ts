@@ -60,6 +60,8 @@ export class ConversationAgent<S = unknown> {
   private running: { handle: RunHandle; source: InboxSource; goalId?: string } | null = null;
   /** 当前这一轮已发生的事件（中途连上的客户端用） */
   private buffer: AgentEvent[] = [];
+  /** 当前这一轮开始前的 transcript：中途连上的客户端从这里重建视图，再回放 buffer（不会重复） */
+  private base: Message[] = [];
   private readonly subscribers = new Set<(e: AgentEvent) => void>();
   /** 已交给当前运行、等待送达的插话：message id → inbox item id */
   private readonly steering = new Map<string, string>();
@@ -92,11 +94,16 @@ export class ConversationAgent<S = unknown> {
     return () => this.subscribers.delete(fn);
   }
 
-  /** 新订阅者需要的快照：状态、收件箱、目标、当前这一轮的事件 */
+  /**
+   * 新订阅者需要的快照：reset（重建视图用的 transcript：运行中是这一轮开始前的，空闲时是全部）、
+   * 状态、收件箱、目标、当前这一轮已发生的事件
+   */
   async snapshot(): Promise<AgentEvent[]> {
     const conv = await this.deps.log.load(this.deps.id);
     const goal = (await this.deps.goals()).get();
+    const running = this.running !== null;
     return [
+      { type: "custom", name: "reset", data: { transcript: running ? this.base : (conv?.transcript ?? []) } },
       this.statusEvent(),
       { type: "custom", name: "inbox", data: conv ? this.inboxView(conv.inbox) : { nextTurn: [], nextStep: [] } },
       this.goalEvent(goal),
@@ -270,6 +277,7 @@ export class ConversationAgent<S = unknown> {
       return this.startTurn();
     }
 
+    this.base = conv.transcript;
     const handle = run({
       ...setup.options,
       messages: [...conv.transcript, ...claimed.map((x) => x.message)],
