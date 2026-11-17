@@ -79,7 +79,7 @@ describe("mapMessagesStream (recorded DeepSeek responses)", () => {
     expect(thinking.type === "thinking" && typeof thinking.providerData?.signature).toBe("string");
 
     const use = blocks[1]!;
-    expect(use).toMatchObject({ type: "server_tool_use", name: "deepseek_web_search" });
+    expect(use).toMatchObject({ type: "server_tool_use", name: "web_search", providerData: { raw: { name: "deepseek_web_search" } } }); // 通用名；原始块用于重放
     expect(use.type === "server_tool_use" && (use.input as { queries: string[] }).queries.length).toBeGreaterThan(0);
 
     const result = blocks[2]!;

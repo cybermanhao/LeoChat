@@ -35,6 +35,12 @@ type Json = Record<string, unknown>;
 
 const SERVER_TOOL_WIRE = { web_search: "deepseek_web_search", read_url: "deepseek_read_url" } as const;
 
+/** 线上的服务端工具名（deepseek_web_search）→ 通用名（web_search），界面不用认识各家的名字；原始块仍在 providerData.raw 里用于重放 */
+function fromWireToolName(name: string): string {
+  for (const [kind, wire] of Object.entries(SERVER_TOOL_WIRE)) if (wire === name) return kind;
+  return name;
+}
+
 const IGNORED_WITH_SERVER_TOOLS = [
   "temperature",
   "top_p",
@@ -285,7 +291,7 @@ export async function* mapMessagesStream(records: AsyncIterable<{ event?: string
           break;
         case "server_tool_use":
           open.set(index, { kind: "server_tool_use", raw: cb, json: "" });
-          yield { type: "block_start", index, block: { type: "server_tool_use", id: String(cb.id), name: String(cb.name) } };
+          yield { type: "block_start", index, block: { type: "server_tool_use", id: String(cb.id), name: fromWireToolName(String(cb.name)) } };
           break;
         case "web_search_tool_result":
           open.set(index, { kind: "server_tool_result", raw: cb });
@@ -331,13 +337,13 @@ export async function* mapMessagesStream(records: AsyncIterable<{ event?: string
       } else if (b.kind === "server_tool_use") {
         const input = b.json !== "" ? (parseToolArguments(b.json) ?? b.raw.input) : b.raw.input;
         const raw: Json = { ...b.raw, input };
-        block = { type: "server_tool_use", id: String(raw.id), name: String(raw.name), input, providerData: { raw } };
+        block = { type: "server_tool_use", id: String(raw.id), name: fromWireToolName(String(raw.name)), input, providerData: { raw } };
       } else {
         const content = Array.isArray(b.raw.content) ? (b.raw.content as Json[]) : [];
         block = {
           type: "server_tool_result",
           toolUseId: String(b.raw.tool_use_id ?? ""),
-          name: "deepseek_web_search",
+          name: "web_search",
           results: content.filter((r) => r.type === "web_search_result").map(toSearchResult),
           providerData: { raw: b.raw },
         };
