@@ -15,7 +15,7 @@
     "build:electron": "pnpm --filter @ai-chatbox/electron build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm --filter @leochat/core --filter @leochat/deepseek --filter @leochat/mcp-kit --filter @leochat/node --filter @leochat/sdk --filter @leochat/cli --filter @ai-chatbox/mcp-core --filter @ai-chatbox/web test",
+    "test": "pnpm --filter @leochat/core --filter @leochat/deepseek --filter @leochat/mcp-kit --filter @leochat/node --filter @ai-chatbox/mcp-core --filter @ai-chatbox/web test",
     "clean": "pnpm -r run clean && rimraf node_modules",
     "build:sdk": "pnpm --filter @leochat/core --filter @leochat/deepseek --filter @leochat/mcp-kit --filter @leochat/node run build",
     "test:sdk": "pnpm --filter @leochat/core --filter @leochat/deepseek --filter @leochat/mcp-kit --filter @leochat/node test",

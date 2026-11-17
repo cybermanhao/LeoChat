@@ -1,33 +1,8 @@
-import type { LeoCard } from "./card";
-
-// ============ 消息状态枚举 ============
+// ============ 消息 ============
 
 /**
- * 消息最终状态
- */
-export enum MessageState {
-  Success = 'success',
-  Abort = 'abort',
-  Timeout = 'timeout',
-  LLMError = 'llm_error',
-  MCPError = 'mcp_error',
-}
-
-/**
- * 消息卡片渲染状态
- */
-export type MessageCardStatus =
-  | 'connecting'
-  | 'thinking'
-  | 'generating'
-  | 'tool_calling'
-  | 'stable';
-
-// ============ 核心消息类型 ============
-
-/**
- * Message - 统一消息格式
- * 用于: LLM 交互、存储、前后端通信
+ * LLMService（OpenAI 兼容接口）使用的消息格式。
+ * 对话本身、持久化和界面都用 @leochat/core 的 Message（内容块）；这个类型只在旧桥接里使用。
  */
 export interface Message {
   id: string;
@@ -36,167 +11,12 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   timestamp: number;
-  state?: MessageState;
   reasoning_content?: string;
   metadata?: MessageMetadata;
-  /** @deprecated 使用 toDisplayMessage() 转换，此字段将被移除 */
-  contentItems?: ContentItem[];
 }
 
-// ============ UI 显示类型 ============
-
-/**
- * 内容项类型
- */
-export type ContentItemType =
-  | 'text'
-  | 'tool-call'
-  | 'tool-result'
-  | 'ui-command'
-  | 'card'
-  | 'leo-card'
-  | 'action-button';
-
-/**
- * 内容项
- */
-export interface ContentItem {
-  id: string;
-  type: ContentItemType;
-  content: string | ToolCall | ToolResult | UICommand | CardData | ActionButtonData | LeoCard;
-  timestamp: number;
-  status?: 'pending' | 'running' | 'completed' | 'error';
-}
-
-/**
- * DisplayMessage - UI 显示消息
- * 由 Message 转换而来，仅用于前端渲染
- */
-export interface DisplayMessage {
-  id: string;
-  role: "user" | "assistant" | "system" | "tool";
-  contentItems: ContentItem[];
-  timestamp: number;
-  reasoning_content?: string;
-  metadata?: MessageMetadata;
-  /** 生成被用户中断时标记，用于在气泡末尾显示提示 */
-  interrupted?: boolean;
-}
-
-// ============ 转换函数 ============
-
-/**
- * 将 Message 转换为 DisplayMessage
- */
-export function toDisplayMessage(msg: Message): DisplayMessage {
-  const contentItems: ContentItem[] = [];
-
-  // 添加文本内容
-  if (msg.content) {
-    contentItems.push({
-      id: `${msg.id}-text`,
-      type: 'text',
-      content: msg.content,
-      timestamp: msg.timestamp,
-    });
-  }
-
-  // 添加工具调用
-  if (msg.tool_calls) {
-    for (const tc of msg.tool_calls) {
-      contentItems.push({
-        id: `${msg.id}-tc-${tc.id}`,
-        type: 'tool-call',
-        content: tc,
-        timestamp: msg.timestamp,
-        status: tc.status,
-      });
-    }
-  }
-
-  return {
-    id: msg.id,
-    role: msg.role,
-    contentItems,
-    timestamp: msg.timestamp,
-    reasoning_content: msg.reasoning_content,
-    metadata: msg.metadata,
-  };
-}
-
-/**
- * 从 DisplayMessage 提取用于 LLM 的 Message
- */
-export function toMessage(dm: DisplayMessage): Message {
-  const textItems = dm.contentItems.filter(item => item.type === 'text');
-  const toolCallItems = dm.contentItems.filter(item => item.type === 'tool-call');
-
-  return {
-    id: dm.id,
-    role: dm.role,
-    content: textItems.map(item => typeof item.content === 'string' ? item.content : '').join(''),
-    tool_calls: toolCallItems.length > 0
-      ? toolCallItems.map(item => item.content as ToolCall)
-      : undefined,
-    timestamp: dm.timestamp,
-    reasoning_content: dm.reasoning_content,
-    metadata: dm.metadata,
-  };
-}
-
-// ============ 向后兼容别名 ============
-
-/** @deprecated Use Message instead */
+/** @deprecated 同 Message */
 export type ChatMessage = Message;
-
-/** @deprecated Use Message instead */
-export type ContextMessage = Message;
-
-/** @deprecated Use ContentItem instead */
-export type MessageContentItem = ContentItem;
-
-/** @deprecated Use ContentItemType instead */
-export type MessageContentType = ContentItemType;
-
-/** @deprecated Use ContentItem[] instead */
-export type BubbleContentArray = ContentItem[];
-
-/** @deprecated Use ContentItem instead */
-export type BubbleContentItem = ContentItem;
-
-/** @deprecated Use ContentItemType instead */
-export type BubbleContentType = ContentItemType;
-
-// 工具结果类型
-export interface ToolResult {
-  id: string;
-  toolCallId: string;
-  result: unknown;
-  error?: string;
-  status: 'success' | 'error';
-}
-
-// UI命令类型
-export interface UICommand {
-  command: 'update_theme' | 'show_notification' | 'show_confirm' | 'open_panel' | 'close_panel' | 'copy_to_clipboard' | 'open_url' | 'scroll_to_message' | 'set_input' | /** @deprecated Use leo-card content items instead */ 'render_cards';
-  payload: Record<string, unknown>;
-}
-
-/** @legacy Use leo-card content items instead */
-export interface CardData {
-  title?: string;
-  description?: string;
-  image?: string;
-  link?: string;
-  linkText?: string;
-}
-
-// 动作按钮数据类型
-export interface ActionButtonData {
-  name: string;
-  label: string;
-  attributes: Record<string, string>;
-}
 
 export interface MessageMetadata {
   model?: string;
@@ -322,52 +142,9 @@ export interface ThemeConfig {
   radius: string;
 }
 
-// Stream parsing types
-export interface StreamChunk {
-  type: "text" | "code" | "image" | "action" | "tool_call";
-  content: string;
-  metadata?: Record<string, unknown>;
-  isComplete: boolean;
-}
-
-export interface CodeBlockState {
-  language: string;
-  content: string;
-  isComplete: boolean;
-}
-
 // Host bridge types (for Electron/Web abstraction)
 export type HostMode = "web" | "electron";
 
-export interface HostBridge {
-  mode: HostMode;
-  sendMessage: (channel: string, data: unknown) => Promise<unknown>;
-  onMessage: (channel: string, callback: (data: unknown) => void) => () => void;
-  invoke: <T>(method: string, ...args: unknown[]) => Promise<T>;
-}
-
-// API types
-export interface LLMRequest {
-  model: string;
-  messages: ChatMessage[];
-  stream?: boolean;
-  temperature?: number;
-  maxTokens?: number;
-  tools?: MCPTool[];
-}
-
-export interface LLMResponse {
-  id: string;
-  choices: {
-    message: ChatMessage;
-    finishReason: string;
-  }[];
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
 
 // Server API types
 export interface ServerStatus {
@@ -379,24 +156,8 @@ export interface ServerStatus {
   uptime: number;
 }
 
-// Event types
-export type AppEvent =
-  | { type: "message:send"; payload: ChatMessage }
-  | { type: "message:stream"; payload: StreamChunk }
-  | { type: "message:complete"; payload: { messageId: string } }
-  | { type: "theme:update"; payload: Partial<ThemeConfig> }
-  | { type: "mcp:connect"; payload: MCPServerConfig }
-  | { type: "mcp:disconnect"; payload: { serverId: string } }
-  | { type: "tool:execute"; payload: ToolCall };
-
-// Re-export TaskLoop types
-export * from "./task-loop";
-
-// Re-export Retry types
-export * from "./retry";
-
-// Re-export Checkpoint types
-export * from "./checkpoint";
+// LLM 配置
+export * from "./llm";
 
 // Re-export Card types
 export * from "./card";

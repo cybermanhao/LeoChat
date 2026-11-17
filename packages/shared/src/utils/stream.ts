@@ -1,103 +1,10 @@
-import type { StreamChunk, CodeBlockState, CardData } from "../types";
-
-/**
- * Parse streaming text for code blocks and special markers
- */
-export function parseStreamChunk(
-  text: string,
-  currentState: CodeBlockState | null
-): { chunks: StreamChunk[]; state: CodeBlockState | null } {
-  const chunks: StreamChunk[] = [];
-  let state = currentState;
-
-  // Check for code block markers
-  const codeBlockStart = /```(\w+)?/;
-  const codeBlockEnd = /```\s*$/;
-
-  if (state) {
-    // We're inside a code block
-    if (codeBlockEnd.test(text)) {
-      state.content += text.replace(codeBlockEnd, "");
-      state.isComplete = true;
-      chunks.push({
-        type: "code",
-        content: state.content,
-        metadata: { language: state.language },
-        isComplete: true,
-      });
-      state = null;
-    } else {
-      state.content += text;
-      chunks.push({
-        type: "code",
-        content: state.content,
-        metadata: { language: state.language },
-        isComplete: false,
-      });
-    }
-  } else {
-    // Check if starting a new code block
-    const match = codeBlockStart.exec(text);
-    if (match) {
-      // Handle multiple code blocks in one chunk by recursively parsing remaining content
-      const afterCode = text.slice(match.index + match[0].length);
-      const endMatch = codeBlockEnd.exec(afterCode);
-      if (endMatch) {
-        // Complete code block within this chunk
-        const beforeCode = text.slice(0, match.index);
-        if (beforeCode.trim()) {
-          chunks.push({
-            type: "text",
-            content: beforeCode,
-            isComplete: true,
-          });
-        }
-        const codeContent = afterCode.slice(0, endMatch.index);
-        chunks.push({
-          type: "code",
-          content: codeContent,
-          metadata: { language: match[1] || "plaintext" },
-          isComplete: true,
-        });
-        const remaining = afterCode.slice(endMatch.index + endMatch[0].length);
-        if (remaining) {
-          const rest = parseStreamChunk(remaining, null);
-          chunks.push(...rest.chunks);
-        }
-        state = null;
-        return { chunks, state };
-      }
-      // Incomplete code block - fall through to original logic
-
-      const beforeCode = text.slice(0, match.index);
-      if (beforeCode.trim()) {
-        chunks.push({
-          type: "text",
-          content: beforeCode,
-          isComplete: true,
-        });
-      }
-      state = {
-        language: match[1] || "plaintext",
-        content: text.slice(match.index + match[0].length),
-        isComplete: false,
-      };
-      chunks.push({
-        type: "code",
-        content: state.content,
-        metadata: { language: state.language },
-        isComplete: false,
-      });
-    } else {
-      chunks.push({
-        type: "text",
-        content: text,
-        isComplete: true,
-      });
-    }
-  }
-
-  return { chunks, state };
+/** 消息文本里的 <card> 卡片标签解析结果 */
+export interface CardData {
+  title?: string;
+  description?: string;
+  image?: string;
+  link?: string;
+  linkText?: string;
 }
 
 /**
@@ -183,30 +90,4 @@ function parseCardAttributes(attrsStr: string): CardData {
     }
   }
   return card;
-}
-
-/**
- * Check if content contains incomplete special blocks
- */
-export function hasIncompleteBlock(content: string): {
-  type: "mermaid" | "table" | "code" | null;
-  isIncomplete: boolean;
-} {
-  // Check for incomplete mermaid
-  if (content.includes("```mermaid") && !content.match(/```mermaid[\s\S]*?```/)) {
-    return { type: "mermaid", isIncomplete: true };
-  }
-
-  // Check for incomplete table (has <table> but no </table>)
-  if (content.includes("<table") && !content.includes("</table>")) {
-    return { type: "table", isIncomplete: true };
-  }
-
-  // Check for any incomplete code block
-  const codeBlockStarts = (content.match(/```/g) || []).length;
-  if (codeBlockStarts % 2 !== 0) {
-    return { type: "code", isIncomplete: true };
-  }
-
-  return { type: null, isIncomplete: false };
 }
