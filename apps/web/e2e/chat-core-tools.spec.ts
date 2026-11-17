@@ -63,3 +63,21 @@ test("Reject is reported back to the model and the run still finishes", async ({
   await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
   await expect(page.locator("[data-message-id]").last()).toContainText("已取消");
 });
+
+test("UI tools run in-process: the model switches the theme without any MCP server", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  // 不连接任何 MCP 服务：界面工具由 server 进程内提供
+  await page.evaluate(() =>
+    localStorage.setItem("leochat-mcp-storage", JSON.stringify({ state: { autoConnectServerIds: [] }, version: 0 })),
+  );
+  await page.reload();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+  await input(page).fill("请调用 update_theme 工具，把界面主题切换成深绿色（dark-green）。");
+  await input(page).press("Enter");
+  await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.locator("html")).toHaveClass(/dark/, { timeout: 10_000 });
+  const stored = await page.evaluate(() => localStorage.getItem("ai-chatbox-theme"));
+  expect(stored).toContain("dark-green");
+});

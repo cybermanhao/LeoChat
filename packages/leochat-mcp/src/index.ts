@@ -1,107 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
-import { themePresets, type ThemePreset } from "@ai-chatbox/shared";
+import { themePresets } from "@ai-chatbox/shared";
 import { exec } from "child_process";
 
 /**
  * LeoChat MCP Server
  *
- * 通过 MCP 协议为 LeoChat 提供 UI 控制能力
- * 前端通过解析工具结果中的 __ui_command__ 字段来执行 UI 操作
+ * 提供 bash、测试工具和示例工具。界面操作工具（主题、通知、面板、剪贴板……）
+ * 已移到 LeoChat server 进程内（packages/server/src/ui-tools.ts），不再经过 MCP。
+ * leochat_tool_guide 提示词仍然描述那些界面工具的用法（工具名不变）。
  */
-
-// ============================================================================
-// UI Command DSL 类型定义
-// ============================================================================
-
-type CommandName =
-  | "update_theme"
-  | "show_notification"
-  | "show_confirm"
-  | "open_panel"
-  | "close_panel"
-  | "copy_to_clipboard"
-  | "open_url"
-  | "scroll_to_message"
-  | "set_input"
-  | "resize_window"
-  // @deprecated render_cards is deprecated — cards are now structured content,
-  // not UI commands. Remove this union member in a future cleanup pass.
-  | "render_cards";
-
-interface UICommand {
-  __ui_command__: true;
-  command: CommandName;
-  payload: Record<string, unknown>;
-}
-
-function createUICommand(
-  command: CommandName,
-  payload: Record<string, unknown>
-): UICommand {
-  return {
-    __ui_command__: true,
-    command,
-    payload,
-  };
-}
-
-/**
- * 转义 HTML 属性值中的特殊字符
- */
-function escapeAttr(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 // ============================================================================
 // 主题配置 - 从 @ai-chatbox/shared 导入，自动同步
 // ============================================================================
-
-// 从 themePresets 生成主题映射
-const THEME_MAP = new Map<string, ThemePreset>(
-  themePresets.map((t) => [t.id, t])
-);
-
-// 主题别名（用于自然语言匹配）
-const THEME_ALIASES: Record<string, string> = {
-  默认: "light",
-  浅色: "light",
-  深色: "dark",
-  紫色: "light-purple",
-  深紫: "dark-purple",
-  绿色: "light-green",
-  深绿: "dark-green",
-  purple: "light-purple",
-  green: "light-green",
-};
-
-function resolveThemeId(input: string): string | null {
-  // 直接匹配
-  if (THEME_MAP.has(input)) return input;
-  // 别名匹配
-  if (THEME_ALIASES[input]) return THEME_ALIASES[input];
-  // 模糊匹配
-  const lowerInput = input.toLowerCase();
-  for (const preset of themePresets) {
-    if (preset.id.includes(lowerInput) || lowerInput.includes(preset.id)) {
-      return preset.id;
-    }
-    if (preset.name.toLowerCase().includes(lowerInput)) {
-      return preset.id;
-    }
-  }
-  return null;
-}
-
-// 获取主题列表字符串（用于工具描述）
-function getThemeListString(): string {
-  return themePresets.map((t) => t.id).join(", ");
-}
 
 // 获取主题描述列表（用于 prompt）
 function getThemeDescriptions(): string {
@@ -234,10 +147,6 @@ ${getThemeDescriptions()}
 // 工具处理辅助函数
 // ============================================================================
 
-const makeResponse = (command: UICommand) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(command) }],
-});
-
 const makeError = (message: string) => ({
   content: [{ type: "text" as const, text: message }],
 });
@@ -247,164 +156,6 @@ const makeError = (message: string) => ({
 // ============================================================================
 // 注意：tools/list 由 registerTool 自动生成，不再需要手写 ListToolsRequestSchema
 // handler。themeList 在每次调用时读取，保持和旧版一致的"实时主题列表"行为。
-
-server.registerTool(
-  "update_theme",
-  {
-    description: `更新界面主题。可用: ${getThemeListString()}`,
-    inputSchema: z.object({
-      theme: z.string().describe(`主题 ID: ${getThemeListString()}`).optional(),
-      mode: z.enum(["light", "dark"]).describe("切换明暗模式（保持当前色系）").optional(),
-    }),
-  },
-  async ({ theme, mode }) => {
-    if (theme) {
-      const resolvedTheme = resolveThemeId(theme);
-      if (resolvedTheme) {
-        return makeResponse(createUICommand("update_theme", { themeId: resolvedTheme }));
-      }
-      return makeError(`未知主题: ${theme}。可用: ${getThemeListString()}`);
-    }
-
-    if (mode) {
-      return makeResponse(createUICommand("update_theme", { mode }));
-    }
-
-    return makeError("请指定 theme 或 mode 参数");
-  }
-);
-
-server.registerTool(
-  "show_notification",
-  {
-    description: "显示通知消息",
-    inputSchema: z.object({
-      message: z.string().describe("通知内容"),
-      type: z.enum(["info", "success", "warning", "error"]).describe("通知类型").optional(),
-      duration: z.number().describe("显示时长(ms)，默认 3000").optional(),
-    }),
-  },
-  async ({ message, type = "info", duration = 3000 }) => {
-    return makeResponse(createUICommand("show_notification", { message, type, duration }));
-  }
-);
-
-server.registerTool(
-  "show_confirm",
-  {
-    description: "显示确认对话框",
-    inputSchema: z.object({
-      title: z.string().describe("标题"),
-      message: z.string().describe("确认消息"),
-      confirmText: z.string().describe("确认按钮文字").optional(),
-      cancelText: z.string().describe("取消按钮文字").optional(),
-    }),
-  },
-  async ({ title, message, confirmText, cancelText }) => {
-    return makeResponse(createUICommand("show_confirm", { title, message, confirmText, cancelText }));
-  }
-);
-
-server.registerTool(
-  "open_panel",
-  {
-    description: "打开 UI 面板",
-    inputSchema: z.object({
-      panel: z.enum(["mcp", "settings", "history"]).describe("面板类型"),
-      tab: z.string().describe("要激活的标签页").optional(),
-    }),
-  },
-  async ({ panel, tab }) => {
-    return makeResponse(createUICommand("open_panel", { panel, tab }));
-  }
-);
-
-server.registerTool(
-  "close_panel",
-  {
-    description: "关闭 UI 面板",
-    inputSchema: z.object({
-      panel: z.enum(["mcp", "settings", "history", "all"]).describe("面板类型，或 'all' 关闭全部"),
-    }),
-  },
-  async ({ panel }) => {
-    return makeResponse(createUICommand("close_panel", { panel }));
-  }
-);
-
-server.registerTool(
-  "copy_to_clipboard",
-  {
-    description: "复制文本到剪贴板",
-    inputSchema: z.object({
-      text: z.string().describe("要复制的文本"),
-      showNotification: z.boolean().describe("是否显示成功通知").optional(),
-    }),
-  },
-  async ({ text, showNotification = true }) => {
-    return makeResponse(createUICommand("copy_to_clipboard", { text, showNotification }));
-  }
-);
-
-server.registerTool(
-  "open_url",
-  {
-    description: "在浏览器中打开链接",
-    inputSchema: z.object({
-      url: z.string().describe("URL 地址"),
-      newTab: z.boolean().describe("是否在新标签页打开").optional(),
-    }),
-  },
-  async ({ url, newTab = true }) => {
-    return makeResponse(createUICommand("open_url", { url, newTab }));
-  }
-);
-
-server.registerTool(
-  "set_input",
-  {
-    description: "设置聊天输入框内容",
-    inputSchema: z.object({
-      text: z.string().describe("要设置的文本"),
-      append: z.boolean().describe("是否追加而非替换").optional(),
-    }),
-  },
-  async ({ text, append = false }) => {
-    return makeResponse(createUICommand("set_input", { text, append }));
-  }
-);
-
-server.registerTool(
-  "scroll_to_message",
-  {
-    description: "滚动到指定消息或位置",
-    inputSchema: z.object({
-      messageId: z.string().describe("消息 ID").optional(),
-      position: z.enum(["top", "bottom"]).describe("滚动到顶部或底部").optional(),
-    }),
-  },
-  async ({ messageId, position }) => {
-    return makeResponse(createUICommand("scroll_to_message", { messageId, position }));
-  }
-);
-
-server.registerTool(
-  "resize_window",
-  {
-    description: "调整应用窗口大小。支持预设尺寸或自定义宽高（仅 Electron 桌面端有效）",
-    inputSchema: z.object({
-      preset: z
-        .enum(["small", "medium", "large", "fullscreen"])
-        .describe("预设尺寸: small(800×600), medium(1200×800), large(1600×1000), fullscreen(最大化)")
-        .optional(),
-      width: z.number().describe("自定义宽度（px），需同时提供 height").optional(),
-      height: z.number().describe("自定义高度（px），需同时提供 width").optional(),
-    }),
-  },
-  async ({ width, height, preset }) => {
-    return makeResponse(createUICommand("resize_window", { width, height, preset }));
-  }
-);
 
 /**
  * @deprecated 此工具已废弃，将在未来版本中移除。

@@ -11,6 +11,7 @@ import type { LLMProvider } from "@ai-chatbox/shared";
 import type { ServerContext } from "../server.js";
 import { mcpCoreTools, pendingApprovalAnswerer } from "../core-bridge.js";
 import { selectProvider, type ProviderSource } from "../providers.js";
+import { UI_TOOL_NAMES, uiTools } from "../ui-tools.js";
 
 const MAX_TEXT = 100_000;
 const MAX_SYSTEM = 50_000;
@@ -72,7 +73,7 @@ export function createConversationRoutes(
   app.post("/conversations/:id/runs", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number; temperature?: number; tools?: unknown; webSearch?: boolean }>(c);
+    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number; temperature?: number; tools?: unknown; webSearch?: boolean; host?: string; uiTools?: boolean }>(c);
     if (!body || typeof body.text !== "string" || !body.text.trim()) return c.json({ error: "text is required" }, 400);
     if (body.text.length > MAX_TEXT) return c.json({ error: "text too long" }, 400);
     if (body.system !== undefined && (typeof body.system !== "string" || body.system.length > MAX_SYSTEM)) {
@@ -107,7 +108,11 @@ export function createConversationRoutes(
       ...(body.system ? { system: body.system } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       messages: [...conv.transcript, message],
-      tools: mcpCoreTools(context.sessionManager, truncate, allow),
+      // 界面操作工具在进程内（默认提供）；同名的 MCP 工具（旧版 leochat-mcp）跳过，避免重名
+      tools: [
+        ...(body.uiTools === false ? [] : uiTools({ electron: body.host === "electron" })),
+        ...mcpCoreTools(context.sessionManager, truncate, allow).filter((t) => !UI_TOOL_NAMES.has(t.name)),
+      ],
       approval: { answerers: [pendingApprovalAnswerer(context.pendingApprovals)] },
       compactor: createCompactor(),
       stopWhen: stepCount(maxSteps),

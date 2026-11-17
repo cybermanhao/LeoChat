@@ -16,11 +16,12 @@ const api = vi.hoisted(() => ({
   abort: vi.fn(),
 }));
 const approveToolCall = vi.hoisted(() => vi.fn());
+const executeUI = vi.hoisted(() => vi.fn());
 const processUI = vi.hoisted(() => vi.fn(async () => ({ processedResult: null, uiCommandExecuted: false })));
 
 vi.mock("../../lib/agent-api", () => ({ agentApi: api }));
 vi.mock("../../lib/api", () => ({ chatApi: { approveToolCall } }));
-vi.mock("../../lib/ui-commands", () => ({ processToolResultForUICommands: processUI, executeUICommand: vi.fn() }));
+vi.mock("../../lib/ui-commands", () => ({ processToolResultForUICommands: processUI, executeUICommand: executeUI }));
 vi.mock("../../lib/api-error", () => ({ handleApiError: vi.fn() }));
 vi.mock("../../lib/os-notification", () => ({ sendOSNotification: vi.fn() }));
 
@@ -223,5 +224,23 @@ describe("steer before the run id is known", () => {
     resolveCreate(meta("c1"));
     await running;
     expect(api.steer).toHaveBeenCalledWith("run_1", "early steer");
+  });
+});
+
+describe("in-process UI tools", () => {
+  it("executes ui_command custom events and tells the server which host it runs in", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    api.run.mockImplementation(() =>
+      stream([
+        { type: "run_start", runId: "r", at: 1 },
+        { type: "custom", name: "ui_command", data: { command: "update_theme", payload: { themeId: "dark-green" } } },
+        { type: "custom", name: "ui_command", data: { command: "rm_rf", payload: {} } }, // 未知命令忽略
+      ]),
+    );
+    await get().sendMessage("换主题");
+    expect(executeUI).toHaveBeenCalledTimes(1);
+    expect(executeUI).toHaveBeenCalledWith({ __ui_command__: true, command: "update_theme", payload: { themeId: "dark-green" } });
+    expect(api.run.mock.calls[0]![1]).toMatchObject({ host: "web" });
   });
 });

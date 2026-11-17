@@ -20,12 +20,14 @@ export function toolOutputText(output: { content?: unknown } | undefined): strin
     .join("");
 }
 
+const isElectron = () => typeof window !== "undefined" && !!(window as unknown as { electronAPI?: unknown }).electronAPI;
+
 const localId = (prefix: string) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 const KNOWN_COMMANDS: ReadonlySet<string> = new Set<CommandName>([
   "update_theme", "show_notification", "show_confirm",
   "open_panel", "close_panel", "copy_to_clipboard",
-  "open_url", "scroll_to_message", "set_input", "send_message",
+  "open_url", "scroll_to_message", "set_input", "send_message", "resize_window",
 ]);
 
 export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) => {
@@ -50,7 +52,19 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
           chatApi.approveToolCall(e.callId, true).catch((err) => console.warn("[sessionAllow]", err));
         }
         break;
+      case "custom":
+        // server 的进程内界面工具（主题、通知、剪贴板……）
+        if (e.name === "ui_command") {
+          const { command, payload } = (e.data ?? {}) as { command?: string; payload?: Record<string, unknown> };
+          if (command && KNOWN_COMMANDS.has(command)) {
+            Promise.resolve(
+              executeUICommand({ __ui_command__: true, command: command as CommandName, payload: (payload ?? {}) as never }),
+            ).catch((err) => console.warn("[UICommand]", err));
+          }
+        }
+        break;
       case "tool_end":
+        // 第三方 MCP 服务仍可能在工具结果里返回 __ui_command__ JSON
         if (e.ok) {
           processToolResultForUICommands(toolOutputText(e.output)).catch((err) => console.warn("[UICommand]", err));
         }
@@ -132,6 +146,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             temperature,
             tools: mcpTools.map((t) => t.name),
             ...(webSearch ? { webSearch: true } : {}),
+            host: isElectron() ? "electron" : "web",
           },
           own.signal,
         );

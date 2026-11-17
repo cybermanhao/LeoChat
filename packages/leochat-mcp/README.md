@@ -1,5 +1,9 @@
 # LeoChat MCP Server
 
+> **2026-11 更新：** 界面操作工具（`update_theme`、`show_notification`、`show_confirm`、`open_panel`、`close_panel`、`copy_to_clipboard`、`open_url`、`set_input`、`scroll_to_message`、`resize_window`）已移到 LeoChat server 进程内（`packages/server/src/ui-tools.ts`），执行时发出 core 的 `custom` 事件 `ui_command`，不再由这个 MCP 服务提供。本服务现在只有 `bash`、`test_tool_call`、`generate_waifu` 和 `leochat_tool_guide` 提示词。
+> 下文的 `__ui_command__` 格式仍然有效：第三方 MCP 服务在工具结果里返回它，LeoChat 界面照样会执行。
+
+
 ## 概述
 
 LeoChat MCP Server 是 LeoChat 的内置 MCP 服务器，提供可扩展的 UI 命令系统，允许 LLM 通过 MCP 工具调用来控制前端界面。

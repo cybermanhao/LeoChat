@@ -179,8 +179,8 @@ describe("tool allow-list", () => {
     const app = new Hono();
     app.route("/api", createRoutes(context, llm as never));
     const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x", tools: ["read_file"] }));
-    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "y", tools: [] }));
+    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x", tools: ["read_file"], uiTools: false }));
+    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "y", tools: [], uiTools: false }));
     expect(seen).toEqual([["read_file"], []]);
     expect((await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "z", tools: "bash" })).status).toBe(400);
     expect(i).toBe(2);
@@ -204,5 +204,44 @@ describe("tool failures", () => {
     const evs = await events(await resP);
     expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "t1", ok: false });
     expect(JSON.stringify(evs)).not.toContain("10.0.0.5");
+  });
+});
+
+describe("in-process UI tools", () => {
+  it("are offered by default and emit a ui_command custom event instead of returning JSON for the GUI to parse", async () => {
+    const offered: string[][] = [];
+    let i = 0;
+    const llm = {
+      streamChat: vi.fn(async (req: { tools?: Array<{ function: { name: string } }> }, cbs: StreamCallbacks) => {
+        offered.push((req.tools ?? []).map((t) => t.function.name));
+        if (i++ === 0) {
+          await cbs.onToolCall({ id: "u1", name: "update_theme", arguments: { theme: "深绿" }, status: "pending" });
+          await cbs.onComplete({ id: "a", role: "assistant", content: "", timestamp: 1 });
+        } else {
+          await cbs.onComplete({ id: "b", role: "assistant", content: "done", timestamp: 2 });
+        }
+      }),
+      chat: vi.fn(),
+    };
+    const context = {
+      sessionManager: {
+        // 旧版 leochat-mcp 仍然暴露同名工具：应被跳过
+        getToolsForLLM: () => ["update_theme", "read_file"].map((name) => ({ type: "function", function: { name, description: "", parameters: { type: "object" } } })),
+        callTool: vi.fn(),
+      },
+      startTime: Date.now(),
+      pendingApprovals: pending,
+      conversations: conversationLog(join(dir, "conversations")),
+    } as unknown as ServerContext;
+    const app = new Hono();
+    app.route("/api", createRoutes(context, llm as never));
+    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
+    const evs = await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "换成深绿主题" }));
+    expect(offered[0]!.filter((n) => n === "update_theme")).toHaveLength(1);
+    expect(offered[0]).toContain("read_file");
+    expect(offered[0]).not.toContain("resize_window"); // 仅桌面端
+    expect(evs.find((e) => e.type === "custom")).toEqual({ type: "custom", name: "ui_command", data: { command: "update_theme", payload: { themeId: "dark-green" } } });
+    expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "u1", ok: true });
+    expect(context.sessionManager.callTool).not.toHaveBeenCalled();
   });
 });

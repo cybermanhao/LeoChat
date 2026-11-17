@@ -60,7 +60,7 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
   await expect(page.getByText("联网搜索", { exact: true })).toBeVisible({ timeout: 60_000 });
   await waitIdle(page);
   const reply = messages(page).nth(1);
-  await expect(reply.getByText(/条结果/)).toBeVisible();
+  await expect(reply.getByText(/条结果/).first()).toBeVisible(); // 模型可能搜索多次
   // 引用的来源以链接列出
   await expect(reply.locator('a[href^="http"]').first()).toBeVisible();
 });

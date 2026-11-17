@@ -23,6 +23,10 @@ export interface RunRequest {
   tools?: string[];
   /** 打开 DeepSeek 联网搜索 */
   webSearch?: boolean;
+  /** 运行环境：桌面端才提供 resize_window 等窗口工具 */
+  host?: "web" | "electron";
+  /** 是否提供进程内的界面操作工具，默认 true */
+  uiTools?: boolean;
 }
 
 const VITE_BACKEND_URL = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
