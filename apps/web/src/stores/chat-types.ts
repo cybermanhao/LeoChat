@@ -14,6 +14,8 @@ export interface SettingsSlice {
   currentProvider: LLMProvider;
   currentModel: string;
   enableMarkdown: boolean;
+  /** 联网搜索（DeepSeek 的服务端工具；其它提供商忽略） */
+  webSearch: boolean;
   maxEpochs: number;
   unlimitedEpochs: boolean;
   contextLevel: number;
@@ -26,6 +28,7 @@ export interface SettingsSlice {
   setCurrentProvider: (provider: LLMProvider) => void;
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;
+  setWebSearch: (on: boolean) => void;
   setMaxEpochs: (n: number) => void;
   setUnlimitedEpochs: (v: boolean) => void;
   setContextLevel: (level: number) => void;

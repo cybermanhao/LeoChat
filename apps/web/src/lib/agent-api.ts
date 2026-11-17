@@ -21,6 +21,8 @@ export interface RunRequest {
   temperature?: number;
   /** 允许模型使用的工具名（用户在 MCP 面板里启用的），不传表示全部 */
   tools?: string[];
+  /** 打开 DeepSeek 联网搜索 */
+  webSearch?: boolean;
 }
 
 const VITE_BACKEND_URL = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;

@@ -35,7 +35,8 @@
     "openai": "^4.77.0",
     "@leochat/core": "workspace:*",
     "zod": "^4.3.6",
-    "@leochat/node": "workspace:*"
+    "@leochat/node": "workspace:*",
+    "@leochat/deepseek": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

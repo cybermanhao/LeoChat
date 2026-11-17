@@ -37,6 +37,8 @@ export interface StreamChatOptions {
 export class LLMService {
   private clients: Map<LLMProvider, OpenAI> = new Map();
   private defaultProvider: LLMProvider = "deepseek";
+  /** 各提供商的 API Key（原生 provider 直接用，例如 @leochat/deepseek） */
+  private apiKeys = new Map<LLMProvider, string>();
 
   constructor() {
     this.initializeClients();
@@ -49,6 +51,7 @@ export class LLMService {
     // DeepSeek
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
     if (deepseekKey) {
+      this.apiKeys.set("deepseek", deepseekKey);
       this.clients.set("deepseek", new OpenAI({
         apiKey: deepseekKey,
         baseURL: API_ENDPOINTS.DEEPSEEK,
@@ -158,6 +161,7 @@ export class LLMService {
     }
 
     this.clients.set(provider, new OpenAI(options));
+    this.apiKeys.set(provider, apiKey);
     console.log(`[LLM] ${provider} client configured via UI`);
 
     // 更新默认提供商（如果之前没有任何 client）
@@ -179,6 +183,16 @@ export class LLMService {
       return ["kimi-code", ...ids];
     }
     return ids;
+  }
+
+  /** 请求实际会用到的提供商（与 streamChat 的选择规则一致） */
+  resolveProvider(provider?: LLMProvider, model?: string): LLMProvider {
+    return provider || (model ? this.inferProvider(model) : this.defaultProvider);
+  }
+
+  /** 已配置的 API Key；没有时返回 undefined */
+  getApiKey(provider: LLMProvider): string | undefined {
+    return this.apiKeys.get(provider);
   }
 
   /**

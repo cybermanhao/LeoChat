@@ -13,6 +13,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   currentProvider: "deepseek" as LLMProvider,
   currentModel: "deepseek-v4-flash",
   enableMarkdown: true,
+  webSearch: false,
   maxEpochs: 50,
   unlimitedEpochs: false,
   contextLevel: 5,
@@ -48,6 +49,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
   setCurrentModel: (model) => set({ currentModel: model }),
   setEnableMarkdown: (enable) => set({ enableMarkdown: enable }),
+  setWebSearch: (on) => set({ webSearch: on }),
   setMaxEpochs: (n) => set({ maxEpochs: Math.min(Math.max(n, 1), 50) }),
   setUnlimitedEpochs: (v) => set({ unlimitedEpochs: v }),
   setContextLevel: (level) => set({ contextLevel: Math.min(Math.max(level, 1), 10) }),

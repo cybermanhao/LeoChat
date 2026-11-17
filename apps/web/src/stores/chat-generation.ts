@@ -116,7 +116,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         ),
       }));
 
-      const { currentProvider, currentModel, maxEpochs, unlimitedEpochs, temperature, mcpTools } = get();
+      const { currentProvider, currentModel, maxEpochs, unlimitedEpochs, temperature, mcpTools, webSearch } = get();
       controller = new AbortController();
       const own = controller;
       let leftover: string[] = [];
@@ -131,6 +131,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
             maxSteps: unlimitedEpochs ? 1000 : maxEpochs,
             temperature,
             tools: mcpTools.map((t) => t.name),
+            ...(webSearch ? { webSearch: true } : {}),
           },
           own.signal,
         );

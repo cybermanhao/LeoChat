@@ -9,7 +9,8 @@ import { createCompactor, run, stepCount, toPublicEvent, userMessage, type RunHa
 import type { ConversationLog } from "@leochat/node";
 import type { LLMProvider } from "@ai-chatbox/shared";
 import type { ServerContext } from "../server.js";
-import { legacyProvider, mcpCoreTools, pendingApprovalAnswerer, type LegacyLLM } from "../core-bridge.js";
+import { mcpCoreTools, pendingApprovalAnswerer } from "../core-bridge.js";
+import { selectProvider, type ProviderSource } from "../providers.js";
 
 const MAX_TEXT = 100_000;
 const MAX_SYSTEM = 50_000;
@@ -28,7 +29,7 @@ async function readJson<T>(c: { req: { json<U>(): Promise<U> } }): Promise<T | n
 
 export function createConversationRoutes(
   context: ServerContext,
-  llm: LegacyLLM,
+  llm: ProviderSource,
   truncate: (s: string) => string,
   sanitize: (e: unknown) => string,
 ) {
@@ -71,7 +72,7 @@ export function createConversationRoutes(
   app.post("/conversations/:id/runs", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number; temperature?: number; tools?: unknown }>(c);
+    const body = await readJson<{ text?: string; system?: string; model?: string; provider?: LLMProvider; maxSteps?: number; temperature?: number; tools?: unknown; webSearch?: boolean }>(c);
     if (!body || typeof body.text !== "string" || !body.text.trim()) return c.json({ error: "text is required" }, 400);
     if (body.text.length > MAX_TEXT) return c.json({ error: "text too long" }, 400);
     if (body.system !== undefined && (typeof body.system !== "string" || body.system.length > MAX_SYSTEM)) {
@@ -96,10 +97,13 @@ export function createConversationRoutes(
 
     const maxSteps = Math.min(Math.max(Math.floor(Number(body.maxSteps) || 10), 1), MAX_STEPS);
     const temperature = typeof body.temperature === "number" && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : undefined;
-    const provider = legacyProvider(llm, body.provider);
+    const { provider, model } = selectProvider(llm, body.provider, body.model);
+    // 联网搜索是 DeepSeek 的服务端工具，只有原生 provider 支持
+    const serverTools = body.webSearch === true && provider.native ? (["web_search"] as const) : undefined;
     const handle = run({
       provider,
-      model: body.model ?? "",
+      model,
+      ...(serverTools ? { serverTools: [...serverTools] } : {}),
       ...(body.system ? { system: body.system } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       messages: [...conv.transcript, message],

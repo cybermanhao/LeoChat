@@ -18,7 +18,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Trash2, RefreshCw, Thermometer, Layers } from "lucide-react";
+import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
@@ -107,6 +107,8 @@ export function ChatArea() {
   const unlimitedEpochs = useChatStore((s) => s.unlimitedEpochs);
   const setUnlimitedEpochs = useChatStore((s) => s.setUnlimitedEpochs);
   const queueFollowUp = useChatStore((s) => s.queueFollowUp);
+  const webSearch = useChatStore((s) => s.webSearch);
+  const setWebSearch = useChatStore((s) => s.setWebSearch);
   const executeAction = useChatStore((s) => s.executeAction);
   const uiMode = useChatStore((s) => s.uiMode);
   const temperature = useChatStore((s) => s.temperature);
@@ -420,6 +422,28 @@ export function ChatArea() {
             {t("settings.model.selectModel")}
           </TooltipContent>
         </Tooltip>
+
+        {/* 联网搜索：DeepSeek 原生能力，其它提供商不可用 */}
+        {currentProvider === "deepseek" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-pressed={webSearch}
+                className={cn(toolbarButtonClass, webSearch && "bg-primary/10 text-primary hover:text-primary")}
+                onClick={() => setWebSearch(!webSearch)}
+              >
+                <Globe className="h-4 w-4" />
+                <span className="hidden sm:inline">联网</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {webSearch ? "联网搜索已开启" : "开启联网搜索"}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* 系统提示（仅专业模式） */}
         {uiMode === 'professional' && <SystemPromptPanel />}

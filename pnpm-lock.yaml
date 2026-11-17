@@ -340,6 +340,9 @@ importers:
       '@leochat/core':
         specifier: workspace:*
         version: link:../core
+      '@leochat/deepseek':
+        specifier: workspace:*
+        version: link:../deepseek
       '@leochat/node':
         specifier: workspace:*
         version: link:../node

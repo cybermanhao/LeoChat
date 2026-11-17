@@ -48,3 +48,19 @@ test("Enter during a run steers into it instead of starting a new run", async ({
   // 插话作为用户消息出现在对话里（core 的 user_message 事件）
   await expect(page.locator("[data-message-id]", { hasText: "停，改成只回复：收到" })).toHaveCount(1);
 });
+
+test("web search (DeepSeek native) shows the search and its sources", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  await page.getByRole("button", { name: "联网" }).click();
+  await expect(page.getByRole("button", { name: "联网" })).toHaveAttribute("aria-pressed", "true");
+
+  await input(page).fill("联网搜索：DeepSeek 最新发布的模型叫什么？一句话回答并注明来源。");
+  await input(page).press("Enter");
+  await expect(page.getByText("联网搜索", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await waitIdle(page);
+  const reply = messages(page).nth(1);
+  await expect(reply.getByText(/条结果/)).toBeVisible();
+  // 引用的来源以链接列出
+  await expect(reply.locator('a[href^="http"]').first()).toBeVisible();
+});

@@ -17,6 +17,7 @@ const PERSISTED_KEYS = [
   "currentProvider",
   "currentModel",
   "enableMarkdown",
+  "webSearch",
   "maxEpochs",
   "unlimitedEpochs",
   "contextLevel",
