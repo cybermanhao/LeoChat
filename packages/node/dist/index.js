@@ -2,6 +2,7 @@ import { mkdir, appendFile, readFile, rm, readdir, stat, open, writeFile, rename
 import { resolve, join } from 'path';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { mcpToolsFromTransport } from '@leochat/mcp-kit';
+import { applyTranscriptOps, newId } from '@leochat/core';
 
 // src/jsonl-store.ts
 var SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -220,7 +221,152 @@ function stdioMcpTools(opts) {
     })
   });
 }
+var SAFE_ID2 = /^[A-Za-z0-9_-]{1,128}$/;
+var INDEX = "index.json";
+function assertId2(id) {
+  if (!SAFE_ID2.test(id)) throw new Error(`conversationLog: invalid id ${JSON.stringify(id)}`);
+}
+async function appendDurable(path, line) {
+  const fh = await open(path, "a");
+  try {
+    await fh.appendFile(line + "\n", "utf8");
+    await fh.datasync();
+  } finally {
+    await fh.close();
+  }
+}
+function parseLog(text) {
+  const lines = text.split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch (e) {
+      const isLast = lines.slice(i + 1).every((l) => !l.trim());
+      if (isLast) break;
+      throw e;
+    }
+  }
+  return out;
+}
+async function conversationLog(dir, opts = {}) {
+  await mkdir(dir, { recursive: true });
+  const now = opts.now ?? Date.now;
+  const file = (id) => {
+    assertId2(id);
+    return join(dir, `${id}.jsonl`);
+  };
+  const queues = /* @__PURE__ */ new Map();
+  const serial = (id, fn) => {
+    const run = (queues.get(id) ?? Promise.resolve()).then(fn, fn);
+    queues.set(id, run.catch(() => {
+    }));
+    return run;
+  };
+  async function readMeta(id) {
+    let text;
+    try {
+      text = await readFile(file(id), "utf8");
+    } catch {
+      return null;
+    }
+    const records = parseLog(text);
+    const meta = records.find((r) => r.t === "meta");
+    if (!meta) return null;
+    let title = meta.title;
+    let updatedAt = meta.createdAt;
+    for (const r of records) {
+      if (r.t === "title") title = r.title;
+      if (r.t !== "meta") updatedAt = Math.max(updatedAt, r.at);
+    }
+    return { id: meta.id, title, createdAt: meta.createdAt, updatedAt };
+  }
+  let index = null;
+  async function loadIndex() {
+    if (index) return index;
+    try {
+      const raw = JSON.parse(await readFile(join(dir, INDEX), "utf8"));
+      index = new Map(raw.conversations.map((c) => [c.id, c]));
+    } catch {
+      index = /* @__PURE__ */ new Map();
+      for (const f of await readdir(dir)) {
+        if (!f.endsWith(".jsonl")) continue;
+        const meta = await readMeta(f.slice(0, -".jsonl".length)).catch(() => null);
+        if (meta) index.set(meta.id, meta);
+      }
+      await saveIndex();
+    }
+    return index;
+  }
+  async function saveIndex() {
+    if (!index) return;
+    const tmp = join(dir, `${INDEX}.${process.pid}.tmp`);
+    await writeFile(tmp, JSON.stringify({ conversations: [...index.values()] }), "utf8");
+    await rename(tmp, join(dir, INDEX));
+  }
+  async function touch(meta) {
+    (await loadIndex()).set(meta.id, meta);
+    await saveIndex().catch(() => {
+    });
+  }
+  const self = {
+    dir,
+    async create(title = "") {
+      const id = newId("conv_").replace(/[^A-Za-z0-9_-]/g, "");
+      const meta = { id, title, createdAt: now(), updatedAt: now() };
+      await appendDurable(file(id), JSON.stringify({ t: "meta", id, title, createdAt: meta.createdAt, v: 1 }));
+      await touch(meta);
+      return meta;
+    },
+    async list() {
+      return [...(await loadIndex()).values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+    async load(id) {
+      let text;
+      try {
+        text = await readFile(file(id), "utf8");
+      } catch {
+        return null;
+      }
+      const records = parseLog(text);
+      const meta = await readMeta(id);
+      if (!meta) return null;
+      const ops = records.filter((r) => r.t === "op").map((r) => r.op);
+      return { meta, transcript: applyTranscriptOps([], ops) };
+    },
+    append(id, op) {
+      return serial(id, async () => {
+        const at = now();
+        await appendDurable(file(id), JSON.stringify({ t: "op", op, at }));
+        const meta = (await loadIndex()).get(id);
+        if (meta) await touch({ ...meta, updatedAt: at });
+      });
+    },
+    setTitle(id, title) {
+      return serial(id, async () => {
+        const at = now();
+        await appendDurable(file(id), JSON.stringify({ t: "title", title, at }));
+        const meta = (await loadIndex()).get(id);
+        if (meta) await touch({ ...meta, title, updatedAt: at });
+      });
+    },
+    delete(id) {
+      return serial(id, async () => {
+        await rm(file(id), { force: true });
+        (await loadIndex()).delete(id);
+        await saveIndex().catch(() => {
+        });
+      });
+    },
+    persistFor(id) {
+      return (op) => self.append(id, op);
+    }
+  };
+  return self;
+}
 
-export { fsSkills, jsonlStore, parseSkillMd, stdioMcpTools };
+export { conversationLog, fsSkills, jsonlStore, parseSkillMd, stdioMcpTools };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

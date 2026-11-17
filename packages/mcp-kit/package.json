@@ -1,6 +1,6 @@
 {
   "name": "@leochat/mcp-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Expose @leochat/core tools as a stateless MCP server (Workers-ready) and use MCP servers as a ToolSource.",
   "type": "module",
@@ -18,11 +18,11 @@
     "@modelcontextprotocol/server": "^2.3.1"
   },
   "peerDependencies": {
-    "@leochat/core": "^0.1.0",
+    "@leochat/core": "^0.1.1",
     "zod": "^4.0.0"
   },
   "leochat": {
-    "sourceCommit": "b09f563",
-    "tag": "sdk-v0.1.0"
+    "sourceCommit": "382702b",
+    "tag": "sdk-v0.1.1"
   }
 }

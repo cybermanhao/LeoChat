@@ -94,12 +94,32 @@ function normalizeToolContent(out) {
 }
 
 // src/events.ts
+function publicErrorMessage(kind) {
+  return `Request failed (${kind})`;
+}
 function toPublicEvent(e) {
-  if (e.type === "tool_end" && e.internal) {
-    const { internal: _internal, ...rest } = e;
-    return rest;
+  switch (e.type) {
+    case "tool_end": {
+      if (!e.internal) return e;
+      const { internal: _internal, ...rest } = e;
+      return rest;
+    }
+    case "retry":
+      return { ...e, error: { kind: e.error.kind, message: publicErrorMessage(e.error.kind) } };
+    case "error":
+      return { ...e, error: { ...e.error, message: publicErrorMessage(e.error.kind) } };
+    case "run_end":
+      return e.result.error ? { ...e, result: { ...e.result, error: { kind: e.result.error.kind, message: publicErrorMessage(e.result.error.kind) } } } : e;
+    default:
+      return e;
   }
-  return e;
+}
+
+// src/run-types.ts
+function applyTranscriptOps(initial, ops) {
+  let out = [...initial];
+  for (const op of ops) out = op.kind === "append" ? [...out, op.message] : [...op.messages];
+  return out;
 }
 
 // src/stop.ts
@@ -605,6 +625,13 @@ async function releaseSources(opts) {
     }
   }
 }
+var PersistError = class extends Error {
+  constructor(original) {
+    super(original instanceof Error ? original.message : String(original));
+    this.original = original;
+    this.name = "PersistError";
+  }
+};
 function toProviderError(e) {
   if (isProviderError(e)) return e;
   return new ProviderError("unknown", e instanceof Error ? e.message : String(e), { cause: e });
@@ -638,7 +665,7 @@ function start(opts, init) {
       await releaseSources(opts);
     } catch (e) {
       await releaseSources(opts);
-      const err = { kind: "unknown", message: e instanceof Error ? e.message : String(e) };
+      const err = { kind: e instanceof PersistError ? "persist" : "unknown", message: e instanceof Error ? e.message : String(e) };
       emit({ type: "error", error: { ...err, retryable: false } });
       r = { runId, reason: "error", transcript: [], usage: emptyUsage(), error: err };
       emit({ type: "run_end", result: r });
@@ -687,6 +714,22 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
   let totalUsage = emptyUsage();
   let costUsd;
   let lastUsage;
+  const persist = async (op) => {
+    if (!opts.persist) return;
+    try {
+      await opts.persist(op);
+    } catch (e) {
+      throw new PersistError(e);
+    }
+  };
+  const append = async (m) => {
+    transcript.push(m);
+    await persist({ kind: "append", message: m });
+  };
+  const reset = async (ms) => {
+    transcript = [...ms];
+    await persist({ kind: "reset", messages: [...ms] });
+  };
   const end = (reason, extra = {}) => {
     const r = {
       runId,
@@ -768,7 +811,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
     }
     const order = new Map(calls.map((c, i) => [c.id, i]));
     results.sort((a, b) => (order.get(a.toolUseId) ?? 0) - (order.get(b.toolUseId) ?? 0));
-    transcript.push({ id: newId("msg_"), role: "tool", content: results });
+    await append({ id: newId("msg_"), role: "tool", content: results });
     return null;
   };
   if (init.kind === "resume") {
@@ -810,7 +853,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
     transcript = [...opts.messages];
     const dangling = unansweredToolUses(transcript);
     if (dangling.length) {
-      transcript.push({ id: newId("msg_"), role: "tool", content: dangling.map((c) => errorResult(c, MESSAGES.notCompleted)) });
+      await append({ id: newId("msg_"), role: "tool", content: dangling.map((c) => errorResult(c, MESSAGES.notCompleted)) });
     }
   }
   let finalStepReason = null;
@@ -819,7 +862,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
     if (steering.length) {
       const take = opts.steeringMode === "one-at-a-time" ? 1 : steering.length;
       for (const s of steering.splice(0, take)) {
-        transcript.push(s.message);
+        await append(s.message);
         emit({ type: "user_message", message: s.message, via: "steer" });
         repeat?.reset();
         s.resolve({ delivered: true });
@@ -843,7 +886,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
         signal
       });
       if (r) {
-        if (r.messages) transcript = r.messages;
+        if (r.messages) await reset(r.messages);
         if (r.system !== void 0) system = r.system;
         if (r.model !== void 0) model = r.model;
         if (r.activeTools) activeTools = r.activeTools;
@@ -868,7 +911,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
         signal
       });
       if (!c) return false;
-      transcript = c.messages;
+      await reset(c.messages);
       emit({ type: "compaction", info: c.info });
       return true;
     };
@@ -963,7 +1006,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
       }
     }
     const assistant = { id: messageId, role: "assistant", content: blocks };
-    if (blocks.length) transcript.push(assistant);
+    if (blocks.length) await append(assistant);
     lastUsage = stepUsage;
     totalUsage = addUsage(totalUsage, stepUsage);
     const stepCost = opts.provider.price?.(model, stepUsage, /* @__PURE__ */ new Date());
@@ -973,14 +1016,14 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
     steps.push({ index: stepIndex, message: assistant, toolCalls: calls, usage: stepUsage });
     if (aborted) {
       if (calls.length) {
-        transcript.push({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.aborted)) });
+        await append({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.aborted)) });
       }
       return end("aborted");
     }
     if (finish === "refusal") return end("refusal");
     if (finalStepReason) {
       if (calls.length) {
-        transcript.push({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.notCompleted)) });
+        await append({ id: newId("msg_"), role: "tool", content: calls.map((c) => errorResult(c, MESSAGES.notCompleted)) });
       }
       return end(finalStepReason);
     }
@@ -1007,7 +1050,7 @@ async function loop(opts, init, runId, signal, emit, steering, followUps) {
       if (followUps.length) {
         const take = opts.followUpMode === "one-at-a-time" ? 1 : followUps.length;
         for (const m of followUps.splice(0, take)) {
-          transcript.push(m);
+          await append(m);
           emit({ type: "user_message", message: m, via: "followUp" });
           repeat?.reset();
         }
@@ -1263,6 +1306,6 @@ async function archive(o, replaced, info) {
   }
 }
 
-export { D1_SCHEMA, DEFAULT_STOP_WHEN, PRUNED_MARKER, ProviderError, SUMMARY_CLOSE_TAG, SUMMARY_OPEN_TAG, ToolError, UI_META_KEY, addUsage, costAbove, createCompactor, cutIsBalanced, d1Store, deferAnswerer, defineTool, emptyUsage, estimateMessage, estimateTokens, hasToolCall, isModelVisible, isProviderError, isStepCountCondition, isToolSource, loadSkillTool, measureRequest, memoryStore, newId, normalizeStopWhen, normalizeToolContent, parseToolArguments, resume, run, skillCatalog, staticSkills, stepCount, systemMessage, textOf, toModelMessages, toPublicEvent, toToolDef, unansweredToolUses, userMessage, validateToolInput };
+export { D1_SCHEMA, DEFAULT_STOP_WHEN, PRUNED_MARKER, ProviderError, SUMMARY_CLOSE_TAG, SUMMARY_OPEN_TAG, ToolError, UI_META_KEY, addUsage, applyTranscriptOps, costAbove, createCompactor, cutIsBalanced, d1Store, deferAnswerer, defineTool, emptyUsage, estimateMessage, estimateTokens, hasToolCall, isModelVisible, isProviderError, isStepCountCondition, isToolSource, loadSkillTool, measureRequest, memoryStore, newId, normalizeStopWhen, normalizeToolContent, parseToolArguments, publicErrorMessage, resume, run, skillCatalog, staticSkills, stepCount, systemMessage, textOf, toModelMessages, toPublicEvent, toToolDef, unansweredToolUses, userMessage, validateToolInput };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

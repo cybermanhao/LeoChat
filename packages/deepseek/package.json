@@ -1,6 +1,6 @@
 {
   "name": "@leochat/deepseek",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "DeepSeek provider for @leochat/core (Messages endpoint, server tools, citations) plus Search/Fetch/OCR tools.",
   "type": "module",
@@ -14,11 +14,11 @@
     "dist"
   ],
   "peerDependencies": {
-    "@leochat/core": "^0.1.0",
+    "@leochat/core": "^0.1.1",
     "zod": "^4.0.0"
   },
   "leochat": {
-    "sourceCommit": "b09f563",
-    "tag": "sdk-v0.1.0"
+    "sourceCommit": "382702b",
+    "tag": "sdk-v0.1.1"
   }
 }

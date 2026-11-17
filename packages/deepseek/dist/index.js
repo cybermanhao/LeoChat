@@ -87,6 +87,10 @@ async function* parseSse(body, signal) {
 
 // src/provider.ts
 var SERVER_TOOL_WIRE = { web_search: "deepseek_web_search", read_url: "deepseek_read_url" };
+function fromWireToolName(name) {
+  for (const [kind, wire] of Object.entries(SERVER_TOOL_WIRE)) if (wire === name) return kind;
+  return name;
+}
 var IGNORED_WITH_SERVER_TOOLS = [
   "temperature",
   "top_p",
@@ -299,7 +303,7 @@ async function* mapMessagesStream(records) {
           break;
         case "server_tool_use":
           open.set(index, { kind: "server_tool_use", raw: cb, json: "" });
-          yield { type: "block_start", index, block: { type: "server_tool_use", id: String(cb.id), name: String(cb.name) } };
+          yield { type: "block_start", index, block: { type: "server_tool_use", id: String(cb.id), name: fromWireToolName(String(cb.name)) } };
           break;
         case "web_search_tool_result":
           open.set(index, { kind: "server_tool_result", raw: cb });
@@ -344,13 +348,13 @@ async function* mapMessagesStream(records) {
       } else if (b.kind === "server_tool_use") {
         const input = b.json !== "" ? parseToolArguments(b.json) ?? b.raw.input : b.raw.input;
         const raw = { ...b.raw, input };
-        block = { type: "server_tool_use", id: String(raw.id), name: String(raw.name), input, providerData: { raw } };
+        block = { type: "server_tool_use", id: String(raw.id), name: fromWireToolName(String(raw.name)), input, providerData: { raw } };
       } else {
         const content = Array.isArray(b.raw.content) ? b.raw.content : [];
         block = {
           type: "server_tool_result",
           toolUseId: String(b.raw.tool_use_id ?? ""),
-          name: "deepseek_web_search",
+          name: "web_search",
           results: content.filter((r) => r.type === "web_search_result").map(toSearchResult),
           providerData: { raw: b.raw }
         };

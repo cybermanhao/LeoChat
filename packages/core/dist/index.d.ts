@@ -1,7 +1,7 @@
 import { P as Provider, M as Message, S as ServerToolKind, a as ModelRequest, T as ToolUseBlock, U as Usage, C as Capabilities, b as ToolResultBlock, c as ToolDef, d as TextBlock, I as ImageBlock, B as Block } from './provider-CmTkRKQo.js';
 export { f as BlockBase, o as BlockDelta, e as BlockType, x as Card, y as CardAction, w as CardsHint, g as Citation, z as CustomHint, F as FileBlock, l as FinishReason, J as JsonSchema, A as McpAppHint, s as ProviderError, r as ProviderErrorKind, q as ProviderEvent, R as Role, h as SearchResult, k as ServerToolResultBlock, j as ServerToolUseBlock, i as ThinkingBlock, u as UI_META_KEY, v as UiHint, n as addUsage, m as emptyUsage, t as isProviderError, p as parseToolArguments } from './provider-CmTkRKQo.js';
-import { A as AnyTool, T as ToolSource, a as ToolContext, b as ApprovalOutcome, c as AgentEvent, d as ToolOutput, C as CompactionInfo, R as RunResult, e as Tool } from './events-Db5KJiTB.js';
-export { E as EventError, P as PendingApproval, k as RunEndReason, h as ToolError, f as ToolVisibility, V as ValidationResult, g as defineTool, j as isModelVisible, i as isToolSource, n as normalizeToolContent, l as toPublicEvent, t as toToolDef, v as validateToolInput } from './events-Db5KJiTB.js';
+import { A as AnyTool, T as ToolSource, a as ToolContext, b as ApprovalOutcome, c as AgentEvent, d as ToolOutput, C as CompactionInfo, R as RunResult, e as Tool } from './events-CoXNxBhv.js';
+export { E as EventError, P as PendingApproval, k as RunEndReason, h as ToolError, f as ToolVisibility, V as ValidationResult, g as defineTool, j as isModelVisible, i as isToolSource, n as normalizeToolContent, p as publicErrorMessage, l as toPublicEvent, t as toToolDef, v as validateToolInput } from './events-CoXNxBhv.js';
 import { z } from 'zod';
 
 /**
@@ -194,11 +194,27 @@ interface RunOptions<Ctx = unknown> {
     approval?: ApprovalConfig<Ctx>;
     /** 暂停式审批和 resume() 必须配置（C1） */
     store?: SessionStore;
+    /**
+     * 持久化钩子（参考 dsh 的检查点策略）。每次修改 transcript 时 core 都会 await 它，写盘成功才继续：
+     * 带 tool_use 的 assistant 消息在工具执行前落盘，工具结果在下一次请求前落盘，未完成的流式输出不落盘。
+     * 抛错会以 reason:'error'、kind:'persist' 结束运行（失败即阻止）。调用方自己负责持久化传入的初始 messages
+     */
+    persist?(op: TranscriptOp): Promise<void>;
     hooks?: RunHooks<Ctx>;
     compactor?: Compactor;
     signal?: AbortSignal;
     providerOptions?: Record<string, unknown>;
 }
+/** transcript 的修改操作：把这些操作依次重放到初始 messages 上，就能得到当前 transcript */
+type TranscriptOp = {
+    kind: "append";
+    message: Message;
+} | {
+    kind: "reset";
+    messages: Message[];
+};
+/** 把一串 TranscriptOp 重放到初始消息上（恢复会话时用） */
+declare function applyTranscriptOps(initial: Message[], ops: Iterable<TranscriptOp>): Message[];
 type SteerOutcome = {
     delivered: true;
 } | {
@@ -372,4 +388,4 @@ declare function measureRequest(messages: Message[], opts: {
 declare function cutIsBalanced(messages: Message[], k: number): boolean;
 declare function createCompactor(o?: CompactorOptions): Compactor;
 
-export { AgentEvent, type Answerer, AnyTool, type ApprovalConfig, type ApprovalDecision, ApprovalOutcome, type ApprovalRequest, type BeforeToolCallResult, Block, Capabilities, CompactionInfo, type Compactor, type CompactorOptions, type D1Like, type D1StatementLike, D1_SCHEMA, DEFAULT_STOP_WHEN, ImageBlock, Message, ModelRequest, PRUNED_MARKER, type PausedRun, type PrepareStepResult, Provider, type RepeatReminderOptions, type ResumeOptions, type RetryConfig, type RunHandle, type RunHooks, type RunOptions, RunResult, SUMMARY_CLOSE_TAG, SUMMARY_OPEN_TAG, ServerToolKind, type SessionStore, type SkillMeta, type SkillSource, type SteerOutcome, type StepContext, type StepRecord, type StopCondition, type StopConditionInput, TextBlock, Tool, ToolContext, ToolDef, ToolOutput, ToolResultBlock, ToolSource, ToolUseBlock, Usage, costAbove, createCompactor, cutIsBalanced, d1Store, deferAnswerer, estimateMessage, estimateTokens, hasToolCall, isStepCountCondition, loadSkillTool, measureRequest, memoryStore, newId, normalizeStopWhen, resume, run, skillCatalog, staticSkills, stepCount, systemMessage, textOf, toModelMessages, unansweredToolUses, userMessage };
+export { AgentEvent, type Answerer, AnyTool, type ApprovalConfig, type ApprovalDecision, ApprovalOutcome, type ApprovalRequest, type BeforeToolCallResult, Block, Capabilities, CompactionInfo, type Compactor, type CompactorOptions, type D1Like, type D1StatementLike, D1_SCHEMA, DEFAULT_STOP_WHEN, ImageBlock, Message, ModelRequest, PRUNED_MARKER, type PausedRun, type PrepareStepResult, Provider, type RepeatReminderOptions, type ResumeOptions, type RetryConfig, type RunHandle, type RunHooks, type RunOptions, RunResult, SUMMARY_CLOSE_TAG, SUMMARY_OPEN_TAG, ServerToolKind, type SessionStore, type SkillMeta, type SkillSource, type SteerOutcome, type StepContext, type StepRecord, type StopCondition, type StopConditionInput, TextBlock, Tool, ToolContext, ToolDef, ToolOutput, ToolResultBlock, ToolSource, ToolUseBlock, type TranscriptOp, Usage, applyTranscriptOps, costAbove, createCompactor, cutIsBalanced, d1Store, deferAnswerer, estimateMessage, estimateTokens, hasToolCall, isStepCountCondition, loadSkillTool, measureRequest, memoryStore, newId, normalizeStopWhen, resume, run, skillCatalog, staticSkills, stepCount, systemMessage, textOf, toModelMessages, unansweredToolUses, userMessage };

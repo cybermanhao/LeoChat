@@ -4,5 +4,5 @@ Built output of `@leochat/core`, `@leochat/deepseek`, `@leochat/mcp-kit` and `@l
 Do not commit here by hand: run `node scripts/release-sdk.mjs <version>` on master.
 
 ```json
-"@leochat/core": "github:cybermanhao/LeoChat#sdk-v0.1.0&path:packages/core"
+"@leochat/core": "github:cybermanhao/LeoChat#sdk-v0.1.1&path:packages/core"
 ```

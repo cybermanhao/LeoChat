@@ -1,4 +1,4 @@
-import { SessionStore, AgentEvent, Message, SkillSource, SkillMeta, ToolSource } from '@leochat/core';
+import { SessionStore, AgentEvent, Message, SkillSource, SkillMeta, ToolSource, TranscriptOp } from '@leochat/core';
 
 interface JsonlStoreOptions {
     /** 短锁最长等待时间，默认 5 秒 */
@@ -47,4 +47,28 @@ interface StdioMcpOptions {
 }
 declare function stdioMcpTools<Ctx = unknown>(opts: StdioMcpOptions): ToolSource<Ctx>;
 
-export { type JsonlStore, type JsonlStoreOptions, type ParsedSkill, type StdioMcpOptions, fsSkills, jsonlStore, parseSkillMd, stdioMcpTools };
+interface ConversationMeta {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+}
+interface ConversationLog {
+    readonly dir: string;
+    create(title?: string): Promise<ConversationMeta>;
+    list(): Promise<ConversationMeta[]>;
+    load(id: string): Promise<{
+        meta: ConversationMeta;
+        transcript: Message[];
+    } | null>;
+    append(id: string, op: TranscriptOp): Promise<void>;
+    setTitle(id: string, title: string): Promise<void>;
+    delete(id: string): Promise<void>;
+    /** 直接交给 run({ persist })：每次 transcript 变化都写进这个会话的日志 */
+    persistFor(id: string): (op: TranscriptOp) => Promise<void>;
+}
+declare function conversationLog(dir: string, opts?: {
+    now?: () => number;
+}): Promise<ConversationLog>;
+
+export { type ConversationLog, type ConversationMeta, type JsonlStore, type JsonlStoreOptions, type ParsedSkill, type StdioMcpOptions, conversationLog, fsSkills, jsonlStore, parseSkillMd, stdioMcpTools };

@@ -217,7 +217,14 @@ type AgentEvent = {
     type: "run_end";
     result: RunResult;
 };
-/** 去掉只应留在服务端的字段，再转发给浏览器 */
+/** 发给浏览器的通用错误说明：只带错误类型，不带上游的原始信息（可能含内部地址、模型名、限流细节） */
+declare function publicErrorMessage(kind: string): string;
+/**
+ * 去掉只应留在服务端的内容，再转发给浏览器：
+ * - tool_end.internal（工具的内部异常）
+ * - retry / error / run_end 里来自上游的原始错误信息，换成只含错误类型的通用说明
+ * 需要更具体的安全信息（例如 HTTP 状态码）时，由应用在此基础上自行替换
+ */
 declare function toPublicEvent(e: AgentEvent): AgentEvent;
 
-export { type AnyTool as A, type CompactionInfo as C, type EventError as E, type PendingApproval as P, type RunResult as R, type ToolSource as T, type ValidationResult as V, type ToolContext as a, type ApprovalOutcome as b, type AgentEvent as c, type ToolOutput as d, type Tool as e, type ToolVisibility as f, defineTool as g, ToolError as h, isToolSource as i, isModelVisible as j, type RunEndReason as k, toPublicEvent as l, normalizeToolContent as n, toToolDef as t, validateToolInput as v };
+export { type AnyTool as A, type CompactionInfo as C, type EventError as E, type PendingApproval as P, type RunResult as R, type ToolSource as T, type ValidationResult as V, type ToolContext as a, type ApprovalOutcome as b, type AgentEvent as c, type ToolOutput as d, type Tool as e, type ToolVisibility as f, defineTool as g, ToolError as h, isToolSource as i, isModelVisible as j, type RunEndReason as k, toPublicEvent as l, normalizeToolContent as n, publicErrorMessage as p, toToolDef as t, validateToolInput as v };

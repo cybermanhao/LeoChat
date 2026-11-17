@@ -1,6 +1,6 @@
 {
   "name": "@leochat/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Runtime-agnostic agent loop for LeoChat (Node, Workers, browser). Zero runtime dependencies besides the zod peer.",
   "type": "module",
@@ -29,7 +29,7 @@
     "zod": "^4.0.0"
   },
   "leochat": {
-    "sourceCommit": "b09f563",
-    "tag": "sdk-v0.1.0"
+    "sourceCommit": "382702b",
+    "tag": "sdk-v0.1.1"
   }
 }
