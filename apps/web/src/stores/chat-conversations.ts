@@ -15,6 +15,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     currentConversationId: null,
     view: initialViewState(),
     loadingConversation: false,
+    goal: null,
     input: "",
 
     setInput: (input) => set({ input }),
@@ -35,7 +36,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     },
 
     createConversation: async () => {
-      if (get().isGenerating) get().cancelGeneration();
+      get().leaveConversation();
       const meta = await agentApi.createConversation();
       loadSeq++;
       set((s) => ({
@@ -43,23 +44,27 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         currentConversationId: meta.id,
         view: initialViewState(),
         loadingConversation: false,
+        goal: null,
       }));
       return meta.id;
     },
 
     setCurrentConversation: async (id) => {
-      if (get().isGenerating) get().cancelGeneration();
+      get().leaveConversation();
       const seq = ++loadSeq;
-      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null });
+      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null, goal: null });
       if (!id) return;
       try {
-        const { meta, transcript } = await agentApi.loadConversation(id);
+        const { meta, transcript, goal, goalRunning } = await agentApi.loadConversation(id);
         if (seq !== loadSeq) return;
         set((s) => ({
           view: initialViewState(transcript),
           loadingConversation: false,
+          goal: goal ?? null,
           conversations: s.conversations.map((c) => (c.id === id ? meta : c)),
         }));
+        // 目标正在 server 上推进：连上，继续显示进度
+        if (goalRunning) void get().attachGoal();
       } catch (e) {
         if (seq !== loadSeq) return;
         console.warn("[conversations] open failed", e);
@@ -73,7 +78,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
     deleteConversation: async (id) => {
       const wasCurrent = get().currentConversationId === id;
-      if (wasCurrent && get().isGenerating) get().cancelGeneration();
+      if (wasCurrent) get().leaveConversation();
       await agentApi.deleteConversation(id).catch((e) => console.warn("[conversations] delete failed", e));
       const remaining = get().conversations.filter((c) => c.id !== id);
       set({ conversations: remaining });
@@ -81,17 +86,17 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     },
 
     clearAllConversations: async () => {
-      if (get().isGenerating) get().cancelGeneration();
+      get().leaveConversation();
       const ids = get().conversations.map((c) => c.id);
       await Promise.all(ids.map((id) => agentApi.deleteConversation(id).catch(() => {})));
       loadSeq++;
-      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false });
+      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false, goal: null });
     },
 
     clearCurrentConversation: async () => {
       const id = get().currentConversationId;
       if (!id) return;
-      if (get().isGenerating) get().cancelGeneration();
+      get().leaveConversation();
       await agentApi.deleteConversation(id).catch(() => {});
       loadSeq++;
       set((s) => ({
@@ -99,6 +104,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
         currentConversationId: null,
         view: initialViewState(),
         loadingConversation: false,
+        goal: null,
       }));
     },
   };

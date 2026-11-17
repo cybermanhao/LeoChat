@@ -2,7 +2,7 @@
  * 会话与运行接口（server 的 routes/conversations.ts）。
  * 运行的响应是 core 事件（toPublicEvent 之后）的 SSE 流，前端直接交给 @leochat/core/view 的 reduce()。
  */
-import type { AgentEvent, Message } from "@leochat/core";
+import type { AgentEvent, Goal, Message } from "@leochat/core";
 import { getServerBaseUrl } from "./api";
 
 export interface ConversationMeta {
@@ -12,8 +12,8 @@ export interface ConversationMeta {
   updatedAt: number;
 }
 
-export interface RunRequest {
-  text: string;
+/** 运行设置（普通运行和目标运行共用） */
+export interface RunSettings {
   system?: string;
   model?: string;
   provider?: string;
@@ -28,6 +28,21 @@ export interface RunRequest {
   /** 是否提供进程内的界面操作工具，默认 true */
   uiTools?: boolean;
 }
+
+export interface RunRequest extends RunSettings {
+  text: string;
+}
+
+export interface LoadedConversation {
+  meta: ConversationMeta;
+  transcript: Message[];
+  /** 当前目标（/goal） */
+  goal: Goal | null;
+  /** server 上是否有正在推进这个目标的驱动 */
+  goalRunning: boolean;
+}
+
+export type GoalAction = "edit" | "pause" | "resume" | "complete" | "clear";
 
 const VITE_BACKEND_URL = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
 
@@ -76,8 +91,7 @@ export async function* parseEventStream(body: ReadableStream<Uint8Array>): Async
 export const agentApi = {
   listConversations: () => call<{ conversations: ConversationMeta[] }>("GET", "/conversations").then((r) => r.conversations),
   createConversation: (title?: string) => call<ConversationMeta>("POST", "/conversations", title ? { title } : {}),
-  loadConversation: (id: string) =>
-    call<{ meta: ConversationMeta; transcript: Message[] }>("GET", `/conversations/${encodeURIComponent(id)}`),
+  loadConversation: (id: string) => call<LoadedConversation>("GET", `/conversations/${encodeURIComponent(id)}`),
   renameConversation: (id: string, title: string) => call<unknown>("PATCH", `/conversations/${encodeURIComponent(id)}`, { title }),
   deleteConversation: (id: string) => call<unknown>("DELETE", `/conversations/${encodeURIComponent(id)}`),
 
@@ -90,6 +104,24 @@ export const agentApi = {
       ...(signal ? { signal } : {}),
     });
     if (!res.ok || !res.body) throw new Error(`run failed: ${res.status}`);
+    yield* parseEventStream(res.body);
+  },
+
+  getGoal: (id: string) => call<{ goal: Goal | null; running: boolean }>("GET", `/conversations/${encodeURIComponent(id)}/goal`),
+  createGoal: (id: string, input: { objective: string; maxRounds?: number }) =>
+    call<{ goal: Goal }>("POST", `/conversations/${encodeURIComponent(id)}/goal`, input),
+  updateGoal: (id: string, input: { action: GoalAction; revision: number; objective?: string; maxRounds?: number }) =>
+    call<{ goal: Goal | null; running: boolean }>("PATCH", `/conversations/${encodeURIComponent(id)}/goal`, input),
+
+  /** 开始推进目标，或连上正在推进的驱动；signal 中止只断开连接，驱动在 server 上继续 */
+  async *runGoal(conversationId: string, settings: RunSettings, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
+    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/goal/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(settings),
+      ...(signal ? { signal } : {}),
+    });
+    if (!res.ok || !res.body) throw new Error(`goal run failed: ${res.status}`);
     yield* parseEventStream(res.body);
   },
 

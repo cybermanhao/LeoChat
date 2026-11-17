@@ -30,6 +30,7 @@ import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ViewMessageItem, messageText } from "./chat/ViewMessageItem";
 import { ApprovalBanner, QueuedBar } from "./chat/RunBanners";
+import { GoalBar } from "./chat/GoalBar";
 
 /**
  * parseActionTags/parseCardTags 对整段文本做正则扫描——流式输出时，每个 token 到达
@@ -95,6 +96,7 @@ export function ChatArea() {
   const isGenerating = useChatStore((s) => s.isGenerating);
   const setInput = useChatStore((s) => s.setInput);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const startGoal = useChatStore((s) => s.startGoal);
   const cancelGeneration = useChatStore((s) => s.cancelGeneration);
   const clearCurrentConversation = useChatStore((s) => s.clearCurrentConversation);
   const currentProvider = useChatStore((s) => s.currentProvider);
@@ -377,6 +379,13 @@ export function ChatArea() {
       // 在用户手势中请求通知权限（首次），之后静默跳过
       if (typeof Notification !== "undefined" && Notification.permission === "default") {
         Notification.requestPermission();
+      }
+      // /goal <目标>：创建目标并开始自动推进（harness 第一期）
+      const goalCmd = /^\/goal(?:\s+([\s\S]*))?$/.exec(input.trim());
+      if (goalCmd) {
+        const objective = goalCmd[1]?.trim();
+        if (objective) void startGoal(objective, assembledPrompt ? { systemPrompt: assembledPrompt } : {});
+        return;
       }
       sendMessage(input, assembledPrompt);
     }
@@ -734,6 +743,9 @@ export function ChatArea() {
 
       {/* 等待审批的工具调用，每个一条 */}
       {awaitingApproval.map((p) => (p.type === "tool" ? <ApprovalBanner key={p.callId} part={p} /> : null))}
+
+      {/* 目标（/goal）状态条 */}
+      <GoalBar {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
 
       {/* Input Area - 固定在底部 */}
       <div className="flex-shrink-0 border-t p-4">

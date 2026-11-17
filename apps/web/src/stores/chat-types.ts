@@ -1,4 +1,5 @@
 import type { LLMConfig, MCPTool } from "@ai-chatbox/shared";
+import type { Goal } from "@leochat/core";
 import type { RunViewState } from "@leochat/core/view";
 import type { ConversationMeta } from "../lib/agent-api";
 
@@ -48,6 +49,8 @@ export interface ConversationsSlice {
   view: RunViewState;
   /** 正在加载当前会话的内容 */
   loadingConversation: boolean;
+  /** 当前会话的目标（/goal）；没有时为 null */
+  goal: Goal | null;
   input: string;
 
   setInput: (input: string) => void;
@@ -72,6 +75,8 @@ export interface GenerationSlice {
   sessionAllowedTools: Set<string>;
   /** 已经回答过、等待 server 确认的审批（防止重复点击） */
   answeredApprovals: Set<string>;
+  /** 当前连着的是目标驱动（而不是一次普通运行） */
+  goalAttached: boolean;
 
   /** 空闲时开始新的运行；运行中时作为插话（steer）送入当前运行 */
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
@@ -79,6 +84,17 @@ export interface GenerationSlice {
   queueFollowUp: (content: string) => Promise<void>;
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
+  /** 离开当前会话（切换 / 新建 / 删除）：普通运行会被取消；目标只断开连接，在 server 上继续推进 */
+  leaveConversation: () => void;
+  /** /goal：创建目标并开始自动推进 */
+  startGoal: (objective: string, opts?: { maxRounds?: number; systemPrompt?: string }) => Promise<void>;
+  /** 开始推进当前 active 的目标，或连上 server 上正在推进的驱动 */
+  attachGoal: (systemPrompt?: string) => Promise<void>;
+  pauseGoal: () => Promise<void>;
+  /** 恢复暂停 / 卡住的目标并继续推进；extraRounds 用于轮数用完时先加轮数 */
+  resumeGoal: (opts?: { extraRounds?: number; systemPrompt?: string }) => Promise<void>;
+  completeGoal: () => Promise<void>;
+  clearGoal: () => Promise<void>;
   /** 回答审批；forSession 表示本次会话内这个工具都自动允许 */
   respondApproval: (callId: string, toolName: string, approved: boolean, forSession?: boolean) => Promise<void>;
 }

@@ -3,7 +3,7 @@
  * 取代旧的 contentItems 渲染。
  */
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, Globe, Loader2, Paperclip, ExternalLink } from "lucide-react";
+import { ChevronRight, Globe, Loader2, Paperclip, ExternalLink, Target } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage, LeoCardView, ToolCallBlock, cn, type ToolCallStatus } from "@ai-chatbox/ui";
 import { normalizeLeoCard, type LeoCard, type LeoCardAction } from "@ai-chatbox/shared";
 import type { ToolPartState, ViewMessage, ViewPart } from "@leochat/core/view";
@@ -161,6 +161,15 @@ function ServerToolView({ part }: { part: Extract<ViewPart, { type: "server_tool
   );
 }
 
+/** 目标驱动生成的每轮提示（<goal_round>，见 core 的 renderGoalRoundPrompt），显示成"第 N 轮"而不是整段提示词 */
+export function goalRoundOf(m: ViewMessage): { round: number; maxRounds: number } | null {
+  if (m.role !== "user") return null;
+  const first = m.parts[0];
+  if (first?.type !== "text" || !first.text.startsWith("<goal_round>")) return null;
+  const r = /Round: (\d+)\/(\d+)/.exec(first.text);
+  return r ? { round: Number(r[1]), maxRounds: Number(r[2]) } : null;
+}
+
 export interface ViewMessageItemProps {
   message: ViewMessage;
   /** 这条消息是否还在生成（显示占位光标） */
@@ -180,6 +189,19 @@ export function messageText(m: ViewMessage): string {
 
 export const ViewMessageItem = memo(function ViewMessageItem({ message, isStreaming, renderText, actions, onCardAction }: ViewMessageItemProps) {
   const isUser = message.role === "user";
+  const goalRound = goalRoundOf(message);
+  if (goalRound) {
+    return (
+      <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground" data-message-id={message.id} data-goal-round={goalRound.round}>
+        <div className="h-px flex-1 bg-border" />
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5">
+          <Target className="h-3 w-3 text-primary" />
+          目标 · 第 {goalRound.round}/{goalRound.maxRounds} 轮
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
   const citations: Citation[] = message.parts.flatMap((p) => (p.type === "text" && p.citations ? p.citations : []));
   const hasVisible = message.parts.some((p) => (p.type === "text" ? p.text.length > 0 : true));
 
