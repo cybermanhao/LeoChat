@@ -1,7 +1,7 @@
 # Harness 设计：/goal 与 /loop
 
 **日期：** 2026-11-17
-**状态：** 已定（2026-11-17），第一期实施 /goal
+**状态：** 第一期（/goal）已完成，2026-11-17；第二期 /loop 待做
 **参考：** deepseek-harness（dsh，本地 `C:\code\deepseek-harness`）的 `packages/goal`、`packages/schedule`；Claude Code 的 `/loop`
 
 ## 1. Harness 是什么
@@ -148,6 +148,23 @@ runGoal({ ...runOptions, goal, store, onRound }) // 返回一个句柄，可 pau
 | 3 默认额度 | **参考 dsh** | 只限轮数，默认 256；不设花费上限（4.1 的 `budgetUsd` 第一期不做） |
 | 4 /loop 语义 | **参考 dsh** | 定时提醒送进原会话，第二期 |
 | 5 第一期范围 | **同意** | 先做 /goal |
+
+## 5.2 第一期结果（2026-11-17）
+
+| 部分 | 提交 | 内容 |
+|---|---|---|
+| core + node | `aa8001d` | `goal.ts`：目标状态 / 严格回放 / `goalController` / `goalTools` / `runGoal`；`approval.neverMessage`；`conversationLog` 存目标记录 |
+| server | `7908ee3` | `/conversations/:id/goal`（GET/POST/PATCH）、`/goal/run`（启动或连上驱动，客户端断开不停）；同一会话只能有一个运行；顺带修复旧 provider 中止时会卡住 |
+| GUI | `c1d777a` | `/goal <目标>`、目标条（暂停 / 继续 / 完成 / 清除）、"第 n/m 轮"分隔线；停止 = 暂停目标，切走只断开 |
+| 命令行 | `07d213b` | `@leochat/cli`：`leochat goal / chat / list`，stdout 回复、stderr 进度、退出码区分完成 / 卡住 / 暂停 |
+
+与 4.x 的差异：
+- 模型工具只有 `get_goal` 和 `update_goal(complete | blocked)`，不需要传 id / revision（驱动知道本轮的目标）。
+- 没有花费上限（决定 3）。
+- 已知代价：stdio MCP 工具源每轮都会重启（core 在每次运行结束时释放工具源）；以后可以给 runGoal 加"跨轮持有工具源"。
+- 连上正在运行的驱动时，当前这一步已经输出的部分不会补发，从下一条消息开始显示。
+
+验证：core 98、node 13、server 15、web 14、cli 6 个测试；真实模型端到端 12 个（含 /goal 完成并刷新恢复、暂停后继续），命令行真实运行一次。
 
 ## 6. 以后
 
