@@ -47,6 +47,8 @@ export interface Schedule<S = unknown> {
 export const MIN_INTERVAL_SECONDS = 60;
 const MAX_DELIVERY_RECORDS = 20;
 const MAX_PROMPT = 8_000;
+/** 投递失败后多久再试 */
+export const RETRY_AFTER_MS = 30_000;
 /** setTimeout 的上限约 24.8 天；更远的任务分段等待 */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -307,6 +309,9 @@ export async function createScheduler<S = unknown>(opts: SchedulerOptions<S>): P
     tasks = [];
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** 投递失败的任务：在这个时间之前不再尝试（只在内存里，重启后立即再试） */
+  const retryAt = new Map<string, number>();
+  const dueAt = (t: Schedule<S>) => Math.max(t.nextAt!, retryAt.get(t.id) ?? 0);
   let running = false;
   let ticking: Promise<void> | null = null;
   let queue: Promise<unknown> = Promise.resolve();
@@ -327,7 +332,7 @@ export async function createScheduler<S = unknown>(opts: SchedulerOptions<S>): P
     if (timer) clearTimeout(timer);
     timer = undefined;
     if (!running) return;
-    const next = Math.min(...tasks.filter((t) => t.state === "active" && t.nextAt !== null).map((t) => t.nextAt!));
+    const next = Math.min(...tasks.filter((t) => t.state === "active" && t.nextAt !== null).map(dueAt));
     if (!Number.isFinite(next)) return;
     timer = setTimeout(() => void self.tick(), Math.min(Math.max(next - now(), 0), MAX_TIMER_MS));
     timer.unref?.();
@@ -395,7 +400,7 @@ export async function createScheduler<S = unknown>(opts: SchedulerOptions<S>): P
       // 同一时间只跑一次；跑的时候又到期的任务在下一次 arm 时处理
       ticking ??= serial(async () => {
         const t = now();
-        const due = tasks.filter((x) => x.state === "active" && x.nextAt !== null && x.nextAt <= t);
+        const due = tasks.filter((x) => x.state === "active" && x.nextAt !== null && dueAt(x) <= t);
         for (const s of due) {
           // 错过多次时只投递最近的一次（dsh）
           let occurrence = s.nextAt!;
@@ -406,8 +411,10 @@ export async function createScheduler<S = unknown>(opts: SchedulerOptions<S>): P
             await opts.deliver(structuredClone(s), occurrence);
           } catch (e) {
             opts.onError?.(e, s);
-            continue; // 留在原时点，下次唤醒再试
+            retryAt.set(s.id, now() + RETRY_AFTER_MS); // 留在原时点，过一会儿再试（避免紧循环）
+            continue;
           }
+          retryAt.delete(s.id);
           const next = nextOccurrence(s.rule, Math.max(t, occurrence), s.timeZone, s.createdAt);
           s.deliveries = [...s.deliveries, { occurrenceAt: occurrence, deliveredAt: now() }].slice(-MAX_DELIVERY_RECORDS);
           s.nextAt = next;

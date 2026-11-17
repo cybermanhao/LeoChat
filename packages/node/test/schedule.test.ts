@@ -116,6 +116,9 @@ describe("scheduler", () => {
     await s.tick();
     expect(s.get(once.id)).toMatchObject({ state: "active", nextAt: once.nextAt });
     env.setFail(false);
+    await s.tick(); // 30 秒内不重试（避免紧循环）
+    expect(s.get(once.id)!.state).toBe("active");
+    env.advance(30_000);
     await s.tick();
     expect(s.get(once.id)!.state).toBe("ended");
   });

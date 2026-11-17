@@ -8,5 +8,5 @@ export { jsonlStore, type JsonlStore, type JsonlStoreOptions } from "./jsonl-sto
 export { fsSkills, parseSkillMd, type ParsedSkill } from "./fs-skills";
 export { stdioMcpTools, type StdioMcpOptions } from "./stdio-mcp";
 export { conversationLog, type ConversationLog, type ConversationMeta } from "./conversation-log";
-export { createScheduler, nextOccurrence, normalizeRule, parseCron, wallClock, fromWallClock, isValidTimeZone, renderReminder, ScheduleError, MIN_INTERVAL_SECONDS, REMINDER_PREFIX, type Schedule, type ScheduleRule, type ScheduleDelivery, type Scheduler, type SchedulerOptions, type CreateScheduleInput } from "./schedule";
+export { createScheduler, RETRY_AFTER_MS, nextOccurrence, normalizeRule, parseCron, wallClock, fromWallClock, isValidTimeZone, renderReminder, ScheduleError, MIN_INTERVAL_SECONDS, REMINDER_PREFIX, type Schedule, type ScheduleRule, type ScheduleDelivery, type Scheduler, type SchedulerOptions, type CreateScheduleInput } from "./schedule";
 export { scheduleTools } from "./schedule-tools";

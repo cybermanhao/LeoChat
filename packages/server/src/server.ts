@@ -14,6 +14,8 @@ export interface ServerContext {
   pendingApprovals: Map<string, (approved: boolean) => void>;
   /** 会话日志（每个会话一份 JSONL，参考 dsh）。异步创建目录，路由里 await */
   conversations: Promise<ConversationLog>;
+  /** 定时提醒（/loop）的任务文件；不提供时不启用定时功能（测试） */
+  schedulesFile?: string;
 }
 
 export function createServer(
@@ -33,11 +35,13 @@ export function createServer(
     },
   });
 
+  const root = dataDir ?? process.env.LEOCHAT_DATA_DIR ?? "./data";
   const context: ServerContext = {
     sessionManager,
     startTime: Date.now(),
     pendingApprovals: new Map(),
-    conversations: conversationLog(join(dataDir ?? process.env.LEOCHAT_DATA_DIR ?? "./data", "conversations")),
+    conversations: conversationLog(join(root, "conversations")),
+    schedulesFile: join(root, "schedules.json"),
   };
 
   // Middleware
