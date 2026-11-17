@@ -21,19 +21,78 @@ export interface ConversationMeta {
   updatedAt: number;
 }
 
+/**
+ * 会话收件箱（参考 dsh agent-loop 的 inbox）：待处理的输入。
+ * next-turn：下一轮的提示（用户消息、定时提醒、目标的下一轮）；next-step：插话，送进正在运行的这一轮
+ */
+export type InboxTarget = "next-turn" | "next-step";
+export type InboxSource = "user" | "reminder" | "goal";
+
+export interface InboxItem<S = unknown> {
+  id: string;
+  message: Message;
+  source: InboxSource;
+  /** 运行这条输入时用的设置（模型、工具……），由宿主决定内容 */
+  settings?: S;
+  at: number;
+}
+
+export interface InboxState<S = unknown> {
+  "next-turn": InboxItem<S>[];
+  "next-step": InboxItem<S>[];
+}
+
 type LogRecord =
   | { t: "meta"; id: string; title: string; createdAt: number; v: 1 }
   | { t: "op"; op: TranscriptOp; at: number }
   | { t: "title"; title: string; at: number }
   /** /goal 的变更记录（core 的 GoalRecord），和 transcript 写在同一份日志里 */
-  | { t: "goal"; rec: GoalRecord };
+  | { t: "goal"; rec: GoalRecord }
+  /** 收件箱：放入一条，或领取（claimed）/ 丢弃（discarded）若干条 */
+  | { t: "inbox"; op: "insert"; target: InboxTarget; item: InboxItem; at: number }
+  | { t: "inbox"; op: "remove"; ids: string[]; outcome: "claimed" | "discarded"; at: number };
+
+const recordAt = (r: Exclude<LogRecord, { t: "meta" }>): number => (r.t === "goal" ? r.rec.at : r.at);
+
+/** 回放收件箱记录：重复的 id 视为数据错误；移除不存在的 id 忽略（重复领取是无害的） */
+export function replayInbox(records: Iterable<LogRecord | { t: string }>): InboxState {
+  const state: InboxState = { "next-turn": [], "next-step": [] };
+  for (const r of records) {
+    if (r.t !== "inbox") continue;
+    const rec = r as Extract<LogRecord, { t: "inbox" }>;
+    if (rec.op === "insert") {
+      if (state["next-turn"].some((x) => x.id === rec.item.id) || state["next-step"].some((x) => x.id === rec.item.id)) {
+        throw new Error(`inbox item ${rec.item.id} is already pending`);
+      }
+      state[rec.target].push(rec.item);
+    } else {
+      const ids = new Set(rec.ids);
+      state["next-turn"] = state["next-turn"].filter((x) => !ids.has(x.id));
+      state["next-step"] = state["next-step"].filter((x) => !ids.has(x.id));
+    }
+  }
+  return state;
+}
+
+export interface LoadedConversation {
+  meta: ConversationMeta;
+  transcript: Message[];
+  goal: Goal | null;
+  goalError?: string;
+  /** 待处理的输入 */
+  inbox: InboxState;
+}
 
 export interface ConversationLog {
   readonly dir: string;
   create(title?: string): Promise<ConversationMeta>;
   list(): Promise<ConversationMeta[]>;
   /** goal 是当前目标；目标记录回放失败时 goal 为 null、goalError 给出原因（不影响会话本身） */
-  load(id: string): Promise<{ meta: ConversationMeta; transcript: Message[]; goal: Goal | null; goalError?: string } | null>;
+  load(id: string): Promise<LoadedConversation | null>;
+  /** 放进收件箱（先写盘） */
+  inboxInsert(id: string, target: InboxTarget, item: InboxItem): Promise<void>;
+  /** 从收件箱移除：claimed 表示已交给运行，discarded 表示撤回 / 停止时清空 */
+  inboxRemove(id: string, ids: string[], outcome: "claimed" | "discarded"): Promise<void>;
   append(id: string, op: TranscriptOp): Promise<void>;
   setTitle(id: string, title: string): Promise<void>;
   delete(id: string): Promise<void>;
@@ -105,7 +164,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     let updatedAt = meta.createdAt;
     for (const r of records) {
       if (r.t === "title") title = r.title;
-      if (r.t !== "meta") updatedAt = Math.max(updatedAt, r.t === "goal" ? r.rec.at : r.at);
+      if (r.t !== "meta") updatedAt = Math.max(updatedAt, recordAt(r));
     }
     return { id: meta.id, title, createdAt: meta.createdAt, updatedAt };
   }
@@ -171,7 +230,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
       } catch (e) {
         goalError = e instanceof Error ? e.message : String(e);
       }
-      return { meta, transcript: applyTranscriptOps([], ops), goal, ...(goalError ? { goalError } : {}) };
+      return { meta, transcript: applyTranscriptOps([], ops), goal, ...(goalError ? { goalError } : {}), inbox: replayInbox(records) };
     },
     append(id, op) {
       return serial(id, async () => {
@@ -198,6 +257,20 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     },
     persistFor(id) {
       return (op) => self.append(id, op);
+    },
+    inboxInsert(id, target, item) {
+      return serial(id, async () => {
+        const at = now();
+        await appendDurable(file(id), JSON.stringify({ t: "inbox", op: "insert", target, item, at } satisfies LogRecord));
+        const meta = (await loadIndex()).get(id);
+        if (meta) await touch({ ...meta, updatedAt: at });
+      });
+    },
+    inboxRemove(id, ids, outcome) {
+      if (!ids.length) return Promise.resolve();
+      return serial(id, async () => {
+        await appendDurable(file(id), JSON.stringify({ t: "inbox", op: "remove", ids, outcome, at: now() } satisfies LogRecord));
+      });
     },
     goalStore(id) {
       assertId(id);
