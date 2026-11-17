@@ -1,7 +1,7 @@
 # GUI 迁移第二步计划：前端直接消费 core 事件
 
 **日期：** 2026-11-16
-**状态：** 计划，等待用户决定 3 个问题后实施
+**状态：** 已完成（2a `d01fd9d`、2b+2d `df9c2d7`、2e `c6975f6`），见文末"结果"
 **前置：** 第一步已完成（提交 `9c21ec6`，合并 `4f68803`）：server 的 `/api/chat` 已跑在 `@leochat/core` 的 `run()` 上，但仍把事件翻译成旧的 SSE 载荷，前端不变。
 
 ## 目标
@@ -56,3 +56,23 @@ server: run() ──AgentEvent（toPublicEvent）──SSE──▶ 前端: stat
 
 - 这是用户可见的大改动，需要在浏览器里逐项回归：流式输出、推理折叠、工具调用各状态、bash 审批、卡片动作、会话切换、断点续跑、主题。
 - 自动测试：reducer 已有测试；新增 server 端 `/api/agent/run` 的事件测试，以及会话转换的往返测试。组件层目前没有测试环境（没有 jsdom / testing-library），2b 时建议补上。
+
+## 结果（2026-11-16）
+
+三个决定：旧会话直接丢弃（不迁移，持久化版本升到 2）；直接切换，不加开关；断点数据参考 dsh——core 的 `run({ persist })` 每次 transcript 变化先写盘再继续（失败即阻止），`@leochat/node` 的 `conversationLog` 每个会话一份 JSONL 日志加 `index.json` 列表缓存。所以 2c（迁移）取消，原来的"断点续跑"横幅也去掉了：中断的工具调用由 core 补成"未完成"并在下一次请求前落盘，不会重复执行。
+
+| 阶段 | 实际做法 |
+|---|---|
+| 2a | 不是 `/api/agent/run`，而是会话接口：`/api/conversations`（增删改查）、`POST /conversations/:id/runs`（core 事件 SSE）、`/runs/:id/steer|follow-up|abort` |
+| 2b | 前端 store 直接 `reduce()`；新组件 `ViewMessageItem`、`RunBanners`；审批从 `awaiting-approval` 的 tool part 推导 |
+| 2d | 运行中 Enter = 插话，Ctrl/Cmd+Enter = 排队；还没拿到 runId 时的插话先暂存，`run_start` 后送出 |
+| 2e | 删除 `/api/chat`、TaskStore、`chatApi.streamChat/chat`、host-bridge、Electron 的 LLM_CHAT、ui 的旧 ChatMessage |
+
+顺带修复：
+- 运行请求带上前端启用的工具名，server 只把这些工具交给模型；以前代理模式把所有已连接工具（包括默认禁用的 bash）都给了模型
+- MCP 服务器连上、工具列表到达时重新同步启用的工具（以前只在启用集合变化时同步）
+- `toPublicEvent` 也替换 retry / error / run_end 里的上游错误原文
+
+验证：core 88、node 11、server 7、web 9 个单元测试；Playwright 真实模型端到端 4 个（流式输出、刷新后恢复、插话、bash 允许 / 拒绝），连续两轮全部通过（`LEOCHAT_E2E_LIVE=1`）。
+
+未做：mcp-core 的 TaskLoop 还被旧的 `packages/leochat-sdk`、`leochat-cli` 使用，删除 TaskLoop 等于删除这两个包，待决定。
