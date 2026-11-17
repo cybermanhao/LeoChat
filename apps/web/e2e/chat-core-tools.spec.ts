@@ -8,26 +8,28 @@ test.setTimeout(180_000);
 const input = (page: Page) => page.locator("textarea").first();
 const stopButton = (page: Page) => page.getByRole("button", { name: "Stop generating" });
 
-/** 打开 bash（默认禁用）并让内置 leochat 服务自动连接，等到 server 上真有 bash 工具 */
+/**
+ * 让内置 leochat 服务自动连接，再在 MCP → 工具 页面里打开 bash。
+ * bash 每次加载页面都会被强制禁用，只能在当前会话里手动打开；所以全程不刷新页面，用应用内导航切回聊天
+ */
 async function enableBash(page: Page) {
   await page.evaluate(() =>
-    localStorage.setItem(
-      "leochat-mcp-storage",
-      JSON.stringify({ state: { autoConnectServerIds: ["leochat"], disabledToolIds: [] }, version: 0 }),
-    ),
+    localStorage.setItem("leochat-mcp-storage", JSON.stringify({ state: { autoConnectServerIds: ["leochat"] }, version: 0 })),
   );
   await page.reload();
-  await page.waitForFunction(
-    async () => {
-      const r = await fetch("/api/mcp/tools").then((x) => x.json()).catch(() => null);
-      const tools = (r?.tools ?? r ?? []) as Array<{ name?: string }>;
-      return Array.isArray(tools) && tools.some((t) => t.name === "bash");
-    },
-    undefined,
-    { timeout: 60_000, polling: 1000 },
-  );
-  // server 上可能还留着上一次的连接；以这个页面自己连上为准（工具白名单来自页面的 MCP 状态）
   await expect(page.getByRole("button", { name: /^MCP [1-9]/ })).toBeVisible({ timeout: 60_000 });
+  // 界面上没有到 /mcp/tools 的入口，用应用内导航过去（不刷新页面）
+  await page.evaluate(() => {
+    history.pushState({}, "", "/mcp/tools");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  const row = page.locator("div", { has: page.getByText("bash", { exact: true }) }).filter({ has: page.getByRole("switch") }).last();
+  const sw = row.getByRole("switch").first();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("button", { name: "聊天", exact: true }).click();
+  await expect(input(page)).toBeVisible();
 }
 
 test("bash asks for approval, runs after Allow, and the result is rendered", async ({ page }) => {

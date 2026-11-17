@@ -9,7 +9,6 @@ interface ElectronAppAPI {
     toolName: string,
     args: Record<string, unknown>
   ) => Promise<unknown>;
-  chat: (messages: unknown[], options?: unknown) => Promise<unknown>;
   onMCPSessionsUpdated: (callback: (sessions: unknown) => void) => () => void;
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
   on: (channel: string, callback: (data: unknown) => void) => () => void;

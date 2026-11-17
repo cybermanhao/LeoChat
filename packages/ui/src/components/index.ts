@@ -13,7 +13,6 @@ export * from "./tooltip";
 export * from "./popover";
 
 // Custom Chat Components
-export * from "./chat-message";
 export * from "./chat-input";
 export * from "./chat-toolbar";
 export * from "./streaming-content";

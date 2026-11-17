@@ -268,17 +268,6 @@ function setupIPC(): void {
       word: isWin ? join(r, "mcp-servers/word-mcp-server.exe") : null,
     };
   });
-
-  // LLM chat (proxy to server)
-  ipcMain.handle(IPC_CHANNELS.LLM_CHAT, async (_, messages, options) => {
-    const port = await serverPortPromise;
-    const response = await fetch(`http://localhost:${port}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, stream: false, ...options }),
-    });
-    return response.json();
-  });
 }
 
 // Enforce single instance — second launch focuses the existing window instead
@@ -308,7 +297,7 @@ app.whenReady().then(() => {
   createWindow();
 
   // Start server in the background. Once ready, resolve the port promise so
-  // all waiting IPC callers (api.ts _apiBasePromise, LLM_CHAT, etc.) unblock,
+  // all waiting IPC callers (api.ts _apiBasePromise etc.) unblock,
   // and notify the renderer to dismiss the loading screen.
   findFreePort(3001)
     .then((port) => startServer(server, port))

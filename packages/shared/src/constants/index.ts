@@ -76,7 +76,6 @@ export const IPC_CHANNELS = {
   MCP_CALL_TOOL: "mcp:call-tool",
 
   // LLM communication
-  LLM_CHAT: "llm:chat",
   LLM_STREAM: "llm:stream",
   LLM_CANCEL: "llm:cancel",
 

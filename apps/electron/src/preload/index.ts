@@ -21,10 +21,6 @@ const api = {
   callMCPTool: (toolName: string, args: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP_CALL_TOOL, toolName, args),
 
-  // LLM
-  chat: (messages: unknown[], options?: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.LLM_CHAT, messages, options),
-
   // Events
   onMCPSessionsUpdated: (callback: (sessions: unknown) => void) => {
     const listener = (_: Electron.IpcRendererEvent, sessions: unknown) =>

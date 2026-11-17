@@ -3,13 +3,12 @@
  *
  * - legacyProvider：把现有的 LLMService（OpenAI 兼容，覆盖所有已配置的 provider）包成 core Provider
  * - mcpCoreTools：把 MCP 工具包成 core 工具；bash 需要审批
- * - toCoreMessages / toLegacyMessages：旧的 ChatMessage 与 core Message 互相转换
+ * - toLegacyMessages：core Message 转成 LLMService 用的旧 ChatMessage
  * 事件翻译成前端认识的旧 SSE 载荷在 routes/index.ts 里完成。
  */
 import {
   ProviderError,
   defineTool,
-  newId,
   type AnyTool,
   type Answerer,
   type Block,
@@ -38,35 +37,7 @@ export interface LegacyLLM {
 
 const textOfBlocks = (blocks: Block[]) => blocks.filter((b): b is Extract<Block, { type: "text" }> => b.type === "text").map((b) => b.text).join("");
 
-/** 旧消息 → core 消息。连续的 tool 消息合并成一条 core tool 消息 */
-export function toCoreMessages(legacy: ChatMessage[]): Message[] {
-  const out: Message[] = [];
-  for (const m of legacy) {
-    if (m.role === "tool") {
-      const block: Block = {
-        type: "tool_result",
-        toolUseId: m.tool_call_id ?? "",
-        content: [{ type: "text", text: m.content ?? "" }],
-      };
-      const prev = out.at(-1);
-      if (prev?.role === "tool") prev.content.push(block);
-      else out.push({ id: m.id ?? newId("msg_"), role: "tool", content: [block] });
-      continue;
-    }
-    const content: Block[] = [];
-    if (m.role === "assistant" && m.reasoning_content) content.push({ type: "thinking", text: m.reasoning_content });
-    if (m.content) content.push({ type: "text", text: m.content });
-    if (m.role === "assistant") {
-      for (const tc of m.tool_calls ?? []) {
-        content.push({ type: "tool_use", id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments ?? {}), input: tc.arguments ?? {} });
-      }
-    }
-    out.push({ id: m.id ?? newId("msg_"), role: m.role, content });
-  }
-  return out;
-}
-
-/** core 消息 → 旧消息（给 LLMService、TaskStore 和前端的 final 事件用） */
+/** core 消息 → 旧消息（给 LLMService 用） */
 export function toLegacyMessages(messages: Message[], system?: string): ChatMessage[] {
   const out: ChatMessage[] = [];
   const now = Date.now();

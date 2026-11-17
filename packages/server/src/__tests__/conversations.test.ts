@@ -9,7 +9,6 @@ import { Hono } from "hono";
 import { conversationLog } from "@leochat/node";
 import { initialViewState, reduce } from "@leochat/core/view";
 import type { AgentEvent } from "@leochat/core";
-import { TaskStore } from "../task-store.js";
 import { createRoutes } from "../routes/index.js";
 import type { ServerContext } from "../server.js";
 import type { StreamCallbacks } from "../services/llm.js";
@@ -42,7 +41,6 @@ function appWith(rounds: Array<(cbs: StreamCallbacks) => Promise<void>>) {
     },
     startTime: Date.now(),
     pendingApprovals: pending,
-    taskStore: new TaskStore(join(dir, "tasks")),
     conversations: conversationLog(join(dir, "conversations")),
   } as unknown as ServerContext;
   const app = new Hono();
@@ -176,7 +174,6 @@ describe("tool allow-list", () => {
       },
       startTime: Date.now(),
       pendingApprovals: pending,
-      taskStore: new TaskStore(join(dir, "tasks")),
       conversations: conversationLog(join(dir, "conversations")),
     } as unknown as ServerContext;
     const app = new Hono();
@@ -187,5 +184,25 @@ describe("tool allow-list", () => {
     expect(seen).toEqual([["read_file"], []]);
     expect((await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "z", tools: "bash" })).status).toBe(400);
     expect(i).toBe(2);
+  });
+});
+
+describe("tool failures", () => {
+  it("send a generic error to the browser, never the internal message", async () => {
+    const app = appWith([
+      async (cbs) => {
+        await cbs.onToolCall({ id: "t1", name: "bash", arguments: { command: "ls" }, status: "pending" });
+        await cbs.onComplete({ id: "a", role: "assistant", content: "", timestamp: 1 });
+      },
+      text("sorry"),
+    ]);
+    callTool.mockRejectedValueOnce(new Error("ECONNREFUSED 10.0.0.5:5432"));
+    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
+    const resP = json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x" });
+    await vi.waitFor(() => expect(pending.has("t1")).toBe(true));
+    await json(app, "POST", "/tools/approve/t1", { approved: true });
+    const evs = await events(await resP);
+    expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "t1", ok: false });
+    expect(JSON.stringify(evs)).not.toContain("10.0.0.5");
   });
 });

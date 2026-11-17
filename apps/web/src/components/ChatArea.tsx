@@ -169,12 +169,13 @@ export function ChatArea() {
     return record;
   }, [mcpConnectingServerIds]);
 
-  // 同步 MCP 工具到 Chat Store（过滤禁用的工具）
+  // 同步 MCP 工具到 Chat Store（过滤禁用的工具）。运行时只把这份列表里的工具交给模型，
+  // 所以服务器连上、工具列表到达（serverStates 变化）时也要重新同步，否则会一直是空的
   // 使用 getState() 避免订阅方法导致的 stale closure
   useEffect(() => {
     const enabledTools = useMCPStore.getState().getEnabledTools();
     setMCPTools(enabledTools);
-  }, [disabledToolIds, mcpEnabledServerIds, setMCPTools]);
+  }, [disabledToolIds, mcpEnabledServerIds, mcpServerStates, setMCPTools]);
 
   // 对话框状态
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);

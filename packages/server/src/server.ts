@@ -7,20 +7,17 @@ import type { ServerStatus } from "@ai-chatbox/shared";
 import { createRoutes } from "./routes/index.js";
 import { join } from "node:path";
 import { conversationLog, type ConversationLog } from "@leochat/node";
-import { TaskStore } from "./task-store.js";
 
 export interface ServerContext {
   sessionManager: ReturnType<typeof createSessionManager>;
   startTime: number;
   pendingApprovals: Map<string, (approved: boolean) => void>;
-  taskStore: TaskStore;
   /** 会话日志（每个会话一份 JSONL，参考 dsh）。异步创建目录，路由里 await */
   conversations: Promise<ConversationLog>;
 }
 
 export function createServer(
   externalSessionManager?: ReturnType<typeof createSessionManager>,
-  taskStoreDir?: string,
   /** 应用数据目录：Electron 传 userData；开发模式默认 ./data。会话日志放在 <dataDir>/conversations */
   dataDir?: string,
 ) {
@@ -40,7 +37,6 @@ export function createServer(
     sessionManager,
     startTime: Date.now(),
     pendingApprovals: new Map(),
-    taskStore: new TaskStore(taskStoreDir ?? (dataDir ? join(dataDir, "tasks") : "./tasks")),
     conversations: conversationLog(join(dataDir ?? process.env.LEOCHAT_DATA_DIR ?? "./data", "conversations")),
   };
 
