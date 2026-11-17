@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@leochat/core": ["../core/src/index.ts"],
+      "@leochat/core/testing": ["../core/src/testing/index.ts"],
+      "@leochat/deepseek": ["../deepseek/src/index.ts"],
+      "@leochat/mcp-kit": ["../mcp-kit/src/index.ts"],
+      "@leochat/node": ["../node/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

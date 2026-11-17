@@ -98,3 +98,6 @@ packages/server/data/
 packages/server/tasks/
 apps/electron/tasks/
 apps/electron/data/
+
+# leochat CLI conversations created in the working directory
+.leochat/

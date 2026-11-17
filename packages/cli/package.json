@@ -1,0 +1,38 @@
+{
+  "name": "@leochat/cli",
+  "version": "0.0.1",
+  "private": true,
+  "description": "LeoChat command line: run /goal and single messages on @leochat/core from a terminal or script.",
+  "type": "module",
+  "bin": { "leochat": "./dist/bin.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@leochat/core": "workspace:*",
+    "@leochat/deepseek": "workspace:*",
+    "@leochat/mcp-kit": "workspace:*",
+    "@leochat/node": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.0"
+  }
+}
