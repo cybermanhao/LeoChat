@@ -187,6 +187,8 @@ async function executeOne<Ctx>(o: ExecuteBatchOptions<Ctx>, call: ToolUseBlock):
       rejectMessage = st.rejectedForRun.get(tool.name);
     } else if (st.allowedForRun.has(tool.name)) {
       outcome = "allowed-once";
+    } else if (o.approval?.policy === "allow") {
+      outcome = "allowed-once";
     } else if ((o.approval?.policy ?? "ask") === "never") {
       outcome = "rejected";
       rejectMessage = o.approval?.neverMessage;

@@ -1,247 +1,228 @@
 /**
- * GUI 迁移第二步：会话与运行接口直接发 core 事件，会话写进 JSONL 日志。
+ * 会话收件箱（harness 第三期）：消息先写进收件箱，每个会话一个处理者按顺序跑，事件走会话事件流。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Hono } from "hono";
-import { conversationLog } from "@leochat/node";
 import { initialViewState, reduce } from "@leochat/core/view";
 import type { AgentEvent } from "@leochat/core";
-import { createRoutes } from "../routes/index.js";
-import type { ServerContext } from "../server.js";
-import type { StreamCallbacks } from "../services/llm.js";
-
-async function events(res: Response): Promise<AgentEvent[]> {
-  const out: AgentEvent[] = [];
-  for (const line of (await res.text()).split("\n")) if (line.startsWith("data: ")) out.push(JSON.parse(line.slice(6)) as AgentEvent);
-  return out;
-}
+import {
+  agentIdle,
+  gated,
+  isCustom,
+  listen,
+  makeApp,
+  newConv,
+  req,
+  say,
+  text,
+  textOf,
+  tool,
+  transcript,
+  turnsDone,
+  watch,
+} from "./helpers.js";
 
 let dir: string;
-let pending: Map<string, (ok: boolean) => void>;
-let callTool: ReturnType<typeof vi.fn>;
-
-function appWith(rounds: Array<(cbs: StreamCallbacks) => Promise<void>>) {
-  let i = 0;
-  const llm = {
-    streamChat: vi.fn(async (_req: unknown, cbs: StreamCallbacks) => {
-      const r = rounds[i++];
-      if (!r) throw new Error("no more scripted rounds");
-      await r(cbs);
-    }),
-    chat: vi.fn(),
-  };
-  callTool = vi.fn(async () => "ran");
-  const context = {
-    sessionManager: {
-      getToolsForLLM: () => [{ type: "function", function: { name: "bash", description: "", parameters: { type: "object" } } }],
-      callTool,
-    },
-    startTime: Date.now(),
-    pendingApprovals: pending,
-    conversations: conversationLog(join(dir, "conversations")),
-  } as unknown as ServerContext;
-  const app = new Hono();
-  app.route("/api", createRoutes(context, llm as never));
-  return app;
-}
-const json = (app: Hono, method: string, path: string, body?: unknown) =>
-  app.request(`/api${path}`, { method, headers: { "Content-Type": "application/json" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-const text = (s: string) => async (cbs: StreamCallbacks) => {
-  await cbs.onChunk({ content: s, index: 0 });
-  await cbs.onComplete({ id: "a", role: "assistant", content: s, timestamp: 1 });
-};
-
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "leochat-conv-test-"));
-  pending = new Map();
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("conversations API", () => {
-  it("runs a turn, streams core events, persists the conversation and titles it", async () => {
-    const app = appWith([text("Hello there."), text("Second answer.")]);
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const evs = await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "Hi, who are you?" }));
-    expect(evs[0]!.type).toBe("run_start");
-    expect(evs.at(-1)!.type).toBe("run_end");
-    // 前端可以直接用 core 的 reducer 渲染
+const inboxOf = (events: AgentEvent[]) =>
+  (events.filter((e) => isCustom(e, "inbox")).at(-1)! as { data: { nextTurn: Array<{ text: string }>; nextStep: unknown[] } }).data;
+
+describe("messages go through the inbox", () => {
+  it("a message is accepted at once (202), run by the agent, persisted, titled, and renderable by core's reducer", async () => {
+    const { app } = makeApp(dir, [text("Hello there."), text("Second answer.")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    const r = await say(app, id, "Hi, who are you?");
+    expect(r.status).toBe(202);
+    const events = await l.until(turnsDone(1));
+    // 用户消息先出现（由处理者领取后发出），然后是这一轮
+    const firstUser = events.findIndex((e) => e.type === "user_message");
+    expect(firstUser).toBeLessThan(events.findIndex((e) => e.type === "run_start"));
     let view = initialViewState();
-    for (const e of evs) view = reduce(view, e);
-    expect(view.status).toBe("done");
+    for (const e of events) view = reduce(view, e);
+    expect(view.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
 
-    const loaded = (await (await json(app, "GET", `/conversations/${conv.id}`)).json()) as { meta: { title: string }; transcript: Array<{ role: string }> };
-    expect(loaded.transcript.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(loaded.meta.title).toBe("Hi, who are you?");
+    const t = await transcript(app, id);
+    expect(t.transcript.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(t.meta.title).toBe("Hi, who are you?");
+    expect(t.inbox["next-turn"]).toEqual([]);
 
-    // 第二轮在已保存的历史上继续
-    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "And again?" }));
-    const again = (await (await json(app, "GET", `/conversations/${conv.id}`)).json()) as { transcript: unknown[] };
-    expect(again.transcript).toHaveLength(4);
-    const list = (await (await json(app, "GET", "/conversations")).json()) as { conversations: Array<{ id: string }> };
-    expect(list.conversations.map((c) => c.id)).toEqual([conv.id]);
+    await say(app, id, "And again?");
+    await l.until(turnsDone(2));
+    await vi.waitFor(async () => expect((await transcript(app, id)).transcript).toHaveLength(4));
   });
 
-  it("accepts a follow-up while the run is in flight", async () => {
-    let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
-    const app = appWith([
-      async (cbs) => {
-        await cbs.onChunk({ content: "first", index: 0 });
-        await gate;
-        await cbs.onComplete({ id: "a", role: "assistant", content: "first", timestamp: 1 });
-      },
-      text("follow-up answer"),
-    ]);
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const res = await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "start" });
-    const reader = res.body!.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    let runId = "";
-    while (!runId) {
-      const { value } = await reader.read();
-      buf += dec.decode(value);
-      const m = buf.match(/"runId":"(run_[^"]+)"/);
-      if (m) runId = m[1]!;
-    }
-    const fu = await json(app, "POST", `/runs/${runId}/follow-up`, { text: "and then?" });
-    expect(fu.status).toBe(200);
-    release();
-    while (!(await reader.read()).done) {
-      /* drain */
-    }
-    const loaded = (await (await json(app, "GET", `/conversations/${conv.id}`)).json()) as { transcript: Array<{ role: string }> };
-    expect(loaded.transcript.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
-    expect((await json(app, "POST", `/runs/${runId}/steer`, { text: "late" })).status).toBe(404); // 运行结束后不再接受
+  it("messages sent while a turn runs queue in the inbox and run as the next turns, in order", async () => {
+    const g = gated("first");
+    const { app } = makeApp(dir, [g.round, text("second answer"), text("third answer")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "one");
+    await l.until((ev) => ev.some((e) => e.type === "run_start"));
+    await say(app, id, "two");
+    await say(app, id, "three");
+    const mid = await l.until((ev) => ev.some((e) => isCustom(e, "inbox") && (e.data as { nextTurn: unknown[] }).nextTurn.length === 2));
+    expect(inboxOf(mid).nextTurn.map((x) => x.text)).toEqual(["two", "three"]);
+    g.release();
+    await vi.waitFor(async () => expect((await transcript(app, id)).transcript.map(textOf)).toEqual(["one", "first", "two", "second answer", "three", "third answer"]), { timeout: 5000 });
   });
 
-  it("asks for bash approval through the existing approve endpoint", async () => {
-    const app = appWith([
-      async (cbs) => {
-        await cbs.onToolCall({ id: "b1", name: "bash", arguments: { command: "ls" }, status: "pending" });
-        await cbs.onComplete({ id: "a", role: "assistant", content: "", timestamp: 1 });
-      },
-      text("listed"),
-    ]);
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const resP = json(app, "POST", `/conversations/${conv.id}/runs`, { text: "list files" });
+  it("an interjection (next-step) goes into the running turn and is claimed when delivered", async () => {
+    const g = gated("thinking");
+    const { app, requests } = makeApp(dir, [tool("t1", "read_file", {}), g.round, text("adjusted")], { tools: ["read_file"] });
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "start");
+    await l.until((ev) => ev.some((e) => e.type === "tool_end"));
+    await say(app, id, "actually, be brief", { target: "next-step" });
+    g.release();
+    const events = await l.until(turnsDone(1));
+    expect(events.some((e) => e.type === "user_message" && e.via === "steer")).toBe(true);
+    expect(events.filter((e) => e.type === "run_start")).toHaveLength(1); // 同一轮
+    expect(requests.at(-1)!.messages.some((m) => m.content === "actually, be brief")).toBe(true);
+    expect((await transcript(app, id)).inbox["next-step"]).toEqual([]);
+  });
+
+  it("a queued message can be withdrawn; stop aborts the turn and clears the inbox", async () => {
+    const g = gated();
+    const { app, requests } = makeApp(dir, [g.round, text("never")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "one");
+    await l.until((ev) => ev.some((e) => e.type === "run_start"));
+    const two = (await (await say(app, id, "two")).json()) as { item: { id: string } };
+    await say(app, id, "three");
+    expect((await req(app, "DELETE", `/conversations/${id}/inbox/${two.item.id}`)).status).toBe(200);
+    expect((await req(app, "DELETE", `/conversations/${id}/inbox/${two.item.id}`)).status).toBe(404);
+    expect((await req(app, "POST", `/conversations/${id}/stop`)).status).toBe(200);
+    const events = await l.until((ev) => ev.some(agentIdle) && ev.some((e) => e.type === "run_end"));
+    expect(events.find((e) => e.type === "run_end")).toMatchObject({ result: { reason: "aborted" } });
+    g.release();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(requests).toHaveLength(1); // "three" 被清掉，没有再跑
+    expect((await transcript(app, id)).inbox["next-turn"]).toEqual([]);
+  });
+
+  it("a client that connects mid-turn first receives everything that already happened in the turn", async () => {
+    const g = gated("partial output");
+    const { app } = makeApp(dir, [g.round]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "go");
+    await l.until((ev) => ev.some((e) => e.type === "block_delta"));
+    const late = listen(app, id).then((x) => x.until(turnsDone(1)));
+    await new Promise((r) => setTimeout(r, 50));
+    g.release();
+    const events = await late;
+    let view = initialViewState();
+    for (const e of events) view = reduce(view, e);
+    expect(view.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(JSON.stringify(view.messages[1]!.parts)).toContain("partial output");
+  });
+
+  it("pending inbox items are processed after a restart", async () => {
+    const g = gated();
+    const first = makeApp(dir, [g.round]);
+    const id = await newConv(first.app);
+    await say(first.app, id, "one");
+    await watch(first.app, id, (ev) => ev.some((e) => e.type === "run_start"));
+    await say(first.app, id, "queued before the crash");
+    // "重启"：同一个数据目录上新建一套路由；第一套留着不管（模拟进程已死）
+    const second = makeApp(dir, [text("picked up after restart")]);
+    await vi.waitFor(async () => expect((await transcript(second.app, id)).transcript.map(textOf)).toContain("picked up after restart"), { timeout: 5000 });
+    g.release();
+  });
+});
+
+describe("permissions (dsh permission presets, no sandbox)", () => {
+  it("ask: bash waits for approval through /tools/approve", async () => {
+    const { app, pending, callTool } = makeApp(dir, [tool("b1", "bash", { command: "ls" }), text("listed")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "list files");
     await vi.waitFor(() => expect(pending.has("b1")).toBe(true));
-    expect((await json(app, "POST", "/tools/approve/b1", { approved: true })).status).toBe(200);
-    const evs = await events(await resP);
-    expect(evs.find((e) => e.type === "approval_request")).toMatchObject({ callId: "b1", toolName: "bash" });
-    expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "b1", ok: true });
+    expect((await req(app, "POST", "/tools/approve/b1", { approved: true })).status).toBe(200);
+    const events = await l.until(turnsDone(1));
+    expect(events.find((e) => e.type === "approval_request")).toMatchObject({ callId: "b1", toolName: "bash" });
     expect(callTool).toHaveBeenCalledWith("bash", { command: "ls" });
   });
 
-  it("sanitizes upstream errors and validates input", async () => {
-    const app = appWith([async (cbs) => cbs.onError(Object.assign(new Error("secret internal-host:8080 failed"), { status: 401 }))]);
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const evs = await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x" }));
-    expect(JSON.stringify(evs)).not.toContain("internal-host");
-    expect(evs.find((e) => e.type === "error")).toMatchObject({ error: { message: "LLM request failed (401)" } });
-
-    expect((await json(app, "POST", `/conversations/${conv.id}/runs`, {})).status).toBe(400);
-    expect((await json(app, "GET", "/conversations/..%2Fetc")).status).toBe(400);
-    expect((await json(app, "POST", "/conversations/conv_missing/runs", { text: "x" })).status).toBe(404);
-    expect((await json(app, "POST", "/runs/run_missing/abort")).status).toBe(404);
-    expect((await json(app, "DELETE", `/conversations/${conv.id}`)).status).toBe(200);
-    expect((await json(app, "GET", `/conversations/${conv.id}`)).status).toBe(404);
+  it("full: bash runs without asking", async () => {
+    const { app, pending, callTool } = makeApp(dir, [tool("b1", "bash", { command: "ls" }), text("listed")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "list files", { settings: { permission: "full" } });
+    const events = await l.until(turnsDone(1));
+    expect(pending.size).toBe(0);
+    expect(events.some((e) => e.type === "approval_request")).toBe(false);
+    expect(callTool).toHaveBeenCalledWith("bash", { command: "ls" });
   });
 });
 
-describe("tool allow-list", () => {
-  it("only offers the tools the GUI enabled (bash stays off unless enabled)", async () => {
-    const seen: unknown[] = [];
-    let i = 0;
-    const llm = {
-      streamChat: vi.fn(async (req: { tools?: Array<{ function: { name: string } }> }, cbs: StreamCallbacks) => {
-        seen.push((req.tools ?? []).map((t) => t.function.name));
-        i++;
-        await cbs.onChunk({ content: "ok", index: 0 });
-        await cbs.onComplete({ id: "a", role: "assistant", content: "ok", timestamp: 1 });
-      }),
-      chat: vi.fn(),
-    };
-    const context = {
-      sessionManager: {
-        getToolsForLLM: () => ["bash", "read_file"].map((name) => ({ type: "function", function: { name, description: "", parameters: { type: "object" } } })),
-        callTool: vi.fn(),
-      },
-      startTime: Date.now(),
-      pendingApprovals: pending,
-      conversations: conversationLog(join(dir, "conversations")),
-    } as unknown as ServerContext;
-    const app = new Hono();
-    app.route("/api", createRoutes(context, llm as never));
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x", tools: ["read_file"], uiTools: false }));
-    await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "y", tools: [], uiTools: false }));
-    expect(seen).toEqual([["read_file"], []]);
-    expect((await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "z", tools: "bash" })).status).toBe(400);
-    expect(i).toBe(2);
+describe("tools and errors", () => {
+  it("only offers the tools the GUI enabled; UI tools are in-process and same-named MCP tools are skipped", async () => {
+    const { app, requests } = makeApp(dir, [text("ok"), text("ok")], { tools: ["bash", "read_file", "update_theme"] });
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "x", { settings: { tools: ["read_file"], uiTools: false } });
+    await l.until(turnsDone(1));
+    expect(requests[0]!.tools!.map((t) => t.function.name)).toEqual(["read_file"]);
+    await say(app, id, "y", { settings: { tools: [] } });
+    await l.until(turnsDone(2));
+    const names = requests[1]!.tools!.map((t) => t.function.name);
+    expect(names.filter((n) => n === "update_theme")).toHaveLength(1);
+    expect(names).not.toContain("resize_window"); // 仅桌面端
+    expect(names).not.toContain("bash");
   });
-});
 
-describe("tool failures", () => {
-  it("send a generic error to the browser, never the internal message", async () => {
-    const app = appWith([
-      async (cbs) => {
-        await cbs.onToolCall({ id: "t1", name: "bash", arguments: { command: "ls" }, status: "pending" });
-        await cbs.onComplete({ id: "a", role: "assistant", content: "", timestamp: 1 });
-      },
-      text("sorry"),
-    ]);
-    callTool.mockRejectedValueOnce(new Error("ECONNREFUSED 10.0.0.5:5432"));
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const resP = json(app, "POST", `/conversations/${conv.id}/runs`, { text: "x" });
-    await vi.waitFor(() => expect(pending.has("t1")).toBe(true));
-    await json(app, "POST", "/tools/approve/t1", { approved: true });
-    const evs = await events(await resP);
-    expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "t1", ok: false });
-    expect(JSON.stringify(evs)).not.toContain("10.0.0.5");
+  it("UI tools emit a ui_command event", async () => {
+    const { app } = makeApp(dir, [tool("u1", "update_theme", { theme: "深绿" }), text("done")]);
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "换成深绿主题");
+    const events = await l.until(turnsDone(1));
+    expect(events.find((e) => isCustom(e, "ui_command"))).toEqual({ type: "custom", name: "ui_command", data: { command: "update_theme", payload: { themeId: "dark-green" } } });
   });
-});
 
-describe("in-process UI tools", () => {
-  it("are offered by default and emit a ui_command custom event instead of returning JSON for the GUI to parse", async () => {
-    const offered: string[][] = [];
-    let i = 0;
-    const llm = {
-      streamChat: vi.fn(async (req: { tools?: Array<{ function: { name: string } }> }, cbs: StreamCallbacks) => {
-        offered.push((req.tools ?? []).map((t) => t.function.name));
-        if (i++ === 0) {
-          await cbs.onToolCall({ id: "u1", name: "update_theme", arguments: { theme: "深绿" }, status: "pending" });
-          await cbs.onComplete({ id: "a", role: "assistant", content: "", timestamp: 1 });
-        } else {
-          await cbs.onComplete({ id: "b", role: "assistant", content: "done", timestamp: 2 });
-        }
-      }),
-      chat: vi.fn(),
-    };
-    const context = {
-      sessionManager: {
-        // 旧版 leochat-mcp 仍然暴露同名工具：应被跳过
-        getToolsForLLM: () => ["update_theme", "read_file"].map((name) => ({ type: "function", function: { name, description: "", parameters: { type: "object" } } })),
-        callTool: vi.fn(),
-      },
-      startTime: Date.now(),
-      pendingApprovals: pending,
-      conversations: conversationLog(join(dir, "conversations")),
-    } as unknown as ServerContext;
-    const app = new Hono();
-    app.route("/api", createRoutes(context, llm as never));
-    const conv = (await (await json(app, "POST", "/conversations", {})).json()) as { id: string };
-    const evs = await events(await json(app, "POST", `/conversations/${conv.id}/runs`, { text: "换成深绿主题" }));
-    expect(offered[0]!.filter((n) => n === "update_theme")).toHaveLength(1);
-    expect(offered[0]).toContain("read_file");
-    expect(offered[0]).not.toContain("resize_window"); // 仅桌面端
-    expect(evs.find((e) => e.type === "custom")).toEqual({ type: "custom", name: "ui_command", data: { command: "update_theme", payload: { themeId: "dark-green" } } });
-    expect(evs.find((e) => e.type === "tool_end")).toMatchObject({ callId: "u1", ok: true });
-    expect(context.sessionManager.callTool).not.toHaveBeenCalled();
+  it("tool failures and upstream errors reach the browser without internal details", async () => {
+    const { app } = makeApp(
+      dir,
+      [tool("t1", "read_file", {}), text("sorry"), async (cbs) => cbs.onError(Object.assign(new Error("secret internal-host:8080 failed"), { status: 401 }))],
+      { tools: ["read_file"], callTool: async () => Promise.reject(new Error("ECONNREFUSED 10.0.0.5:5432")) },
+    );
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "read it");
+    const a = await l.until(turnsDone(1));
+    expect(a.find((e) => e.type === "tool_end")).toMatchObject({ callId: "t1", ok: false });
+    expect(JSON.stringify(a)).not.toContain("10.0.0.5");
+    await say(app, id, "again");
+    const all = await l.until(turnsDone(2));
+    const b = all.slice(all.findIndex((e) => e.type === "run_end") + 1);
+    expect(JSON.stringify(b)).not.toContain("internal-host");
+    expect(b.find((e) => e.type === "error")).toMatchObject({ error: { message: "LLM request failed (401)" } });
+  });
+
+  it("validates input", async () => {
+    const { app } = makeApp(dir, []);
+    const id = await newConv(app);
+    expect((await say(app, id, "")).status).toBe(400);
+    expect((await say(app, id, "x", { target: "somewhere" })).status).toBe(400);
+    expect((await say(app, id, "x", { settings: { permission: "root" } })).status).toBe(400);
+    expect((await say(app, id, "x", { settings: { tools: "bash" } })).status).toBe(400);
+    expect((await req(app, "GET", "/conversations/..%2Fetc")).status).toBe(400);
+    expect((await say(app, "conv_missing", "x")).status).toBe(404);
+    expect((await req(app, "POST", "/conversations/conv_missing/stop")).status).toBe(404);
+    expect((await req(app, "GET", "/conversations/conv_missing/events")).status).toBe(404);
+    expect((await req(app, "DELETE", `/conversations/${id}`)).status).toBe(200);
+    expect((await req(app, "GET", `/conversations/${id}`)).status).toBe(404);
   });
 });

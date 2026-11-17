@@ -1,7 +1,11 @@
 /**
- * 会话、运行与目标（/goal）接口，直接以 SSE 发送 core 事件（toPublicEvent 之后）。
- * 会话数据是每个会话一份 JSONL 日志（@leochat/node 的 conversationLog，参考 dsh），
- * 运行中的每次 transcript 变化都通过 run({ persist }) 先写盘再继续；目标变更也写进同一份日志。
+ * 会话接口（harness 第三期：会话收件箱，设计 docs/superpowers/specs/2026-11-17-conversation-inbox-design.md）。
+ *
+ * - 所有输入（用户消息、插话、定时提醒、目标的下一轮）都写进会话的收件箱，由每个会话一个的处理者按顺序跑
+ *   （conversation-agent.ts，参考 dsh agent-loop）
+ * - 每个会话一条事件流 GET /conversations/:id/events：推送这个会话所有运行的事件（不论由谁发起），
+ *   连上时先补发状态、收件箱、目标和当前这一轮已发生的事件
+ * - 会话数据是每个会话一份 JSONL（@leochat/node conversationLog）；运行中每次 transcript 变化先写盘再继续
  */
 import { Hono, type Context } from "hono";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -9,17 +13,12 @@ import {
   GoalError,
   createCompactor,
   goalController,
-  run,
-  runGoal,
   stepCount,
   toPublicEvent,
   userMessage,
   type AgentEvent,
   type AnyTool,
   type GoalController,
-  type GoalRunHandle,
-  type Message,
-  type RunHandle,
 } from "@leochat/core";
 import {
   ScheduleError,
@@ -36,6 +35,7 @@ import type { ServerContext } from "../server.js";
 import { mcpCoreTools, pendingApprovalAnswerer } from "../core-bridge.js";
 import { selectProvider, type ProviderSource, type RunProvider } from "../providers.js";
 import { UI_TOOL_NAMES, uiTools } from "../ui-tools.js";
+import { ConversationAgent, unattendedApproval, type TurnSetup } from "../conversation-agent.js";
 
 const MAX_TEXT = 100_000;
 const MAX_SYSTEM = 50_000;
@@ -52,8 +52,8 @@ async function readJson<T>(c: { req: { json<U>(): Promise<U> } }): Promise<T | n
   }
 }
 
-/** 运行设置（普通运行和目标运行共用）；字段都来自不可信的请求体 */
-interface RunSettingsBody {
+/** 运行设置（来自不可信的请求体，存进收件箱 / 定时任务，到期时用同样的设置运行） */
+export interface RunSettingsBody {
   system?: string;
   model?: string;
   provider?: LLMProvider;
@@ -63,6 +63,8 @@ interface RunSettingsBody {
   webSearch?: boolean;
   host?: string;
   uiTools?: boolean;
+  /** 权限预设（dsh 的 permission-presets，暂无沙箱）：ask 询问（默认），full 完全信任、不再询问 */
+  permission?: "ask" | "full";
 }
 
 interface RunSettings {
@@ -73,16 +75,13 @@ interface RunSettings {
   serverTools?: Array<"web_search">;
   tools: AnyTool[];
   maxSteps: number;
+  fullAccess: boolean;
 }
 
-/** 目标驱动：事件分发给所有连着的客户端；客户端断开不影响驱动（无人值守） */
-interface GoalSession {
-  handle: GoalRunHandle;
-  provider: RunProvider;
-  subscribers: Set<(e: AgentEvent | null) => void>;
-  /** 驱动结束且会话已登记为空闲后 resolve */
-  done: Promise<void>;
-}
+const SETTINGS_KEYS = ["system", "model", "provider", "maxSteps", "temperature", "tools", "webSearch", "host", "uiTools", "permission"] as const;
+/** 只保留运行设置字段 */
+const settingsBodyOf = (b: RunSettingsBody): RunSettingsBody =>
+  Object.fromEntries(SETTINGS_KEYS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as RunSettingsBody;
 
 export function createConversationRoutes(
   context: ServerContext,
@@ -91,19 +90,9 @@ export function createConversationRoutes(
   sanitize: (e: unknown) => string,
 ) {
   const app = new Hono();
-  /** 进行中的运行（包括目标的每一轮）：插话、排队、中止用 */
-  const runs = new Map<string, RunHandle>();
-  /** 正在运行的会话（同一会话同时只能有一次运行或一个目标驱动） */
-  const busy = new Set<string>();
-  const goalSessions = new Map<string, GoalSession>();
-  /** 每个会话正在进行的普通运行（定时提醒到期时排进去） */
-  const activeRuns = new Map<string, RunHandle>();
-  /** 正在看某个会话的客户端：收到 server 自己发起的运行（定时提醒）的事件 */
-  const watchers = new Map<string, Set<(e: AgentEvent) => void>>();
-  const broadcast = (id: string, e: AgentEvent) => watchers.get(id)?.forEach((f) => f(e));
+  const log = (): Promise<ConversationLog> => context.conversations;
   /** 每个会话的目标控制器（本进程是唯一写入方，缓存起来保证串行） */
   const controllers = new Map<string, Promise<GoalController>>();
-  const log = (): Promise<ConversationLog> => context.conversations;
   const goalsFor = (id: string): Promise<GoalController> => {
     let p = controllers.get(id);
     if (!p) {
@@ -114,9 +103,10 @@ export function createConversationRoutes(
     return p;
   };
 
-  /** 校验请求体里的运行设置；不合法时返回错误文字 */
+  /** 校验运行设置；不合法时返回错误文字 */
   function parseSettings(body: RunSettingsBody): RunSettings | string {
     if (body.system !== undefined && (typeof body.system !== "string" || body.system.length > MAX_SYSTEM)) return "invalid system prompt";
+    if (body.permission !== undefined && body.permission !== "ask" && body.permission !== "full") return "invalid permission";
     // 可用工具白名单（GUI 发送用户启用的工具名）；不传表示全部
     let allow: Set<string> | undefined;
     if (body.tools !== undefined) {
@@ -140,103 +130,8 @@ export function createConversationRoutes(
         ...mcpCoreTools(context.sessionManager, truncate, allow).filter((t) => !UI_TOOL_NAMES.has(t.name)),
       ],
       maxSteps: Math.min(Math.max(Math.floor(Number(body.maxSteps) || 10), 1), MAX_STEPS),
+      fullAccess: body.permission === "full",
     };
-  }
-
-  const runOptionsOf = (s: RunSettings) => ({
-    provider: s.provider,
-    model: s.model,
-    ...(s.serverTools ? { serverTools: s.serverTools } : {}),
-    ...(s.system ? { system: s.system } : {}),
-    ...(s.temperature !== undefined ? { temperature: s.temperature } : {}),
-    tools: s.tools,
-    compactor: createCompactor(),
-    stopWhen: stepCount(s.maxSteps),
-  });
-
-  /** 只保留运行设置字段（存进定时任务，到期时用同样的设置运行） */
-  const settingsBodyOf = (b: RunSettingsBody): RunSettingsBody => {
-    const keys = ["system", "model", "provider", "maxSteps", "temperature", "tools", "webSearch", "host", "uiTools"] as const;
-    return Object.fromEntries(keys.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as RunSettingsBody;
-  };
-
-  // ── 定时提醒（/loop） ──
-  let schedulerP: Promise<Scheduler<RunSettingsBody>> | undefined;
-  const scheduleToolsFor = async (id: string, body: RunSettingsBody): Promise<AnyTool[]> =>
-    schedulerP ? scheduleTools(await schedulerP, id, { settings: settingsBodyOf(body) }) : [];
-
-  /** 普通运行：追加用户消息、开始 run()。调用方已经检查过会话空闲；运行结束后自动解除 busy */
-  async function startRun(id: string, transcript: Message[], message: Message, settings: RunSettings, body: RunSettingsBody) {
-    const conversations = await log();
-    busy.add(id);
-    try {
-      // 用户消息先写盘（core 只负责持久化运行过程中新增的消息）
-      await conversations.append(id, { kind: "append", message });
-      const handle = run({
-        ...runOptionsOf(settings),
-        tools: [...settings.tools, ...(await scheduleToolsFor(id, body))],
-        messages: [...transcript, message],
-        approval: { answerers: [pendingApprovalAnswerer(context.pendingApprovals)] },
-        persist: conversations.persistFor(id),
-      });
-      runs.set(handle.runId, handle);
-      activeRuns.set(id, handle);
-      void handle.result.finally(() => {
-        runs.delete(handle.runId);
-        if (activeRuns.get(id) === handle) activeRuns.delete(id);
-        busy.delete(id);
-      });
-      return handle;
-    } catch (e) {
-      busy.delete(id);
-      throw e;
-    }
-  }
-
-  /** 定时提醒到期：会话空闲就开一次运行，正在运行就排进去（followUp）；抛错表示稍后再试 */
-  async function deliver(schedule: Schedule<RunSettingsBody>, occurrenceAt: number): Promise<void> {
-    const id = schedule.conversationId;
-    const conv = await (await log()).load(id);
-    if (!conv) {
-      // 会话已删除：任务一并删除（不能在投递里 await，调度器正在串行处理）
-      void schedulerP?.then((s) => s.delete(schedule.id));
-      return;
-    }
-    const message = userMessage(renderReminder(schedule, occurrenceAt, schedule.timeZone));
-    const goal = goalSessions.get(id);
-    if (goal) {
-      const round = goal.handle.current();
-      if (!round) throw new Error("goal is between rounds");
-      round.followUp(message);
-      return;
-    }
-    const active = activeRuns.get(id);
-    if (active) {
-      active.followUp(message);
-      return;
-    }
-    if (busy.has(id)) throw new Error("conversation is busy");
-    const body = schedule.settings ?? {};
-    const settings = parseSettings(body);
-    if (typeof settings === "string") throw new Error(`invalid saved settings: ${settings}`);
-    const handle = await startRun(id, conv.transcript, message, settings, body);
-    // 正在看这个会话的客户端：先收到提醒消息，再收到运行事件
-    broadcast(id, { type: "user_message", message, via: "followUp" });
-    void (async () => {
-      for await (const e of handle) broadcast(id, publicEvent(e, settings.provider));
-    })();
-  }
-
-  if (context.schedulesFile) {
-    schedulerP = createScheduler<RunSettingsBody>({
-      file: context.schedulesFile,
-      deliver,
-      onError: (e, sch) => console.warn(`[schedule] ${sch.id} delivery deferred:`, e instanceof Error ? e.message : e),
-    });
-    void schedulerP.then(
-      (sch) => sch.start(),
-      (e) => console.error("[schedule] failed to start", e),
-    );
   }
 
   /** 转成发给浏览器的事件：去掉内部字段，上游错误换成安全的说明（CLAUDE.md 后端规范） */
@@ -250,6 +145,88 @@ export function createConversationRoutes(
     return pub;
   }
   const writeEvent = (stream: SSEStreamingApi, pub: AgentEvent) => stream.writeSSE({ event: pub.type, data: JSON.stringify(pub) });
+
+  // ── 定时提醒（/loop）：到期时放进收件箱 ──
+  let schedulerP: Promise<Scheduler<RunSettingsBody>> | undefined;
+
+  // ── 每个会话一个处理者 ──
+  const agents = new Map<string, ConversationAgent<RunSettingsBody>>();
+  const ready = log();
+  /** 会话的处理者（按需创建，进程内每个会话只有一个） */
+  const agentReady = async (id: string): Promise<ConversationAgent<RunSettingsBody>> => {
+    const l = await ready;
+    let a = agents.get(id);
+    if (!a) {
+      a = new ConversationAgent<RunSettingsBody>({
+        id,
+        log: l,
+        goals: () => goalsFor(id),
+        setup: async (body, source, extraTools): Promise<TurnSetup> => {
+          const b = body ?? {};
+          const s = parseSettings(b);
+          if (typeof s === "string") throw new Error(`invalid saved settings: ${s}`);
+          const schedule = schedulerP ? scheduleTools(await schedulerP, id, { settings: settingsBodyOf(b) }) : [];
+          return {
+            options: {
+              provider: s.provider,
+              model: s.model,
+              ...(s.serverTools ? { serverTools: s.serverTools } : {}),
+              ...(s.system ? { system: s.system } : {}),
+              ...(s.temperature !== undefined ? { temperature: s.temperature } : {}),
+              tools: [...s.tools, ...schedule, ...extraTools],
+              compactor: createCompactor(),
+              stopWhen: stepCount(s.maxSteps),
+            },
+            // 目标轮次无人值守：询问模式下拒绝需要审批的工具（第二期决定 2A），完全信任时直接执行
+            approval:
+              source === "goal"
+                ? unattendedApproval(s.fullAccess)
+                : s.fullAccess
+                  ? { policy: "allow" }
+                  : { answerers: [pendingApprovalAnswerer(context.pendingApprovals)] },
+            publicEvent: (e) => publicEvent(e, s.provider),
+          };
+        },
+        onTurnError: (e) => console.error("[agent] turn could not start:", e),
+      });
+      agents.set(id, a);
+    }
+    return a;
+  };
+
+  if (context.schedulesFile) {
+    schedulerP = createScheduler<RunSettingsBody>({
+      file: context.schedulesFile,
+      // 到期：放进收件箱（先写盘），由处理者在空闲时跑；不会因为会话忙而失败
+      deliver: async (schedule: Schedule<RunSettingsBody>, occurrenceAt: number) => {
+        const id = schedule.conversationId;
+        if (!(await (await log()).load(id))) {
+          void schedulerP?.then((s) => s.delete(schedule.id)); // 会话已删除
+          return;
+        }
+        const message = userMessage(renderReminder(schedule, occurrenceAt, schedule.timeZone));
+        await (await agentReady(id)).insert("next-turn", message, "reminder", schedule.settings ?? {});
+      },
+      onError: (e, sch) => console.warn(`[schedule] ${sch.id} delivery deferred:`, e instanceof Error ? e.message : e),
+    });
+    void schedulerP.then(
+      (sch) => sch.start(),
+      (e) => console.error("[schedule] failed to start", e),
+    );
+  }
+
+  // 进程启动：收件箱里还有待处理输入的会话继续处理（目标不会自己恢复）
+  void (async () => {
+    try {
+      const l = await ready;
+      for (const c of await l.list()) {
+        const conv = await l.load(c.id);
+        if (conv && (conv.inbox["next-turn"].length || conv.inbox["next-step"].length)) (await agentReady(c.id)).kick();
+      }
+    } catch (e) {
+      console.error("[agent] startup scan failed", e);
+    }
+  })();
 
   // ── 会话 ──────────────────────────────────────────────────────────────
 
@@ -266,7 +243,8 @@ export function createConversationRoutes(
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
     const conv = await (await log()).load(id);
     if (!conv) return c.json({ error: "Not found" }, 404);
-    return c.json({ ...conv, goalRunning: goalSessions.has(id) });
+    const a = agents.get(id);
+    return c.json({ ...conv, running: a?.isRunning ?? false, goalArmed: a?.isArmed ?? false });
   });
 
   app.patch("/conversations/:id", async (c) => {
@@ -280,61 +258,79 @@ export function createConversationRoutes(
   app.delete("/conversations/:id", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    goalSessions.get(id)?.handle.stop("abort");
+    agents.get(id)?.dispose();
+    agents.delete(id);
     await (await log()).delete(id);
     controllers.delete(id);
     if (schedulerP) await (await schedulerP).deleteForConversation(id);
     return c.json({ success: true });
   });
 
-  // ── 普通运行 ──────────────────────────────────────────────────────────
+  // ── 输入 ──────────────────────────────────────────────────────────────
 
-  /** 在会话里发一条用户消息并运行；响应是 core 事件的 SSE 流 */
-  app.post("/conversations/:id/runs", async (c) => {
+  /**
+   * 发一条消息：写进收件箱后立刻返回。target：next-turn 排队（空闲时就是"发送"），
+   * next-step 插话（送进正在运行的这一轮；空闲时等同下一轮）。settings 是跑这条消息用的设置
+   */
+  app.post("/conversations/:id/messages", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<RunSettingsBody & { text?: string }>(c);
+    const body = await readJson<{ text?: unknown; target?: unknown; settings?: RunSettingsBody }>(c);
     if (!body || typeof body.text !== "string" || !body.text.trim()) return c.json({ error: "text is required" }, 400);
     if (body.text.length > MAX_TEXT) return c.json({ error: "text too long" }, 400);
-    const settings = parseSettings(body);
-    if (typeof settings === "string") return c.json({ error: settings }, 400);
+    const target = body.target === "next-step" ? "next-step" : body.target === undefined || body.target === "next-turn" ? "next-turn" : null;
+    if (!target) return c.json({ error: "invalid target" }, 400);
+    const settings = body.settings && typeof body.settings === "object" ? settingsBodyOf(body.settings) : {};
+    const parsed = parseSettings(settings);
+    if (typeof parsed === "string") return c.json({ error: parsed }, 400);
     const conversations = await log();
     const conv = await conversations.load(id);
     if (!conv) return c.json({ error: "Not found" }, 404);
-    // 运行中请用插话 / 排队接口，不能在同一会话再起一次运行
-    if (busy.has(id)) return c.json({ error: "Conversation is busy" }, 409);
-    const handle = await startRun(id, conv.transcript, userMessage(body.text), settings, body);
     if (!conv.meta.title) await conversations.setTitle(id, body.text.trim().replace(/\s+/g, " ").slice(0, 40));
-    return streamSSE(c, async (stream) => {
-      stream.onAbort(() => handle.abort("client disconnected"));
-      for await (const e of handle) {
-        await writeEvent(stream, publicEvent(e, settings.provider)).catch(() => handle.abort("write failed"));
-      }
-    });
+    const item = await (await agentReady(id)).insert(target, userMessage(body.text), "user", settings);
+    return c.json({ item: { id: item.id, target } }, 202);
+  });
+
+  /** 撤回一条还没处理的输入 */
+  app.delete("/conversations/:id/inbox/:itemId", async (c) => {
+    const id = c.req.param("id");
+    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    const ok = await (await agentReady(id)).discard(c.req.param("itemId"));
+    return ok ? c.json({ success: true }) : c.json({ error: "Not pending" }, 404);
+  });
+
+  /** 停止：中止当前运行并清空收件箱；停止的是目标轮次则暂停目标 */
+  app.post("/conversations/:id/stop", async (c) => {
+    const id = c.req.param("id");
+    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    if (!(await (await log()).load(id))) return c.json({ error: "Not found" }, 404);
+    await (await agentReady(id)).stop();
+    return c.json({ success: true });
   });
 
   /**
-   * 观察一个会话（长连接）：收到 server 自己发起的运行（定时提醒）的事件。
-   * 客户端自己发起的运行仍然走各自的响应流，不会重复推送。
+   * 会话事件流（长连接）：这个会话所有运行的事件。连上时先补发状态、收件箱、目标和当前这一轮已发生的事件。
+   * 自定义事件：agent（运行状态）、inbox（待处理输入）、goal（目标 + armed）、goal_round、ui_command、ping
    */
-  app.get("/conversations/:id/watch", (c) => {
+  app.get("/conversations/:id/events", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    if (!(await (await log()).load(id))) return c.json({ error: "Not found" }, 404);
+    const agent = await agentReady(id);
     return streamSSE(c, async (stream) => {
       const queue: AgentEvent[] = [];
       let wake: (() => void) | null = null;
-      const sub = (e: AgentEvent) => {
+      const push = (e: AgentEvent) => {
         queue.push(e);
         wake?.();
       };
-      let set = watchers.get(id);
-      if (!set) watchers.set(id, (set = new Set()));
-      set.add(sub);
-      // 心跳，防止中间层关掉空闲连接
-      const heartbeat = setInterval(() => sub({ type: "custom", name: "ping", data: null }), 25_000);
+      // 先订阅再取快照：两者之间发生的事件不会漏（会有少量重复，客户端的 reducer 对快照之后的事件按顺序处理）
+      const unsubscribe = agent.subscribe(push);
+      const snapshot = await agent.snapshot();
+      queue.unshift(...snapshot.filter((e) => !queue.includes(e)));
+      const heartbeat = setInterval(() => push({ type: "custom", name: "ping", data: null }), 25_000);
       stream.onAbort(() => wake?.());
       try {
-        await writeEvent(stream, { type: "custom", name: "ping", data: null });
         while (!stream.aborted) {
           const e = queue.shift();
           if (!e) {
@@ -346,10 +342,109 @@ export function createConversationRoutes(
         }
       } finally {
         clearInterval(heartbeat);
-        set.delete(sub);
-        if (!set.size) watchers.delete(id);
+        unsubscribe();
       }
     });
+  });
+
+  // ── 目标（/goal） ─────────────────────────────────────────────────────
+
+  const goalErrorResponse = (c: Context, e: unknown) => {
+    if (e instanceof GoalError) {
+      const status = e.code === "stale" || e.code === "goal_exists" ? 409 : e.code === "no_goal" ? 404 : 400;
+      return c.json({ error: e.message, code: e.code }, status);
+    }
+    throw e;
+  };
+
+  app.get("/conversations/:id/goal", async (c) => {
+    const id = c.req.param("id");
+    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    if (!(await (await log()).load(id))) return c.json({ error: "Not found" }, 404);
+    try {
+      return c.json({ goal: (await goalsFor(id)).get(), armed: agents.get(id)?.isArmed ?? false });
+    } catch (e) {
+      return goalErrorResponse(c, e);
+    }
+  });
+
+  /** 创建目标（只有用户能创建）并开始自动推进；settings 是目标轮次用的设置 */
+  app.post("/conversations/:id/goal", async (c) => {
+    const id = c.req.param("id");
+    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    const body = await readJson<{ objective?: unknown; maxRounds?: unknown; settings?: RunSettingsBody }>(c);
+    if (!body) return c.json({ error: "Invalid JSON body" }, 400);
+    const settings = body.settings && typeof body.settings === "object" ? settingsBodyOf(body.settings) : {};
+    if (typeof parseSettings(settings) === "string") return c.json({ error: "invalid settings" }, 400);
+    const conversations = await log();
+    const conv = await conversations.load(id);
+    if (!conv) return c.json({ error: "Not found" }, 404);
+    try {
+      const goal = await (await goalsFor(id)).create({
+        objective: body.objective as string,
+        ...(body.maxRounds !== undefined ? { maxRounds: body.maxRounds as number } : {}),
+      });
+      if (!conv.meta.title) await conversations.setTitle(id, `目标：${goal.objective.replace(/\s+/g, " ").slice(0, 36)}`);
+      (await agentReady(id)).arm(settings);
+      return c.json({ goal, armed: true });
+    } catch (e) {
+      return goalErrorResponse(c, e);
+    }
+  });
+
+  /**
+   * 用户修改目标，都要带当前 revision：
+   * pause（暂停并中止正在跑的目标轮次）/ resume（恢复并继续推进，可带 settings）/ edit / complete / clear
+   */
+  app.patch("/conversations/:id/goal", async (c) => {
+    const id = c.req.param("id");
+    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
+    const body = await readJson<{ action?: string; revision?: unknown; objective?: unknown; maxRounds?: unknown; settings?: RunSettingsBody }>(c);
+    if (!body || typeof body.revision !== "number") return c.json({ error: "action and revision are required" }, 400);
+    try {
+      const goals = await goalsFor(id);
+      const current = goals.get();
+      if (!current) return c.json({ error: "No goal", code: "no_goal" }, 404);
+      const ref = { id: current.id, revision: body.revision };
+      const agent = await agentReady(id);
+      switch (body.action) {
+        case "pause":
+          // 宿主发起的暂停：中止正在跑的目标轮次（dsh）；没在跑时直接暂停
+          if (current.revision !== body.revision) throw new GoalError("stale", "goal changed; read it again");
+          agent.disarm(true);
+          if (goals.get()?.phase === "active") await goals.pause({ id: current.id, revision: goals.get()!.revision }).catch(() => {});
+          break;
+        case "resume": {
+          const settings = body.settings && typeof body.settings === "object" ? settingsBodyOf(body.settings) : {};
+          if (typeof parseSettings(settings) === "string") return c.json({ error: "invalid settings" }, 400);
+          if (current.phase !== "active") await goals.resume(ref);
+          else if (current.revision !== body.revision) throw new GoalError("stale", "goal changed; read it again");
+          agent.arm(settings);
+          break;
+        }
+        case "complete":
+          await goals.complete(ref);
+          agent.disarm(true);
+          break;
+        case "edit":
+          await goals.edit(ref, {
+            ...(body.objective !== undefined ? { objective: body.objective as string } : {}),
+            ...(body.maxRounds !== undefined ? { maxRounds: body.maxRounds as number } : {}),
+          });
+          break;
+        case "clear":
+          if (current.revision !== body.revision) throw new GoalError("stale", "goal changed; read it again");
+          agent.disarm(true);
+          await goals.clear({ id: current.id, revision: goals.get()?.revision ?? body.revision });
+          break;
+        default:
+          return c.json({ error: "unknown action" }, 400);
+      }
+      await agent.emitGoal();
+      return c.json({ goal: goals.get(), armed: agent.isArmed });
+    } catch (e) {
+      return goalErrorResponse(c, e);
+    }
   });
 
   // ── 定时提醒接口 ──
@@ -392,200 +487,6 @@ export function createConversationRoutes(
     if (!schedulerP) return c.json({ error: "Not found" }, 404);
     const deleted = await (await schedulerP).delete(c.req.param("sid"));
     return deleted ? c.json({ success: true }) : c.json({ error: "Not found" }, 404);
-  });
-
-  const withRun = (handler: (h: RunHandle, text: string) => Promise<unknown> | unknown, needsText: boolean) =>
-    async (c: Context) => {
-      const h = runs.get(c.req.param("runId") ?? "");
-      if (!h) return c.json({ error: "Run not found" }, 404);
-      const body = needsText ? await readJson<{ text?: string }>(c) : {};
-      const text = (body as { text?: string } | null)?.text;
-      if (needsText && (typeof text !== "string" || !text.trim() || text.length > MAX_TEXT)) return c.json({ error: "text is required" }, 400);
-      return c.json({ result: (await handler(h, text ?? "")) ?? null });
-    };
-
-  // 插话：在下一个 step 边界插入；返回是否送达
-  app.post("/runs/:runId/steer", withRun((h, text) => h.steer(userMessage(text)), true));
-  // 排队：本轮结束后接着跑
-  app.post("/runs/:runId/follow-up", withRun((h, text) => h.followUp(userMessage(text)), true));
-  // 中止；目标的某一轮被中止时，目标会暂停
-  app.post("/runs/:runId/abort", withRun((h) => h.abort("user"), false));
-
-  // ── 目标（/goal） ─────────────────────────────────────────────────────
-
-  const goalErrorResponse = (c: Context, e: unknown) => {
-    if (e instanceof GoalError) {
-      const status = e.code === "stale" || e.code === "goal_exists" ? 409 : e.code === "no_goal" ? 404 : 400;
-      return c.json({ error: e.message, code: e.code }, status);
-    }
-    throw e;
-  };
-
-  app.get("/conversations/:id/goal", async (c) => {
-    const id = c.req.param("id");
-    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const conv = await (await log()).load(id);
-    if (!conv) return c.json({ error: "Not found" }, 404);
-    try {
-      return c.json({ goal: (await goalsFor(id)).get(), running: goalSessions.has(id) });
-    } catch (e) {
-      return goalErrorResponse(c, e);
-    }
-  });
-
-  /** 创建目标（只有用户能创建）；创建后用 POST /goal/run 开始自动推进 */
-  app.post("/conversations/:id/goal", async (c) => {
-    const id = c.req.param("id");
-    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ objective?: unknown; maxRounds?: unknown }>(c);
-    if (!body) return c.json({ error: "Invalid JSON body" }, 400);
-    const conversations = await log();
-    const conv = await conversations.load(id);
-    if (!conv) return c.json({ error: "Not found" }, 404);
-    try {
-      const goal = await (await goalsFor(id)).create({
-        objective: body.objective as string,
-        ...(body.maxRounds !== undefined ? { maxRounds: body.maxRounds as number } : {}),
-      });
-      if (!conv.meta.title) await conversations.setTitle(id, `目标：${goal.objective.replace(/\s+/g, " ").slice(0, 36)}`);
-      return c.json({ goal });
-    } catch (e) {
-      return goalErrorResponse(c, e);
-    }
-  });
-
-  /** 用户修改目标：edit / pause / resume / complete / clear，都要带当前 revision */
-  app.patch("/conversations/:id/goal", async (c) => {
-    const id = c.req.param("id");
-    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ action?: string; revision?: unknown; objective?: unknown; maxRounds?: unknown }>(c);
-    if (!body || typeof body.revision !== "number") return c.json({ error: "action and revision are required" }, 400);
-    try {
-      const goals = await goalsFor(id);
-      const current = goals.get();
-      if (!current) return c.json({ error: "No goal", code: "no_goal" }, 404);
-      const ref = { id: current.id, revision: body.revision };
-      const session = goalSessions.get(id);
-      switch (body.action) {
-        case "pause":
-          // 驱动在跑：中止当前轮，由驱动暂停目标（dsh：宿主发起的暂停会中止正在运行的轮次）
-          if (current.revision !== body.revision) throw new GoalError("stale", "goal changed; read it again");
-          if (session) {
-            session.handle.stop("pause");
-            await session.done;
-          } else await goals.pause(ref);
-          break;
-        case "resume":
-          await goals.resume(ref);
-          break;
-        case "complete":
-          await goals.complete(ref);
-          break;
-        case "edit":
-          await goals.edit(ref, {
-            ...(body.objective !== undefined ? { objective: body.objective as string } : {}),
-            ...(body.maxRounds !== undefined ? { maxRounds: body.maxRounds as number } : {}),
-          });
-          break;
-        case "clear":
-          if (current.revision !== body.revision) throw new GoalError("stale", "goal changed; read it again");
-          if (session) {
-            session.handle.stop("abort");
-            await session.done;
-          }
-          await goals.clear({ id: current.id, revision: goals.get()?.revision ?? body.revision });
-          break;
-        default:
-          return c.json({ error: "unknown action" }, 400);
-      }
-      return c.json({ goal: goals.get(), running: goalSessions.has(id) });
-    } catch (e) {
-      return goalErrorResponse(c, e);
-    }
-  });
-
-  /**
-   * 开始自动推进目标（或连上正在推进的驱动），响应是事件 SSE。
-   * 客户端断开不会停止驱动：目标在后台继续（无人值守），重新打开会话后再连上即可。
-   * 进程重启后驱动不会自己继续（dsh 的规则），要用户再调用这个接口。
-   */
-  app.post("/conversations/:id/goal/run", async (c) => {
-    const id = c.req.param("id");
-    if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    let session = goalSessions.get(id);
-    if (!session) {
-      const body = (await readJson<RunSettingsBody>(c)) ?? {};
-      const settings = parseSettings(body);
-      if (typeof settings === "string") return c.json({ error: settings }, 400);
-      const conversations = await log();
-      const conv = await conversations.load(id);
-      if (!conv) return c.json({ error: "Not found" }, 404);
-      let goals: GoalController;
-      try {
-        goals = await goalsFor(id);
-      } catch (e) {
-        return goalErrorResponse(c, e);
-      }
-      const goal = goals.get();
-      if (!goal || goal.phase !== "active") return c.json({ error: "Goal is not active", code: "invalid_transition", goal }, 409);
-      if (busy.has(id)) return c.json({ error: "Conversation is busy" }, 409);
-      busy.add(id);
-      const handle = runGoal({
-        ...runOptionsOf(settings),
-        messages: conv.transcript,
-        goals,
-        persist: conversations.persistFor(id),
-        onRound: (round) => {
-          runs.set(round.runId, round);
-          void round.result.finally(() => runs.delete(round.runId));
-        },
-      });
-      const s: GoalSession = { handle, provider: settings.provider, subscribers: new Set(), done: Promise.resolve() };
-      session = s;
-      goalSessions.set(id, s);
-      s.done = (async () => {
-        try {
-          for await (const e of handle) for (const sub of s.subscribers) sub(e);
-          await handle.result;
-        } finally {
-          goalSessions.delete(id);
-          busy.delete(id);
-          for (const sub of s.subscribers) sub(null);
-        }
-      })();
-    }
-
-    const s = session;
-    return streamSSE(c, async (stream) => {
-      let wake: (() => void) | null = null;
-      const queue: Array<AgentEvent | null> = [];
-      const sub = (e: AgentEvent | null) => {
-        queue.push(e);
-        wake?.();
-      };
-      s.subscribers.add(sub);
-      // 连接时先告诉客户端当前目标状态
-      await writeEvent(stream, { type: "custom", name: "goal", data: (await goalsFor(id)).get() });
-      stream.onAbort(() => {
-        s.subscribers.delete(sub);
-        wake?.();
-      });
-      try {
-        for (;;) {
-          if (stream.aborted) return;
-          const e = queue.shift();
-          if (e === undefined) {
-            await new Promise<void>((r) => (wake = r));
-            wake = null;
-            continue;
-          }
-          if (e === null) return;
-          await writeEvent(stream, publicEvent(e, s.provider));
-        }
-      } finally {
-        s.subscribers.delete(sub);
-      }
-    });
   });
 
   return app;

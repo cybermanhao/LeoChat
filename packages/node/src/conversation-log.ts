@@ -190,7 +190,8 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
   }
   async function saveIndex(): Promise<void> {
     if (!index) return;
-    const tmp = join(dir, `${INDEX}.${process.pid}.tmp`);
+    // 临时文件名带随机后缀：同一进程里可能有多个实例同时写（否则会互相 rename 掉对方的临时文件）
+    const tmp = join(dir, `${INDEX}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
     await writeFile(tmp, JSON.stringify({ conversations: [...index.values()] }), "utf8");
     await rename(tmp, join(dir, INDEX));
   }

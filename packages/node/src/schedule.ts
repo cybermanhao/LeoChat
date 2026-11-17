@@ -323,7 +323,7 @@ export async function createScheduler<S = unknown>(opts: SchedulerOptions<S>): P
 
   const save = async () => {
     await mkdir(dirname(opts.file), { recursive: true });
-    const tmp = `${opts.file}.${process.pid}.tmp`;
+    const tmp = `${opts.file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
     await writeFile(tmp, JSON.stringify({ schedules: tasks }, null, 2), "utf8");
     await rename(tmp, opts.file);
   };

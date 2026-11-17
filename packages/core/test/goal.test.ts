@@ -188,3 +188,16 @@ describe("runGoal", () => {
     expect(provider.requests).toHaveLength(0);
   });
 });
+
+describe("approval policy allow", () => {
+  it("runs tools that need approval without emitting an approval request", async () => {
+    const { run } = await import("../src/index");
+    let ran = false;
+    const bash = defineTool({ name: "bash", description: "", input: z.object({}), needsApproval: true, execute: () => ((ran = true), { content: "x" }) });
+    const h = run({ provider: scriptedProvider([toolTurn([{ id: "b1", name: "bash", args: {} }]), textTurn("ok")]), model: "m", messages: [userMessage("go")], tools: [bash], approval: { policy: "allow" } });
+    const events = await drain(h);
+    expect(ran).toBe(true);
+    expect(events.some((e) => e.type === "approval_request")).toBe(false);
+    expect(events.find((e) => e.type === "approval_resolved")).toMatchObject({ outcome: "allowed-once", automatic: true });
+  });
+});
