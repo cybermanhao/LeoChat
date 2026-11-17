@@ -9,7 +9,7 @@
  */
 import { mkdir, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { applyTranscriptOps, newId, type Message, type TranscriptOp } from "@leochat/core";
+import { applyTranscriptOps, newId, replayGoal, type Goal, type GoalRecord, type GoalStore, type Message, type TranscriptOp } from "@leochat/core";
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const INDEX = "index.json";
@@ -24,18 +24,23 @@ export interface ConversationMeta {
 type LogRecord =
   | { t: "meta"; id: string; title: string; createdAt: number; v: 1 }
   | { t: "op"; op: TranscriptOp; at: number }
-  | { t: "title"; title: string; at: number };
+  | { t: "title"; title: string; at: number }
+  /** /goal 的变更记录（core 的 GoalRecord），和 transcript 写在同一份日志里 */
+  | { t: "goal"; rec: GoalRecord };
 
 export interface ConversationLog {
   readonly dir: string;
   create(title?: string): Promise<ConversationMeta>;
   list(): Promise<ConversationMeta[]>;
-  load(id: string): Promise<{ meta: ConversationMeta; transcript: Message[] } | null>;
+  /** goal 是当前目标；目标记录回放失败时 goal 为 null、goalError 给出原因（不影响会话本身） */
+  load(id: string): Promise<{ meta: ConversationMeta; transcript: Message[]; goal: Goal | null; goalError?: string } | null>;
   append(id: string, op: TranscriptOp): Promise<void>;
   setTitle(id: string, title: string): Promise<void>;
   delete(id: string): Promise<void>;
   /** 直接交给 run({ persist })：每次 transcript 变化都写进这个会话的日志 */
   persistFor(id: string): (op: TranscriptOp) => Promise<void>;
+  /** 这个会话的目标存储，交给 core 的 goalController() */
+  goalStore(id: string): GoalStore;
 }
 
 function assertId(id: string): void {
@@ -100,7 +105,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     let updatedAt = meta.createdAt;
     for (const r of records) {
       if (r.t === "title") title = r.title;
-      if (r.t !== "meta") updatedAt = Math.max(updatedAt, r.at);
+      if (r.t !== "meta") updatedAt = Math.max(updatedAt, r.t === "goal" ? r.rec.at : r.at);
     }
     return { id: meta.id, title, createdAt: meta.createdAt, updatedAt };
   }
@@ -158,7 +163,15 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
       const meta = await readMeta(id);
       if (!meta) return null;
       const ops = records.filter((r): r is Extract<LogRecord, { t: "op" }> => r.t === "op").map((r) => r.op);
-      return { meta, transcript: applyTranscriptOps([], ops) };
+      const goalRecs = records.filter((r): r is Extract<LogRecord, { t: "goal" }> => r.t === "goal").map((r) => r.rec);
+      let goal: Goal | null = null;
+      let goalError: string | undefined;
+      try {
+        goal = replayGoal(goalRecs);
+      } catch (e) {
+        goalError = e instanceof Error ? e.message : String(e);
+      }
+      return { meta, transcript: applyTranscriptOps([], ops), goal, ...(goalError ? { goalError } : {}) };
     },
     append(id, op) {
       return serial(id, async () => {
@@ -185,6 +198,28 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     },
     persistFor(id) {
       return (op) => self.append(id, op);
+    },
+    goalStore(id) {
+      assertId(id);
+      return {
+        load: async () => {
+          let text: string;
+          try {
+            text = await readFile(file(id), "utf8");
+          } catch {
+            return [];
+          }
+          return parseLog(text)
+            .filter((r): r is Extract<LogRecord, { t: "goal" }> => r.t === "goal")
+            .map((r) => r.rec);
+        },
+        append: (rec) =>
+          serial(id, async () => {
+            await appendDurable(file(id), JSON.stringify({ t: "goal", rec } satisfies LogRecord));
+            const meta = (await loadIndex()).get(id);
+            if (meta) await touch({ ...meta, updatedAt: rec.at });
+          }),
+      };
     },
   };
   return self;

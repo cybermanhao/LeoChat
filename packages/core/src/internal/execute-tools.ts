@@ -189,6 +189,7 @@ async function executeOne<Ctx>(o: ExecuteBatchOptions<Ctx>, call: ToolUseBlock):
       outcome = "allowed-once";
     } else if ((o.approval?.policy ?? "ask") === "never") {
       outcome = "rejected";
+      rejectMessage = o.approval?.neverMessage;
     } else {
       o.emit({ type: "approval_request", approvalId, callId: call.id, toolName: tool.name, ...(reason ? { reason } : {}) });
       automatic = false;

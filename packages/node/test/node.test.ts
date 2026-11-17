@@ -204,3 +204,34 @@ describe("conversationLog", () => {
     expect(toolResults.every((b) => b.isError)).toBe(true);
   });
 });
+
+describe("conversationLog goal records", () => {
+  it("stores goal changes in the conversation log and replays them on load and after reopening", async () => {
+    const { conversationLog } = await import("../src/index");
+    const { goalController } = await import("@leochat/core");
+    const log = await conversationLog(dir);
+    const conv = await log.create("goal chat");
+    const goals = await goalController(log.goalStore(conv.id));
+    const g = await goals.create({ objective: "sort the files", maxRounds: 4 });
+    await goals.admitRound({ id: g.id, revision: g.revision });
+    await log.append(conv.id, { kind: "append", message: userMessage("hi", "m1") });
+    const loaded = await log.load(conv.id);
+    expect(loaded!.goal).toMatchObject({ objective: "sort the files", roundsStarted: 1, revision: 2 });
+    expect(loaded!.transcript.map((m) => m.id)).toEqual(["m1"]); // 目标记录不进 transcript
+    const reopened = await goalController((await conversationLog(dir)).goalStore(conv.id));
+    expect(reopened.get()).toEqual(loaded!.goal);
+  });
+
+  it("a corrupted goal history does not make the conversation unloadable", async () => {
+    const { conversationLog } = await import("../src/index");
+    const { appendFile } = await import("node:fs/promises");
+    const log = await conversationLog(dir);
+    const conv = await log.create();
+    await log.append(conv.id, { kind: "append", message: userMessage("kept", "m1") });
+    await appendFile(join(dir, `${conv.id}.jsonl`), JSON.stringify({ t: "goal", rec: { op: "pause", goal: { id: "x", revision: 9 }, at: 1 } }) + "\n");
+    const loaded = await log.load(conv.id);
+    expect(loaded!.transcript.map((m) => m.id)).toEqual(["m1"]);
+    expect(loaded!.goal).toBeNull();
+    expect(loaded!.goalError).toMatch(/discontinuous|invalid/);
+  });
+});

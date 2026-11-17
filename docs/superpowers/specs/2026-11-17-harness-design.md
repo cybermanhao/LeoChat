@@ -1,7 +1,7 @@
 # Harness 设计：/goal 与 /loop
 
 **日期：** 2026-11-17
-**状态：** 草案，等待用户决定第 5 节的问题
+**状态：** 已定（2026-11-17），第一期实施 /goal
 **参考：** deepseek-harness（dsh，本地 `C:\code\deepseek-harness`）的 `packages/goal`、`packages/schedule`；Claude Code 的 `/loop`
 
 ## 1. Harness 是什么
@@ -138,6 +138,16 @@ runGoal({ ...runOptions, goal, store, onRound }) // 返回一个句柄，可 pau
 
 ### 决定 5：第一期范围
 - **推荐：先做 /goal（4.1–4.3 加 GUI 目标条），/loop 作为第二期。** /goal 更能体现 harness 的价值，而且 /loop 的投递也要复用 /goal 的"空闲时开一轮"逻辑。
+
+## 5.1 用户的决定（2026-11-17）
+
+| 决定 | 选择 | 落实 |
+|---|---|---|
+| 1 在哪跑 | **C：GUI 和命令行都做** | core 部分共用；GUI（server）先做，命令行外壳随后 |
+| 2 无人值守审批 | **A：目标轮次里一律拒绝** | 目标轮次用 `policy: 'never'`，拒绝信息说明"无人值守，不能执行" |
+| 3 默认额度 | **参考 dsh** | 只限轮数，默认 256；不设花费上限（4.1 的 `budgetUsd` 第一期不做） |
+| 4 /loop 语义 | **参考 dsh** | 定时提醒送进原会话，第二期 |
+| 5 第一期范围 | **同意** | 先做 /goal |
 
 ## 6. 以后
 

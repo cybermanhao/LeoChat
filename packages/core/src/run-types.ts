@@ -74,6 +74,8 @@ export type Answerer<Ctx = unknown> = (
 export interface ApprovalConfig<Ctx = unknown> {
   /** 默认 ask；never 在调用应答者之前就确定性地拒绝（CI、无人值守） */
   policy?: "ask" | "never";
+  /** policy 为 never 时模型看到的拒绝说明，例如"无人值守，不能执行"；省略时用默认措辞 */
+  neverMessage?: string;
   /** 链走到头还没人回答 → unavailable → 拒绝 */
   answerers?: Answerer<Ctx>[];
 }
