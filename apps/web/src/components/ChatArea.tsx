@@ -18,7 +18,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe, ShieldCheck, ShieldAlert, ArrowDown } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
@@ -31,6 +31,7 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ViewMessageItem, messageText } from "./chat/ViewMessageItem";
 import { ApprovalBanner, QueuedBar } from "./chat/RunBanners";
 import { GoalBar } from "./chat/GoalBar";
+import { useStickToBottom } from "./chat/useStickToBottom";
 import { ScheduleBar } from "./chat/ScheduleBar";
 import { parseLoopCommand } from "../lib/loop-command";
 import { showToast } from "../stores/toast";
@@ -93,7 +94,9 @@ const ParsedMessageText = ({
 export function ChatArea() {
   const { t } = useT();
   const navigate = useNavigate();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // 贴底滚动：贴底时跟随内容增长（每帧最多一次、不用动画），用户上滚就不再跟随
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
+  const currentConversationId = useChatStore((s) => s.currentConversationId);
   const view = useChatStore((s) => s.view);
   const inbox = useChatStore((s) => s.inbox);
   const input = useChatStore((s) => s.input);
@@ -136,31 +139,16 @@ export function ChatArea() {
   );
 
   // 滚动到底部
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({
-          top: scrollRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      });
-    }
-  }, []);
-
-  // 新消息时滚动到底部
+  // 切换会话：直接到底部（不用动画）
   useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages.length, scrollToBottom]);
+    scrollToBottom();
+  }, [currentConversationId, scrollToBottom]);
 
-  // 流式生成时自动滚动（监听最后一条消息的内容变化）
+  // 新的用户消息（自己发的、插话、提醒、目标轮次）：回到底部并恢复跟随
   const lastMessage = messages[messages.length - 1];
   useEffect(() => {
-    if (isGenerating && lastMessage?.role === "assistant") {
-      scrollToBottom();
-    }
-  }, [isGenerating, lastMessage?.parts, scrollToBottom]);
+    if (lastMessage?.role === "user") scrollToBottom();
+  }, [lastMessage?.id, lastMessage?.role, scrollToBottom]);
 
   // MCP Store
   const mcpSources = useMCPStore((s) => s.sources);
@@ -739,11 +727,13 @@ export function ChatArea() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Messages - 可滚动区域 */}
+      <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 scrollbar-thin"
+        className="h-full overflow-y-auto p-4 scrollbar-thin [overflow-anchor:none]"
+        data-testid="chat-scroll"
       >
-        <div className="mx-auto max-w-3xl space-y-4">
+        <div ref={contentRef} className="mx-auto max-w-3xl space-y-4">
           {messages.map((message, index) => {
             const streaming = isGenerating && index === messages.length - 1 && message.role === "assistant";
             return (
@@ -776,6 +766,18 @@ export function ChatArea() {
             <p className="text-center text-xs text-muted-foreground">本次回复出错（{view.error.kind}），可以重新发送。</p>
           )}
         </div>
+      </div>
+      {/* 用户上滚后不再跟随；点这里回到底部并恢复跟随 */}
+      {!isAtBottom && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom(true)}
+          className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground shadow-md transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ArrowDown className="h-3 w-3" />
+          {isGenerating ? "回到底部（正在生成）" : "回到底部"}
+        </button>
+      )}
       </div>
 
       {/* 排队中的插话 / 后续消息 */}
