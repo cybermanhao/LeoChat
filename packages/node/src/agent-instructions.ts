@@ -76,7 +76,14 @@ async function projectDirs(cwd: string, markers: string[]): Promise<string[]> {
   }
 }
 
-const render = (f: InstructionFile, body: string) => `<instructions path="${f.path}" scope="${f.scope}">\n${body}\n</instructions>`;
+/** 发给模型的路径：家目录下的写成 ~/...，不把本机用户名之类的细节带出去 */
+export function displayPath(path: string, home: string = homedir()): string {
+  const norm = (x: string) => x.replace(/\\/g, "/").replace(/\/+$/, "");
+  const p = norm(path);
+  const h = norm(home);
+  return h && p.toLowerCase().startsWith(h.toLowerCase() + "/") ? `~${p.slice(h.length)}` : p;
+}
+const render = (f: InstructionFile, body: string) => `<instructions path="${displayPath(f.path)}" scope="${f.scope}">\n${body}\n</instructions>`;
 const HEADER =
   "The following instruction files come from the user (global) and from the project the work happens in. Follow them; more specific (later) files take precedence over broader (earlier) ones.\n\n";
 

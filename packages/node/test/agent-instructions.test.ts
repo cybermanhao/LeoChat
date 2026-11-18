@@ -76,3 +76,15 @@ describe("loadAgentInstructions (dsh agent-instructions)", () => {
     expect(withInstructions("you are helpful", r)).toMatch(/<\/instructions>\n\nyou are helpful$/);
   });
 });
+
+describe("displayPath", () => {
+  it("shows files under the home directory as ~/... and leaves others as they are", async () => {
+    const { displayPath } = await import("../src/agent-instructions");
+    const r = String.raw;
+    expect(displayPath(r`C:\Users\someone\.leochat\AGENTS.md`, r`C:\Users\someone`)).toBe("~/.leochat/AGENTS.md");
+    expect(displayPath(r`c:\users\SOMEONE\proj\AGENTS.md`, r`C:\Users\someone\ `.trim())).toBe("~/proj/AGENTS.md");
+    expect(displayPath("/home/someone/.agents/AGENTS.md", "/home/someone")).toBe("~/.agents/AGENTS.md");
+    expect(displayPath(r`D:\work\repo\AGENTS.md`, r`C:\Users\someone`)).toBe("D:/work/repo/AGENTS.md");
+    expect(displayPath(r`C:\Users\someone2\AGENTS.md`, r`C:\Users\someone`)).toBe("C:/Users/someone2/AGENTS.md");
+  });
+});
