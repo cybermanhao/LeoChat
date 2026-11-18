@@ -21,7 +21,8 @@ function io(provider?: Provider, extra: { interrupt?: AbortSignal; env?: Record<
     io: {
       stdout: { write: (s: string) => out.push(s) },
       stderr: { write: (s: string) => err.push(s) },
-      env: extra.env ?? {},
+      // 指令文件的位置指到临时目录，不读用户真实的 ~/.leochat
+      env: { LEOCHAT_HOME: join(dir, "home"), LEOCHAT_AGENTS_HOME: join(dir, "agents"), ...(extra.env ?? {}) },
       cwd: dir,
       ...(provider ? { provider } : {}),
       ...(extra.interrupt ? { interrupt: extra.interrupt } : {}),
@@ -111,5 +112,27 @@ describe("leochat chat / list / usage", () => {
     expect(await main(["chat", "hi"], noKey.io)).toBe(EXIT.usage);
     expect(noKey.stderr()).toContain("DEEPSEEK_API_KEY");
     expect(await main(["--help"], io().io)).toBe(EXIT.ok);
+  });
+});
+
+describe("instruction files (dsh agent-instructions)", () => {
+  it("loads ~/.leochat/AGENTS.md and the project chain into the system prompt; --no-instructions turns it off", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "home"), { recursive: true });
+    await writeFile(join(dir, "home", "AGENTS.md"), "Always answer in Chinese.");
+    await mkdir(join(dir, ".git"), { recursive: true });
+    await writeFile(join(dir, "AGENTS.md"), "This project is a poem collection.");
+    const provider = scriptedProvider([textTurn("好")]);
+    const t = io(provider);
+    expect(await main(["chat", "--system", "be brief", "hi"], t.io)).toBe(EXIT.ok);
+    const system = provider.requests[0]!.system ?? "";
+    expect(system).toContain("Always answer in Chinese.");
+    expect(system).toContain("This project is a poem collection.");
+    expect(system.trimEnd().endsWith("be brief")).toBe(true);
+    expect(t.stderr()).toContain("[指令]");
+
+    const off = scriptedProvider([textTurn("ok")]);
+    await main(["chat", "--no-instructions", "hi"], io(off).io);
+    expect(off.requests[0]!.system ?? "").not.toContain("poem collection");
   });
 });

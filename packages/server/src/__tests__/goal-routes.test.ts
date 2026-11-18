@@ -13,7 +13,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "leochat-goal-test-"));
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); // 测试结束时后台的运行可能还在写日志
 });
 
 type GoalData = { phase: string; revision: number; roundsStarted: number; armed: boolean } | null;

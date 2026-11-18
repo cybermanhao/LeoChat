@@ -29,7 +29,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "leochat-conv-test-"));
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); // 测试结束时后台的运行可能还在写日志
 });
 
 /** 客户端的做法：reset 时用其中的 transcript 重建视图，之后的事件依次 reduce */
@@ -276,5 +276,17 @@ describe("approval wait (dsh ask: no timeout)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("instruction files", () => {
+  it("the global AGENTS.md comes first in the system prompt, before the GUI's system prompt", async () => {
+    const { app, requests } = makeApp(dir, [text("ok")], { instructions: "<instructions>Answer in Chinese.</instructions>" });
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await say(app, id, "hi", { settings: { system: "be brief" } });
+    await l.until(turnsDone(1));
+    const system = requests[0]!.messages.find((m) => m.role === "system")!.content;
+    expect(system).toBe("<instructions>Answer in Chinese.</instructions>\n\nbe brief");
   });
 });

@@ -44,3 +44,16 @@ describe("conversation inbox", () => {
     expect((await log.load(c.id))!.inbox["next-turn"].map((x) => x.id)).toEqual(["kept"]);
   });
 });
+
+describe("writes after delete", () => {
+  it("a write still in flight after a conversation is deleted does not recreate its log file", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const log = await conversationLog(dir);
+    const c = await log.create();
+    await log.delete(c.id);
+    await log.append(c.id, { kind: "append", message: userMessage("late", "m1") });
+    await log.inboxInsert(c.id, "next-turn", item("late"));
+    expect((await readdir(dir)).filter((f) => f.endsWith(".jsonl"))).toEqual([]);
+    expect(await log.load(c.id)).toBeNull();
+  });
+});

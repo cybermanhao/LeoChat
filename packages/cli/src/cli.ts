@@ -28,7 +28,7 @@ import {
   type ToolSource,
 } from "@leochat/core";
 import { deepseek } from "@leochat/deepseek";
-import { conversationLog, stdioMcpTools, type ConversationLog } from "@leochat/node";
+import { conversationLog, loadAgentInstructions, stdioMcpTools, withInstructions, type ConversationLog } from "@leochat/node";
 
 export const EXIT = { ok: 0, error: 1, blocked: 2, stopped: 3, usage: 64 } as const;
 
@@ -58,6 +58,8 @@ const USAGE = `用法:
   --system <文字>     系统提示
   --max-steps N       每次运行（目标的每一轮）最多几步（默认 20）
   -q, --quiet         不输出进度（stderr）
+  --no-instructions   不加载指令文件（默认加载 ~/.leochat/AGENTS.md、~/.agents/AGENTS.md，
+                      以及从项目根到当前目录的 AGENTS.md / CLAUDE.md，与 dsh 相同）
 
 环境变量: DEEPSEEK_API_KEY（可用 node --env-file=.env 加载）
 目标轮次无人值守：需要审批的工具一律拒绝。`;
@@ -159,6 +161,7 @@ export async function main(argv: string[], io: CliIO): Promise<number> {
         resume: { type: "string" },
         status: { type: "string" },
         quiet: { type: "boolean", short: "q" },
+        "no-instructions": { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
     });
@@ -194,10 +197,12 @@ export async function main(argv: string[], io: CliIO): Promise<number> {
 
     const provider = io.provider ?? makeProvider(io.env);
     const tools: Array<AnyTool | ToolSource> = opt.mcp ? await loadMcpTools(opt.mcp, io.cwd) : [];
+    const instructions = opt["no-instructions"] ? null : await loadAgentInstructions({ cwd: io.cwd, env: io.env });
+    const system = instructions ? withInstructions(opt.system, instructions) : opt.system;
     const runOptions = {
       provider,
       model: opt.model ?? "deepseek-flash",
-      ...(opt.system ? { system: opt.system } : {}),
+      ...(system ? { system } : {}),
       ...(opt["web-search"] ? { serverTools: ["web_search" as const] } : {}),
       tools,
       compactor: createCompactor(),
@@ -205,6 +210,9 @@ export async function main(argv: string[], io: CliIO): Promise<number> {
       ...(io.interrupt ? { signal: io.interrupt } : {}),
     };
     const p = printer(io, opt.quiet ?? false);
+    if (instructions?.files.length) {
+      p.progress(`[指令] ${instructions.files.map((f) => f.path).join(", ")}${instructions.omitted.length ? `（预算不足，省略 ${instructions.omitted.length} 个）` : ""}`);
+    }
 
     // 会话：--continue / --resume 用已有的，否则新建
     const existing = opt.resume ?? opt.continue;

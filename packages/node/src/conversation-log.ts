@@ -142,6 +142,12 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     assertId(id);
     return join(dir, `${id}.jsonl`);
   };
+  /** 本进程里已删除的会话：之后还在路上的写入（例如被中止的运行）直接丢弃，不会重新创建日志文件 */
+  const deleted = new Set<string>();
+  const writeLine = async (id: string, line: string) => {
+    if (deleted.has(id)) return;
+    await appendDurable(file(id), line);
+  };
   const queues = new Map<string, Promise<unknown>>();
   /** 同一个会话的写入排队执行 */
   const serial = <T>(id: string, fn: () => Promise<T>): Promise<T> => {
@@ -205,7 +211,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     async create(title = "") {
       const id = newId("conv_").replace(/[^A-Za-z0-9_-]/g, "");
       const meta: ConversationMeta = { id, title, createdAt: now(), updatedAt: now() };
-      await appendDurable(file(id), JSON.stringify({ t: "meta", id, title, createdAt: meta.createdAt, v: 1 } satisfies LogRecord));
+      await writeLine(id, JSON.stringify({ t: "meta", id, title, createdAt: meta.createdAt, v: 1 } satisfies LogRecord));
       await touch(meta);
       return meta;
     },
@@ -236,7 +242,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     append(id, op) {
       return serial(id, async () => {
         const at = now();
-        await appendDurable(file(id), JSON.stringify({ t: "op", op, at } satisfies LogRecord));
+        await writeLine(id, JSON.stringify({ t: "op", op, at } satisfies LogRecord));
         const meta = (await loadIndex()).get(id);
         if (meta) await touch({ ...meta, updatedAt: at });
       });
@@ -244,12 +250,13 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     setTitle(id, title) {
       return serial(id, async () => {
         const at = now();
-        await appendDurable(file(id), JSON.stringify({ t: "title", title, at } satisfies LogRecord));
+        await writeLine(id, JSON.stringify({ t: "title", title, at } satisfies LogRecord));
         const meta = (await loadIndex()).get(id);
         if (meta) await touch({ ...meta, title, updatedAt: at });
       });
     },
     delete(id) {
+      deleted.add(id);
       return serial(id, async () => {
         await rm(file(id), { force: true });
         (await loadIndex()).delete(id);
@@ -262,7 +269,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     inboxInsert(id, target, item) {
       return serial(id, async () => {
         const at = now();
-        await appendDurable(file(id), JSON.stringify({ t: "inbox", op: "insert", target, item, at } satisfies LogRecord));
+        await writeLine(id, JSON.stringify({ t: "inbox", op: "insert", target, item, at } satisfies LogRecord));
         const meta = (await loadIndex()).get(id);
         if (meta) await touch({ ...meta, updatedAt: at });
       });
@@ -270,7 +277,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
     inboxRemove(id, ids, outcome) {
       if (!ids.length) return Promise.resolve();
       return serial(id, async () => {
-        await appendDurable(file(id), JSON.stringify({ t: "inbox", op: "remove", ids, outcome, at: now() } satisfies LogRecord));
+        await writeLine(id, JSON.stringify({ t: "inbox", op: "remove", ids, outcome, at: now() } satisfies LogRecord));
       });
     },
     goalStore(id) {
@@ -289,7 +296,7 @@ export async function conversationLog(dir: string, opts: { now?: () => number } 
         },
         append: (rec) =>
           serial(id, async () => {
-            await appendDurable(file(id), JSON.stringify({ t: "goal", rec } satisfies LogRecord));
+            await writeLine(id, JSON.stringify({ t: "goal", rec } satisfies LogRecord));
             const meta = (await loadIndex()).get(id);
             if (meta) await touch({ ...meta, updatedAt: rec.at });
           }),

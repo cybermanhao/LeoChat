@@ -10,3 +10,4 @@ export { stdioMcpTools, type StdioMcpOptions } from "./stdio-mcp";
 export { conversationLog, replayInbox, type ConversationLog, type ConversationMeta, type LoadedConversation, type InboxItem, type InboxState, type InboxTarget, type InboxSource } from "./conversation-log";
 export { createScheduler, RETRY_AFTER_MS, nextOccurrence, normalizeRule, parseCron, wallClock, fromWallClock, isValidTimeZone, renderReminder, ScheduleError, MIN_INTERVAL_SECONDS, REMINDER_PREFIX, type Schedule, type ScheduleRule, type ScheduleDelivery, type Scheduler, type SchedulerOptions, type CreateScheduleInput } from "./schedule";
 export { scheduleTools } from "./schedule-tools";
+export { loadAgentInstructions, withInstructions, leochatHome, DEFAULT_INSTRUCTION_BYTES, type InstructionOptions, type InstructionFile, type LoadedInstructions } from "./agent-instructions";

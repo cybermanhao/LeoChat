@@ -29,6 +29,7 @@ import {
   type Schedule,
   type ScheduleRule,
   type Scheduler,
+  withInstructions,
 } from "@leochat/node";
 import type { LLMProvider } from "@ai-chatbox/shared";
 import type { ServerContext } from "../server.js";
@@ -171,7 +172,10 @@ export function createConversationRoutes(
               provider: s.provider,
               model: s.model,
               ...(s.serverTools ? { serverTools: s.serverTools } : {}),
-              ...(s.system ? { system: s.system } : {}),
+              ...(await (async () => {
+                const system = context.instructions ? withInstructions(s.system, await context.instructions().catch(() => ({ text: "", files: [], omitted: [] }))) : s.system;
+                return system ? { system } : {};
+              })()),
               ...(s.temperature !== undefined ? { temperature: s.temperature } : {}),
               tools: [...s.tools, ...schedule, ...extraTools],
               compactor: createCompactor(),

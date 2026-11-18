@@ -12,7 +12,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "leochat-schedule-routes-"));
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); // 测试结束时后台的运行可能还在写日志
 });
 
 const schedules = async (app: Parameters<typeof req>[0], id?: string) =>

@@ -9,6 +9,7 @@ import type { ServerContext } from "../server.js";
 import type { StreamCallbacks } from "../services/llm.js";
 
 export type Round = (cbs: StreamCallbacks) => Promise<void>;
+export type LegacyMessage = { role: string; content: string };
 
 export interface TestApp {
   app: Hono;
@@ -20,7 +21,7 @@ export interface TestApp {
 export function makeApp(
   dir: string,
   rounds: Round[],
-  opts: { tools?: string[]; schedules?: boolean; callTool?: (name: string, args: unknown) => Promise<unknown> } = {},
+  opts: { tools?: string[]; schedules?: boolean; callTool?: (name: string, args: unknown) => Promise<unknown>; instructions?: string } = {},
 ): TestApp {
   let i = 0;
   const requests: TestApp["requests"] = [];
@@ -44,6 +45,9 @@ export function makeApp(
     pendingApprovals: pending,
     conversations: conversationLog(join(dir, "conversations")),
     ...(opts.schedules ? { schedulesFile: join(dir, "schedules.json") } : {}),
+    ...(opts.instructions !== undefined
+      ? { instructions: async () => ({ text: opts.instructions, files: [{ path: "AGENTS.md", scope: "global", content: opts.instructions }], omitted: [] }) }
+      : {}),
   } as unknown as ServerContext;
   const app = new Hono();
   app.route("/api", createRoutes(context, llm as never));

@@ -6,7 +6,7 @@ import { createSessionManager } from "@ai-chatbox/mcp-core";
 import type { ServerStatus } from "@ai-chatbox/shared";
 import { createRoutes } from "./routes/index.js";
 import { join } from "node:path";
-import { conversationLog, type ConversationLog } from "@leochat/node";
+import { conversationLog, loadAgentInstructions, type ConversationLog, type LoadedInstructions } from "@leochat/node";
 
 export interface ServerContext {
   sessionManager: ReturnType<typeof createSessionManager>;
@@ -16,6 +16,8 @@ export interface ServerContext {
   conversations: Promise<ConversationLog>;
   /** 定时提醒（/loop）的任务文件；不提供时不启用定时功能（测试） */
   schedulesFile?: string;
+  /** 指令文件（dsh 的 agent-instructions；GUI 没有工作目录，只加载全局的 ~/.leochat/AGENTS.md 等）；不提供时不加载（测试） */
+  instructions?: () => Promise<LoadedInstructions>;
 }
 
 export function createServer(
@@ -42,6 +44,8 @@ export function createServer(
     pendingApprovals: new Map(),
     conversations: conversationLog(join(root, "conversations")),
     schedulesFile: join(root, "schedules.json"),
+    // 每一轮读一次：用户改了文件，下一轮就生效
+    instructions: () => loadAgentInstructions(),
   };
 
   // Middleware
