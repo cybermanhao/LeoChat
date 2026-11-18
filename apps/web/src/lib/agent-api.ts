@@ -1,6 +1,7 @@
 /**
- * 会话与运行接口（server 的 routes/conversations.ts）。
- * 运行的响应是 core 事件（toPublicEvent 之后）的 SSE 流，前端直接交给 @leochat/core/view 的 reduce()。
+ * 会话接口（server 的 routes/conversations.ts，harness 第三期：会话收件箱）。
+ * 输入都写进会话的收件箱（立即返回），由 server 上每个会话一个的处理者按顺序跑；
+ * 每个打开的会话一条事件流（core 事件，toPublicEvent 之后），前端交给 @leochat/core/view 的 reduce()。
  */
 import type { AgentEvent, Goal, Message } from "@leochat/core";
 import { getServerBaseUrl } from "./api";
@@ -28,19 +29,28 @@ export interface RunSettings {
   host?: "web" | "electron";
   /** 是否提供进程内的界面操作工具，默认 true */
   uiTools?: boolean;
+  /** 权限预设（dsh 的 permission-presets，暂无沙箱）：ask 询问，full 完全信任、不再询问 */
+  permission?: "ask" | "full";
 }
 
-export interface RunRequest extends RunSettings {
-  text: string;
+/** 收件箱里待处理的输入（server 推送的 inbox 事件） */
+export interface InboxView {
+  nextTurn: Array<{ id: string; source: "user" | "reminder" | "goal"; text: string }>;
+  nextStep: Array<{ id: string; source: "user" | "reminder" | "goal"; text: string }>;
 }
+
+/** 目标 + 是否正在自动推进（armed，只在 server 进程内） */
+export type GoalView = Goal & { armed?: boolean };
 
 export interface LoadedConversation {
   meta: ConversationMeta;
   transcript: Message[];
   /** 当前目标（/goal） */
   goal: Goal | null;
-  /** server 上是否有正在推进这个目标的驱动 */
-  goalRunning: boolean;
+  /** 处理者正在跑 */
+  running: boolean;
+  /** 目标正在自动推进 */
+  goalArmed: boolean;
 }
 
 export type GoalAction = "edit" | "pause" | "resume" | "complete" | "clear";
@@ -108,35 +118,32 @@ export const agentApi = {
   renameConversation: (id: string, title: string) => call<unknown>("PATCH", `/conversations/${encodeURIComponent(id)}`, { title }),
   deleteConversation: (id: string) => call<unknown>("DELETE", `/conversations/${encodeURIComponent(id)}`),
 
-  /** 发起一次运行，逐个产出事件；signal 中止只断开连接（server 收到断开会中止运行） */
-  async *run(conversationId: string, req: RunRequest, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/runs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(req),
-      ...(signal ? { signal } : {}),
+  /** 发一条消息：写进收件箱后立即返回。next-turn 发送 / 排队，next-step 插话（送进正在运行的这一轮） */
+  sendMessage: (conversationId: string, input: { text: string; target: "next-turn" | "next-step"; settings: RunSettings }) =>
+    call<{ item: { id: string } }>("POST", `/conversations/${encodeURIComponent(conversationId)}/messages`, input),
+  /** 撤回一条还没处理的输入 */
+  withdraw: (conversationId: string, itemId: string) =>
+    call<unknown>("DELETE", `/conversations/${encodeURIComponent(conversationId)}/inbox/${encodeURIComponent(itemId)}`),
+  /** 停止：中止当前运行并清空收件箱；停止的是目标轮次则暂停目标 */
+  stop: (conversationId: string) => call<unknown>("POST", `/conversations/${encodeURIComponent(conversationId)}/stop`, {}),
+
+  /** 会话事件流（长连接）：这个会话所有运行的事件；连上时先收到 reset（重建视图用）、状态、收件箱、目标 */
+  async *events(conversationId: string, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/events`, {
+      headers: { Accept: "text/event-stream" },
+      signal,
     });
-    if (!res.ok || !res.body) throw new Error(`run failed: ${res.status}`);
+    if (!res.ok || !res.body) throw new Error(`events failed: ${res.status}`);
     yield* parseEventStream(res.body);
   },
 
-  getGoal: (id: string) => call<{ goal: Goal | null; running: boolean }>("GET", `/conversations/${encodeURIComponent(id)}/goal`),
-  createGoal: (id: string, input: { objective: string; maxRounds?: number }) =>
-    call<{ goal: Goal }>("POST", `/conversations/${encodeURIComponent(id)}/goal`, input),
-  updateGoal: (id: string, input: { action: GoalAction; revision: number; objective?: string; maxRounds?: number }) =>
-    call<{ goal: Goal | null; running: boolean }>("PATCH", `/conversations/${encodeURIComponent(id)}/goal`, input),
-
-  /** 开始推进目标，或连上正在推进的驱动；signal 中止只断开连接，驱动在 server 上继续 */
-  async *runGoal(conversationId: string, settings: RunSettings, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/goal/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(settings),
-      ...(signal ? { signal } : {}),
-    });
-    if (!res.ok || !res.body) throw new Error(`goal run failed: ${res.status}`);
-    yield* parseEventStream(res.body);
-  },
+  getGoal: (id: string) => call<{ goal: Goal | null; armed: boolean }>("GET", `/conversations/${encodeURIComponent(id)}/goal`),
+  /** 创建目标并开始自动推进；settings 是目标轮次用的设置 */
+  createGoal: (id: string, input: { objective: string; maxRounds?: number; settings: RunSettings }) =>
+    call<{ goal: Goal; armed: boolean }>("POST", `/conversations/${encodeURIComponent(id)}/goal`, input),
+  /** 修改目标（resume 时可带新的 settings） */
+  updateGoal: (id: string, input: { action: GoalAction; revision: number; objective?: string; maxRounds?: number; settings?: RunSettings }) =>
+    call<{ goal: Goal | null; armed: boolean }>("PATCH", `/conversations/${encodeURIComponent(id)}/goal`, input),
 
   listSchedules: (conversationId: string) =>
     call<{ schedules: ScheduleView[] }>("GET", `/schedules?conversationId=${encodeURIComponent(conversationId)}`).then((r) => r.schedules),
@@ -144,17 +151,4 @@ export const agentApi = {
     call<{ schedule: ScheduleView }>("POST", `/conversations/${encodeURIComponent(conversationId)}/schedules`, input).then((r) => r.schedule),
   deleteSchedule: (id: string) => call<unknown>("DELETE", `/schedules/${encodeURIComponent(id)}`),
 
-  /** 观察会话（长连接）：收到 server 自己发起的运行（定时提醒）的事件 */
-  async *watch(conversationId: string, signal: AbortSignal): AsyncGenerator<AgentEvent> {
-    const res = await fetch(`${await base()}/conversations/${encodeURIComponent(conversationId)}/watch`, {
-      headers: { Accept: "text/event-stream" },
-      signal,
-    });
-    if (!res.ok || !res.body) throw new Error(`watch failed: ${res.status}`);
-    yield* parseEventStream(res.body);
-  },
-
-  steer: (runId: string, text: string) => call<{ result: unknown }>("POST", `/runs/${encodeURIComponent(runId)}/steer`, { text }),
-  followUp: (runId: string, text: string) => call<{ result: unknown }>("POST", `/runs/${encodeURIComponent(runId)}/follow-up`, { text }),
-  abort: (runId: string) => call<unknown>("POST", `/runs/${encodeURIComponent(runId)}/abort`, {}),
 };

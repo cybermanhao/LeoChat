@@ -81,3 +81,18 @@ test("UI tools run in-process: the model switches the theme without any MCP serv
   const stored = await page.evaluate(() => localStorage.getItem("ai-chatbox-theme"));
   expect(stored).toContain("dark-green");
 });
+
+test("full access (permission preset) runs bash without an approval banner", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  await enableBash(page);
+  page.on("dialog", (d) => void d.accept()); // 开启完全信任时的确认框
+  await page.getByRole("button", { name: "询问" }).click();
+  await expect(page.getByRole("button", { name: "完全信任" })).toHaveAttribute("aria-pressed", "true");
+
+  await input(page).fill("请用 bash 工具执行命令 `echo leochat-full-access`，然后把输出原样告诉我。");
+  await input(page).press("Enter");
+  await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.getByText("AI 请求执行")).toHaveCount(0);
+  await expect(page.locator("[data-message-id]").last()).toContainText("leochat-full-access");
+});

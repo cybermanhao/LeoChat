@@ -1,22 +1,22 @@
 import { initialViewState } from "@leochat/core/view";
 import { agentApi } from "../lib/agent-api";
+import { EMPTY_INBOX } from "./chat-generation";
 import type { ConversationsSlice, SliceCreator } from "./chat-types";
 
 /**
- * 会话列表与当前会话。会话内容由本地 server 保存（每个会话一份 JSONL 日志），
- * 切换会话时从 server 读取 transcript，再用 core 的 initialViewState() 生成视图。
+ * 会话列表与当前会话。会话内容由本地 server 保存（每个会话一份 JSONL 日志）。
+ * 打开会话时先读一次（列表元数据、目标），再连上会话事件流：流里的 reset 事件会用 transcript 重建视图，
+ * 之后的事件实时更新；离开会话只断开连接，server 上进行中的工作（目标、提醒）照常继续。
  */
 export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => {
   /** 防止快速切换时，较早的加载结果覆盖较晚的 */
   let loadSeq = 0;
+  const blank = { view: initialViewState(), loadingConversation: false, goal: null, schedules: [], inbox: EMPTY_INBOX };
 
   return {
     conversations: [],
     currentConversationId: null,
-    view: initialViewState(),
-    loadingConversation: false,
-    goal: null,
-    schedules: [],
+    ...blank,
     input: "",
 
     setInput: (input) => set({ input }),
@@ -37,40 +37,30 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     },
 
     createConversation: async () => {
-      get().leaveConversation();
+      get().connect(null);
       const meta = await agentApi.createConversation();
       loadSeq++;
-      set((s) => ({
-        conversations: [meta, ...s.conversations.filter((c) => c.id !== meta.id)],
-        currentConversationId: meta.id,
-        view: initialViewState(),
-        loadingConversation: false,
-        goal: null,
-        schedules: [],
-      }));
-      get().watchConversation(meta.id);
+      set((s) => ({ conversations: [meta, ...s.conversations.filter((c) => c.id !== meta.id)], currentConversationId: meta.id, ...blank }));
+      get().connect(meta.id);
       return meta.id;
     },
 
     setCurrentConversation: async (id) => {
-      get().leaveConversation();
+      get().connect(null);
       const seq = ++loadSeq;
-      set({ currentConversationId: id, view: initialViewState(), loadingConversation: id !== null, goal: null, schedules: [] });
+      set({ currentConversationId: id, ...blank, loadingConversation: id !== null });
       if (!id) return;
       try {
-        const { meta, transcript, goal, goalRunning } = await agentApi.loadConversation(id);
+        const { meta, transcript, goal, goalArmed } = await agentApi.loadConversation(id);
         if (seq !== loadSeq) return;
         set((s) => ({
           view: initialViewState(transcript),
           loadingConversation: false,
-          goal: goal ?? null,
+          goal: goal ? { ...goal, armed: goalArmed } : null,
           conversations: s.conversations.map((c) => (c.id === id ? meta : c)),
         }));
-        // 目标正在 server 上推进：连上，继续显示进度
-        if (goalRunning) void get().attachGoal();
-        // 定时提醒：列表 + 观察 server 发起的运行
         void get().refreshSchedules();
-        get().watchConversation(id);
+        get().connect(id);
       } catch (e) {
         if (seq !== loadSeq) return;
         console.warn("[conversations] open failed", e);
@@ -84,7 +74,7 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
     deleteConversation: async (id) => {
       const wasCurrent = get().currentConversationId === id;
-      if (wasCurrent) get().leaveConversation();
+      if (wasCurrent) get().connect(null);
       await agentApi.deleteConversation(id).catch((e) => console.warn("[conversations] delete failed", e));
       const remaining = get().conversations.filter((c) => c.id !== id);
       set({ conversations: remaining });
@@ -92,27 +82,20 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     },
 
     clearAllConversations: async () => {
-      get().leaveConversation();
+      get().connect(null);
       const ids = get().conversations.map((c) => c.id);
       await Promise.all(ids.map((id) => agentApi.deleteConversation(id).catch(() => {})));
       loadSeq++;
-      set({ conversations: [], currentConversationId: null, view: initialViewState(), loadingConversation: false, goal: null, schedules: [] });
+      set({ conversations: [], currentConversationId: null, ...blank });
     },
 
     clearCurrentConversation: async () => {
       const id = get().currentConversationId;
       if (!id) return;
-      get().leaveConversation();
+      get().connect(null);
       await agentApi.deleteConversation(id).catch(() => {});
       loadSeq++;
-      set((s) => ({
-        conversations: s.conversations.filter((c) => c.id !== id),
-        currentConversationId: null,
-        view: initialViewState(),
-        loadingConversation: false,
-        goal: null,
-        schedules: [],
-      }));
+      set((s) => ({ conversations: s.conversations.filter((c) => c.id !== id), currentConversationId: null, ...blank }));
     },
   };
 };

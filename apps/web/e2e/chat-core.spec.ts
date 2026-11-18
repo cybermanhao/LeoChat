@@ -67,3 +67,19 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
   // 引用的来源以链接列出
   await expect(reply.locator('a[href^="http"]').first()).toBeVisible();
 });
+
+test("Ctrl+Enter during a turn queues in the inbox bar, and a queued message can be withdrawn", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  await input(page).fill("从 1 数到 300，用逗号分隔，不要其他内容");
+  await input(page).press("Enter");
+  await expect(stopButton(page)).toBeVisible({ timeout: 30_000 });
+  await input(page).fill("这条稍后再说");
+  await input(page).press("Control+Enter");
+  const bar = page.getByTestId("inbox-bar");
+  await expect(bar).toContainText("这条稍后再说", { timeout: 10_000 });
+  await bar.getByRole("button", { name: /撤回/ }).click();
+  await expect(bar).toHaveCount(0);
+  await waitIdle(page);
+  await expect(page.locator("[data-message-id]", { hasText: "这条稍后再说" })).toHaveCount(0);
+});

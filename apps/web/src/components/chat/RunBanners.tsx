@@ -2,7 +2,8 @@
  * 运行中的横幅：工具审批、排队中的消息。数据都来自 core 的视图状态（RunViewState）。
  */
 import { useEffect, useState } from "react";
-import type { Message } from "@leochat/core";
+import { X } from "lucide-react";
+import type { InboxView } from "../../lib/agent-api";
 import type { ViewPart } from "@leochat/core/view";
 import { useChatStore } from "../../stores/chat";
 
@@ -72,23 +73,30 @@ export function ApprovalBanner({ part }: { part: ToolPart }) {
   );
 }
 
-const textOf = (m: Message) =>
-  m.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+const SOURCE_LABEL = { user: "排队", reminder: "定时提醒", goal: "目标" } as const;
 
-/** 排队区：插话（下一步送达）和后续消息（本轮结束后处理） */
-export function QueuedBar({ steering, followUp }: { steering: Message[]; followUp: Message[] }) {
-  if (!steering.length && !followUp.length) return null;
+/** 收件箱：还没处理的输入（插话在下一步送达；排队项在这一轮结束后处理），可撤回 */
+export function QueuedBar({ inbox }: { inbox: InboxView }) {
+  const withdraw = useChatStore((s) => s.withdraw);
   const rows = [
-    ...steering.map((m) => ({ m, label: "插话" })),
-    ...followUp.map((m) => ({ m, label: "排队" })),
+    ...inbox.nextStep.map((x) => ({ ...x, label: "插话" })),
+    ...inbox.nextTurn.map((x) => ({ ...x, label: SOURCE_LABEL[x.source] })),
   ];
+  if (!rows.length) return null;
   return (
-    <div className="flex-shrink-0 border-t border-border bg-card px-4 py-2">
+    <div className="flex-shrink-0 border-t border-border bg-card px-4 py-2" data-testid="inbox-bar">
       <div className="mx-auto max-w-3xl space-y-1">
-        {rows.map(({ m, label }) => (
-          <div key={m.id} className="flex items-center gap-2 text-xs">
-            <span className="rounded bg-accent px-1.5 py-0.5 text-accent-foreground">{label}</span>
-            <span className="truncate text-muted-foreground">{textOf(m)}</span>
+        {rows.map((x) => (
+          <div key={x.id} className="flex items-center gap-2 text-xs">
+            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-accent-foreground">{x.label}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">{x.text}</span>
+            <button
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => void withdraw(x.id)}
+              aria-label={`撤回：${x.text}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
           </div>
         ))}
       </div>

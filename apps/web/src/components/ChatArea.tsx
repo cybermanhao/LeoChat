@@ -18,7 +18,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe } from "lucide-react";
+import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
@@ -95,6 +95,7 @@ export function ChatArea() {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const view = useChatStore((s) => s.view);
+  const inbox = useChatStore((s) => s.inbox);
   const input = useChatStore((s) => s.input);
   const isGenerating = useChatStore((s) => s.isGenerating);
   const setInput = useChatStore((s) => s.setInput);
@@ -117,6 +118,8 @@ export function ChatArea() {
   const queueFollowUp = useChatStore((s) => s.queueFollowUp);
   const webSearch = useChatStore((s) => s.webSearch);
   const setWebSearch = useChatStore((s) => s.setWebSearch);
+  const permission = useChatStore((s) => s.permission);
+  const setPermission = useChatStore((s) => s.setPermission);
   const executeAction = useChatStore((s) => s.executeAction);
   const uiMode = useChatStore((s) => s.uiMode);
   const temperature = useChatStore((s) => s.temperature);
@@ -374,10 +377,10 @@ export function ChatArea() {
 
   // 运行中：Enter 插话，Ctrl/Cmd+Enter 排队
   const handleSteer = () => {
-    if (input.trim()) sendMessage(input);
+    if (input.trim()) sendMessage(input, assembledPrompt);
   };
   const handleQueue = () => {
-    if (input.trim()) queueFollowUp(input);
+    if (input.trim()) queueFollowUp(input, assembledPrompt);
   };
 
   const handleSend = () => {
@@ -466,6 +469,29 @@ export function ChatArea() {
             </TooltipContent>
           </Tooltip>
         )}
+
+        {/* 权限预设（dsh 的 permission-presets，暂无沙箱）：询问 / 完全信任 */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={permission === "full"}
+              className={cn(toolbarButtonClass, permission === "full" && "bg-accent text-accent-foreground")}
+              onClick={() => {
+                if (permission === "full") setPermission("ask");
+                else if (window.confirm("完全信任：bash 等需要审批的工具将不再询问、直接执行，目标的自动轮次也会执行它们。确定开启？")) setPermission("full");
+              }}
+            >
+              {permission === "full" ? <ShieldAlert className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              <span className="hidden sm:inline">{permission === "full" ? "完全信任" : "询问"}</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {permission === "full" ? "需要审批的工具直接执行（点击改回询问）" : "需要审批的工具先问你；目标的自动轮次会拒绝它们"}
+          </TooltipContent>
+        </Tooltip>
 
         {/* 系统提示（仅专业模式） */}
         {uiMode === 'professional' && <SystemPromptPanel />}
@@ -753,7 +779,7 @@ export function ChatArea() {
       </div>
 
       {/* 排队中的插话 / 后续消息 */}
-      <QueuedBar steering={view.queued.steering} followUp={view.queued.followUp} />
+      <QueuedBar inbox={inbox} />
 
       {/* 等待审批的工具调用，每个一条 */}
       {awaitingApproval.map((p) => (p.type === "tool" ? <ApprovalBanner key={p.callId} part={p} /> : null))}

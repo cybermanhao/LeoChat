@@ -1,7 +1,6 @@
 import type { LLMConfig, MCPTool } from "@ai-chatbox/shared";
-import type { Goal } from "@leochat/core";
 import type { RunViewState } from "@leochat/core/view";
-import type { ConversationMeta, ScheduleView } from "../lib/agent-api";
+import type { ConversationMeta, GoalView, InboxView, ScheduleView } from "../lib/agent-api";
 import type { LoopRule } from "../lib/loop-command";
 
 export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
@@ -18,6 +17,8 @@ export interface SettingsSlice {
   enableMarkdown: boolean;
   /** 联网搜索（DeepSeek 的服务端工具；其它提供商忽略） */
   webSearch: boolean;
+  /** 权限预设（dsh 的 permission-presets，暂无沙箱）：ask 询问（默认），full 完全信任、不再询问 */
+  permission: "ask" | "full";
   maxEpochs: number;
   unlimitedEpochs: boolean;
   contextLevel: number;
@@ -31,6 +32,7 @@ export interface SettingsSlice {
   setCurrentModel: (model: string) => void;
   setEnableMarkdown: (enable: boolean) => void;
   setWebSearch: (on: boolean) => void;
+  setPermission: (p: "ask" | "full") => void;
   setMaxEpochs: (n: number) => void;
   setUnlimitedEpochs: (v: boolean) => void;
   setContextLevel: (level: number) => void;
@@ -50,8 +52,10 @@ export interface ConversationsSlice {
   view: RunViewState;
   /** 正在加载当前会话的内容 */
   loadingConversation: boolean;
-  /** 当前会话的目标（/goal）；没有时为 null */
-  goal: Goal | null;
+  /** 当前会话的目标（/goal，含是否正在自动推进）；没有时为 null */
+  goal: GoalView | null;
+  /** 当前会话收件箱里待处理的输入 */
+  inbox: InboxView;
   /** 当前会话的定时提醒（/loop） */
   schedules: ScheduleView[];
   input: string;
@@ -71,35 +75,31 @@ export interface ConversationsSlice {
 // ─── Generation slice ────────────────────────────────────────────
 
 export interface GenerationSlice {
+  /** 当前会话的处理者正在跑（server 推送的 agent 事件） */
   isGenerating: boolean;
-  /** 进行中的运行 id（插话 / 排队 / 中止用） */
-  activeRunId: string | null;
   /** 本次会话内总是允许的工具（不持久化，刷新即清空） */
   sessionAllowedTools: Set<string>;
   /** 已经回答过、等待 server 确认的审批（防止重复点击） */
   answeredApprovals: Set<string>;
-  /** 当前连着的是目标驱动（而不是一次普通运行） */
-  goalAttached: boolean;
 
-  /** 空闲时开始新的运行；运行中时作为插话（steer）送入当前运行 */
+  /** 连上 / 断开当前会话的事件流（打开会话时连上，断线自动重连）；null 表示断开 */
+  connect: (id: string | null) => void;
+  /** 发送：空闲时开始新的一轮；运行中作为插话送进当前这一轮 */
   sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
-  /** 运行中排队：本轮结束后接着处理 */
-  queueFollowUp: (content: string) => Promise<void>;
+  /** 排队：当前这一轮结束后处理 */
+  queueFollowUp: (content: string, systemPrompt?: string) => Promise<void>;
+  /** 撤回收件箱里一条还没处理的输入 */
+  withdraw: (itemId: string) => Promise<void>;
+  /** 停止：中止当前这一轮并清空收件箱（目标轮次则暂停目标） */
   cancelGeneration: () => void;
   executeAction: (actionName: string, attributes: Record<string, string>) => void;
-  /** 离开当前会话（切换 / 新建 / 删除）：普通运行会被取消；目标只断开连接，在 server 上继续推进 */
-  leaveConversation: () => void;
   /** /goal：创建目标并开始自动推进 */
   startGoal: (objective: string, opts?: { maxRounds?: number; systemPrompt?: string }) => Promise<void>;
-  /** 开始推进当前 active 的目标，或连上 server 上正在推进的驱动 */
-  attachGoal: (systemPrompt?: string) => Promise<void>;
   pauseGoal: () => Promise<void>;
-  /** 恢复暂停 / 卡住的目标并继续推进；extraRounds 用于轮数用完时先加轮数 */
+  /** 恢复暂停 / 卡住 / 待继续的目标；extraRounds 用于轮数用完时先加轮数 */
   resumeGoal: (opts?: { extraRounds?: number; systemPrompt?: string }) => Promise<void>;
   completeGoal: () => Promise<void>;
   clearGoal: () => Promise<void>;
-  /** 开始 / 停止观察会话：收到 server 自己发起的运行（定时提醒到期）；断线自动重连 */
-  watchConversation: (id: string | null) => void;
   /** /loop：给当前会话建一个定时提醒（没有会话就先建一个）；成功返回 true */
   createSchedule: (prompt: string, rule: LoopRule, systemPrompt?: string) => Promise<boolean>;
   deleteSchedule: (id: string) => Promise<void>;

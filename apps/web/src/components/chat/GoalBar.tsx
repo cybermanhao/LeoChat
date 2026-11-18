@@ -20,8 +20,6 @@ const EXTRA_ROUNDS = 20;
 
 export function GoalBar({ systemPrompt }: { systemPrompt?: string }) {
   const goal = useChatStore((s) => s.goal);
-  const attached = useChatStore((s) => s.goalAttached);
-  const isGenerating = useChatStore((s) => s.isGenerating);
   const pauseGoal = useChatStore((s) => s.pauseGoal);
   const resumeGoal = useChatStore((s) => s.resumeGoal);
   const completeGoal = useChatStore((s) => s.completeGoal);
@@ -39,9 +37,9 @@ export function GoalBar({ systemPrompt }: { systemPrompt?: string }) {
     }
   };
   const roundsLeft = goal.maxRounds - goal.roundsStarted;
-  const running = attached && goal.phase === "active";
-  // active 但没有驱动在跑：进程重启后不会自己继续（dsh 的规则），要用户点继续
-  const canContinue = !isGenerating && goal.phase !== "complete";
+  // armed：server 正在自动推进（只在 server 进程内，重启后不会自己继续——dsh 的规则，要用户点继续）
+  const running = !!goal.armed && goal.phase === "active";
+  const canContinue = !running && goal.phase !== "complete";
   const btn =
     "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 

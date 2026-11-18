@@ -1,5 +1,5 @@
 /**
- * GUI 迁移第二步的前端 store：会话由 server 保存，生成过程直接用 core 的 reduce() 渲染。
+ * 前端 store（harness 第三期：会话收件箱）：输入发到 server 的收件箱，每个打开的会话一条事件流。
  * 这里不起 Zustand，直接组合两个 slice，agentApi 用假的。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,15 +10,13 @@ const api = vi.hoisted(() => ({
   createConversation: vi.fn(),
   loadConversation: vi.fn(),
   deleteConversation: vi.fn(),
-  run: vi.fn(),
-  steer: vi.fn(),
-  followUp: vi.fn(),
-  abort: vi.fn(),
+  events: vi.fn(),
+  sendMessage: vi.fn(),
+  withdraw: vi.fn(),
+  stop: vi.fn(),
   getGoal: vi.fn(),
   createGoal: vi.fn(),
   updateGoal: vi.fn(),
-  runGoal: vi.fn(),
-  watch: vi.fn(),
   listSchedules: vi.fn(),
   createSchedule: vi.fn(),
   deleteSchedule: vi.fn(),
@@ -26,12 +24,13 @@ const api = vi.hoisted(() => ({
 const approveToolCall = vi.hoisted(() => vi.fn());
 const executeUI = vi.hoisted(() => vi.fn());
 const processUI = vi.hoisted(() => vi.fn(async () => ({ processedResult: null, uiCommandExecuted: false })));
+const notify = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/agent-api", () => ({ agentApi: api }));
 vi.mock("../../lib/api", () => ({ chatApi: { approveToolCall } }));
 vi.mock("../../lib/ui-commands", () => ({ processToolResultForUICommands: processUI, executeUICommand: executeUI }));
 vi.mock("../../lib/api-error", () => ({ handleApiError: vi.fn() }));
-vi.mock("../../lib/os-notification", () => ({ sendOSNotification: vi.fn() }));
+vi.mock("../../lib/os-notification", () => ({ sendOSNotification: notify }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
 import { createConversationsSlice } from "../chat-conversations";
@@ -46,21 +45,60 @@ function makeStore() {
     unlimitedEpochs: false,
     temperature: 0.7,
     mcpTools: [{ name: "read_file" }],
+    webSearch: false,
+    permission: "ask",
   } as unknown as ChatState;
   const set = (u: unknown) => {
     const patch = typeof u === "function" ? (u as (s: ChatState) => Partial<ChatState>)(state) : (u as Partial<ChatState>);
     state = { ...state, ...patch };
   };
   const get = () => state;
-  state = { ...state, ...createConversationsSlice(set, get), ...createGenerationSlice(set, get) };
-  return { get };
+  state = { ...state, ...createGenerationSlice(set, get), ...createConversationsSlice(set, get) };
+  return { get, patch: (p: Partial<ChatState>) => set(p) };
 }
+
+/** 每个会话一个可控的事件流 */
+const streams = new Map<string, { push: (e: AgentEvent) => void; signal: AbortSignal }>();
+function fakeEvents() {
+  api.events.mockImplementation(async function* (id: string, signal: AbortSignal) {
+    const queue: AgentEvent[] = [];
+    let wake: (() => void) | null = null;
+    streams.set(id, {
+      signal,
+      push: (e) => {
+        queue.push(e);
+        wake?.();
+      },
+    });
+    signal.addEventListener("abort", () => wake?.());
+    while (!signal.aborted) {
+      const e = queue.shift();
+      if (e) yield e;
+      else await new Promise<void>((r) => (wake = r));
+    }
+  });
+}
+const push = async (id: string, ...events: AgentEvent[]) => {
+  await vi.waitFor(() => expect(streams.get(id)).toBeDefined());
+  for (const e of events) streams.get(id)!.push(e);
+  await new Promise((r) => setTimeout(r, 5));
+};
 
 const meta = (id: string, title = "") => ({ id, title, createdAt: 1, updatedAt: 1 });
 const user = (id: string, text: string): Message => ({ id, role: "user", content: [{ type: "text", text }] });
-
-/** 一次简单回复的事件序列 */
-function textRun(text: string, runId = "run_1"): AgentEvent[] {
+const custom = (name: string, data: unknown): AgentEvent => ({ type: "custom", name, data });
+const goal = (over: Partial<Goal> = {}): Goal => ({
+  id: "goal_1",
+  revision: 1,
+  objective: "Sort the files",
+  phase: "active",
+  roundsStarted: 0,
+  maxRounds: 256,
+  createdAt: 1,
+  updatedAt: 1,
+  ...over,
+});
+function turn(text: string, runId = "r1"): AgentEvent[] {
   return [
     { type: "run_start", runId, at: 1 },
     { type: "step_start", stepId: "s1", index: 0 },
@@ -73,60 +111,56 @@ function textRun(text: string, runId = "run_1"): AgentEvent[] {
   ];
 }
 
-async function* stream(events: AgentEvent[], gate?: Promise<void>, gateAfter = 0) {
-  for (let i = 0; i < events.length; i++) {
-    if (gate && i === gateAfter) await gate;
-    yield events[i]!;
-  }
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
+  streams.clear();
+  fakeEvents();
   api.deleteConversation.mockResolvedValue({});
-  api.steer.mockResolvedValue({ result: "delivered" });
-  api.followUp.mockResolvedValue({ result: null });
-  api.abort.mockResolvedValue({});
-  approveToolCall.mockResolvedValue(undefined);
-  // 默认：watch 连上后什么也不发，提醒列表为空
-  api.watch.mockImplementation(async function* (_id: string, signal: AbortSignal) {
-    await new Promise<void>((r) => signal.addEventListener("abort", () => r(), { once: true }));
-  });
+  api.sendMessage.mockResolvedValue({ item: { id: "in_1" } });
+  api.withdraw.mockResolvedValue({});
+  api.stop.mockResolvedValue({});
   api.listSchedules.mockResolvedValue([]);
+  approveToolCall.mockResolvedValue(undefined);
 });
 
-describe("conversations slice", () => {
-  it("loads the list and opens a conversation from its transcript", async () => {
+describe("conversations", () => {
+  it("opens a conversation: loads it, connects its event stream, and the reset event rebuilds the view", async () => {
     const { get } = makeStore();
     api.listConversations.mockResolvedValue([meta("c1", "first"), meta("c2")]);
-    api.loadConversation.mockResolvedValue({
-      meta: meta("c1", "first"),
-      transcript: [user("u1", "hi"), { id: "a1", role: "assistant", content: [{ type: "text", text: "hello" }] }],
-    });
+    api.loadConversation.mockResolvedValue({ meta: meta("c1", "first"), transcript: [user("u1", "hi")], goal: null, running: false, goalArmed: false });
     await get().loadConversations();
-    expect(get().conversations.map((c) => c.id)).toEqual(["c1", "c2"]);
     await get().setCurrentConversation("c1");
-    expect(get().currentConversationId).toBe("c1");
+    expect(get().view.messages.map((m) => m.id)).toEqual(["u1"]);
+    expect(api.events.mock.calls[0]![0]).toBe("c1");
+    await push("c1", custom("reset", { transcript: [user("u1", "hi"), { id: "a1", role: "assistant", content: [{ type: "text", text: "hello" }] }] }));
     expect(get().view.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
   });
 
-  it("drops a stale load when the user switches again quickly", async () => {
+  it("switching conversations closes the old stream without stopping the server's work, and ignores a stale load", async () => {
     const { get } = makeStore();
     let resolveFirst: (v: unknown) => void = () => {};
     api.loadConversation
       .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
-      .mockResolvedValueOnce({ meta: meta("c2"), transcript: [user("u2", "second")] });
+      .mockResolvedValueOnce({ meta: meta("c2"), transcript: [user("u2", "second")], goal: null, running: false, goalArmed: false })
+      .mockResolvedValueOnce({ meta: meta("c3"), transcript: [], goal: null, running: false, goalArmed: false });
     const first = get().setCurrentConversation("c1");
     await get().setCurrentConversation("c2");
-    resolveFirst({ meta: meta("c1"), transcript: [user("u1", "first")] });
+    resolveFirst({ meta: meta("c1"), transcript: [user("u1", "first")], goal: null, running: false, goalArmed: false });
     await first;
     expect(get().currentConversationId).toBe("c2");
     expect(get().view.messages[0]!.id).toBe("u2");
+    await push("c2", custom("agent", { running: true, source: "goal" }));
+    expect(get().isGenerating).toBe(true);
+    await get().setCurrentConversation("c3");
+    expect(streams.get("c2")!.signal.aborted).toBe(true);
+    expect(get().isGenerating).toBe(false);
+    expect(api.stop).not.toHaveBeenCalled();
   });
 
   it("deleting the current conversation moves to the next one", async () => {
     const { get } = makeStore();
     api.listConversations.mockResolvedValue([meta("c1"), meta("c2")]);
-    api.loadConversation.mockImplementation(async (id: string) => ({ meta: meta(id), transcript: [] }));
+    api.loadConversation.mockImplementation(async (id: string) => ({ meta: meta(id), transcript: [], goal: null, running: false, goalArmed: false }));
     await get().loadConversations();
     await get().setCurrentConversation("c1");
     await get().deleteConversation("c1");
@@ -136,280 +170,180 @@ describe("conversations slice", () => {
   });
 });
 
-describe("generation slice", () => {
-  it("creates a conversation on first send, renders the streamed reply, and titles it", async () => {
+describe("input goes to the server inbox", () => {
+  it("first send creates the conversation, connects, and posts next-turn with the current settings", async () => {
     const { get } = makeStore();
     api.createConversation.mockResolvedValue(meta("c1"));
-    api.run.mockImplementation(() => stream(textRun("Hello!")));
     await get().sendMessage("  Hi there  ", "be nice");
-    expect(api.run).toHaveBeenCalledWith(
-      "c1",
-      expect.objectContaining({ text: "  Hi there  ", system: "be nice", model: "deepseek-chat", provider: "deepseek", maxSteps: 10, tools: ["read_file"] }),
-      expect.any(AbortSignal),
-    );
-    const v = get().view;
-    expect(v.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(v.messages[1]!.parts[0]).toMatchObject({ type: "text", text: "Hello!", streaming: false });
-    expect(v.status).toBe("done");
-    expect(get().isGenerating).toBe(false);
+    expect(api.sendMessage).toHaveBeenCalledWith("c1", {
+      text: "  Hi there  ",
+      target: "next-turn",
+      settings: expect.objectContaining({ system: "be nice", model: "deepseek-chat", provider: "deepseek", maxSteps: 10, tools: ["read_file"], host: "web" }),
+    });
+    expect(api.sendMessage.mock.calls[0]![1].settings).not.toHaveProperty("permission");
+    expect(api.events.mock.calls[0]![0]).toBe("c1");
     expect(get().conversations[0]!.title).toBe("Hi there");
-  });
-
-  it("while running, Enter steers and Ctrl+Enter queues into the active run", async () => {
-    const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
-    api.run.mockImplementation(() => stream(textRun("ok"), gate, 1));
-    const running = get().sendMessage("start");
-    await vi.waitFor(() => expect(get().activeRunId).toBe("run_1"));
-    await get().sendMessage("actually, shorter");
-    await get().queueFollowUp("then translate");
-    expect(api.steer).toHaveBeenCalledWith("run_1", "actually, shorter");
-    expect(api.followUp).toHaveBeenCalledWith("run_1", "then translate");
-    expect(api.run).toHaveBeenCalledTimes(1);
-    release();
-    await running;
-  });
-
-  it("auto-approves tools allowed for the session and answers others once", async () => {
-    const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    const events: AgentEvent[] = [
-      { type: "run_start", runId: "r", at: 1 },
-      { type: "message_start", stepId: "s", messageId: "a", role: "assistant" },
-      { type: "block_start", messageId: "a", index: 0, block: { type: "tool_use", id: "b1", name: "bash" } },
-      { type: "block_end", messageId: "a", index: 0, block: { type: "tool_use", id: "b1", name: "bash", arguments: '{"command":"ls"}', input: { command: "ls" } } },
-      { type: "approval_request", approvalId: "apr", callId: "b1", toolName: "bash" },
-    ];
-    api.run.mockImplementation(() => stream(events));
-    await get().sendMessage("list");
-    expect(get().view.messages[1]!.parts[0]).toMatchObject({ type: "tool", state: "awaiting-approval" });
-    await get().respondApproval("b1", "bash", true, true);
-    await get().respondApproval("b1", "bash", true, true); // 重复点击不重复提交
-    expect(approveToolCall).toHaveBeenCalledTimes(1);
-    expect(get().sessionAllowedTools.has("bash")).toBe(true);
-
-    // 同一会话里再次请求 bash：自动允许
-    api.run.mockImplementation(() => stream(events.map((e) => (e.type === "approval_request" ? { ...e, callId: "b2" } : e))));
-    await get().sendMessage("again");
-    expect(approveToolCall).toHaveBeenLastCalledWith("b2", true);
-  });
-
-  it("runs UI commands from successful tool output", async () => {
-    const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    api.run.mockImplementation(() =>
-      stream([
-        { type: "run_start", runId: "r", at: 1 },
-        { type: "tool_end", callId: "t", ok: true, output: { content: [{ type: "text", text: '{"__ui_command__":true}' }] }, ms: 1 },
-      ]),
-    );
-    await get().sendMessage("theme");
-    expect(processUI).toHaveBeenCalledWith('{"__ui_command__":true}');
-  });
-
-  it("cancel aborts the run on the server and ends streaming locally", async () => {
-    const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    const never = new Promise<void>(() => {});
-    api.run.mockImplementation(() => stream(textRun("partial"), never, 5));
-    void get().sendMessage("go");
-    await vi.waitFor(() => expect(get().view.messages[1]?.parts[0]).toMatchObject({ text: "partial", streaming: true }));
-    get().cancelGeneration();
-    expect(api.abort).toHaveBeenCalledWith("run_1");
-    expect(get().isGenerating).toBe(false);
-    expect(get().view.status).toBe("aborted");
-    expect(get().view.messages[1]!.parts[0]).toMatchObject({ streaming: false });
-  });
-});
-
-describe("steer before the run id is known", () => {
-  it("holds the steer until run_start and then delivers it", async () => {
-    const { get } = makeStore();
-    let resolveCreate: (v: unknown) => void = () => {};
-    api.createConversation.mockImplementation(() => new Promise((r) => (resolveCreate = r)));
-    api.run.mockImplementation(() => stream(textRun("ok")));
-    const running = get().sendMessage("start");
-    expect(get().isGenerating).toBe(true);
-    await get().sendMessage("early steer"); // 还没有 runId
     expect(get().input).toBe("");
-    expect(api.steer).not.toHaveBeenCalled();
-    resolveCreate(meta("c1"));
-    await running;
-    expect(api.steer).toHaveBeenCalledWith("run_1", "early steer");
+  });
+
+  it("while a turn runs, Enter interjects (next-step) and Ctrl+Enter queues (next-turn); full access is sent along", async () => {
+    const { get, patch } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    await get().sendMessage("start");
+    await push("c1", custom("agent", { running: true, source: "user" }));
+    await get().sendMessage("shorter please");
+    await get().queueFollowUp("then translate");
+    expect(api.sendMessage.mock.calls.map((c) => c[1].target)).toEqual(["next-turn", "next-step", "next-turn"]);
+    patch({ permission: "full" });
+    await get().sendMessage("x");
+    expect(api.sendMessage.mock.calls.at(-1)![1].settings).toMatchObject({ permission: "full" });
+  });
+
+  it("a failed send puts the text back into the input", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    api.sendMessage.mockRejectedValueOnce(new Error("500"));
+    await get().sendMessage("keep me");
+    expect(get().input).toBe("keep me");
+  });
+
+  it("stop and withdraw go to the server", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    await get().sendMessage("start");
+    get().cancelGeneration();
+    await get().withdraw("in_9");
+    expect(api.stop).toHaveBeenCalledWith("c1");
+    expect(api.withdraw).toHaveBeenCalledWith("c1", "in_9");
   });
 });
 
-describe("in-process UI tools", () => {
-  it("executes ui_command custom events and tells the server which host it runs in", async () => {
-    const { get } = makeStore();
+describe("event stream", () => {
+  it("renders runs, tracks status / inbox / goal, runs UI commands and session-allowed approvals", async () => {
+    const { get, patch } = makeStore();
     api.createConversation.mockResolvedValue(meta("c1"));
-    api.run.mockImplementation(() =>
-      stream([
-        { type: "run_start", runId: "r", at: 1 },
-        { type: "custom", name: "ui_command", data: { command: "update_theme", payload: { themeId: "dark-green" } } },
-        { type: "custom", name: "ui_command", data: { command: "rm_rf", payload: {} } }, // 未知命令忽略
-      ]),
+    await get().sendMessage("hi");
+    patch({ sessionAllowedTools: new Set(["bash"]) });
+    await push(
+      "c1",
+      custom("reset", { transcript: [] }),
+      custom("inbox", { nextTurn: [{ id: "in_1", source: "user", text: "hi" }], nextStep: [] }),
+      custom("agent", { running: true, source: "user" }),
+      custom("inbox", { nextTurn: [], nextStep: [] }),
+      { type: "user_message", message: user("u1", "hi"), via: "followUp" },
+      ...turn("Hello!").slice(0, 3),
+      { type: "approval_request", approvalId: "apr", callId: "b1", toolName: "bash" },
+      custom("ui_command", { command: "update_theme", payload: { themeId: "dark-green" } }),
+      custom("ui_command", { command: "rm_rf", payload: {} }),
+      ...turn("Hello!").slice(3),
+      custom("agent", { running: false, source: null }),
     );
-    await get().sendMessage("换主题");
+    expect(get().view.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(get().view.messages[1]!.parts[0]).toMatchObject({ text: "Hello!", streaming: false });
+    expect(get().isGenerating).toBe(false);
+    expect(get().inbox).toEqual({ nextTurn: [], nextStep: [] });
+    expect(approveToolCall).toHaveBeenCalledWith("b1", true);
     expect(executeUI).toHaveBeenCalledTimes(1);
     expect(executeUI).toHaveBeenCalledWith({ __ui_command__: true, command: "update_theme", payload: { themeId: "dark-green" } });
-    expect(api.run.mock.calls[0]![1]).toMatchObject({ host: "web" });
+    expect(notify).toHaveBeenCalledWith("LeoChat", "AI 回复完成");
+    expect(api.listSchedules).toHaveBeenCalled(); // 一轮结束后刷新提醒
   });
-});
 
-describe("/goal in the store", () => {
-  const goal = (over: Partial<Goal> = {}): Goal => ({
-    id: "goal_1",
-    revision: 1,
-    objective: "Sort the files",
-    phase: "active",
-    roundsStarted: 0,
-    maxRounds: 256,
-    createdAt: 1,
-    updatedAt: 1,
-    ...over,
-  });
-  const roundMsg = (n: number): Message => ({ id: `r${n}`, role: "user", content: [{ type: "text", text: `<goal_round>
-Round: ${n}/256
-</goal_round>` }] });
-
-  it("startGoal creates the goal, attaches to the driver, and follows goal / goal_round events", async () => {
+  it("goal turns do not send the reply notification; goal completion does", async () => {
     const { get } = makeStore();
     api.createConversation.mockResolvedValue(meta("c1"));
-    api.createGoal.mockResolvedValue({ goal: goal() });
-    api.runGoal.mockImplementation(() =>
-      stream([
-        { type: "custom", name: "goal", data: goal() },
-        { type: "custom", name: "goal_round", data: { round: 1, message: roundMsg(1) } },
-        ...textRun("Working."),
-        { type: "custom", name: "goal", data: goal({ phase: "complete", revision: 3, roundsStarted: 1 }) },
-      ]),
+    await get().sendMessage("x");
+    await push(
+      "c1",
+      custom("goal", { ...goal(), armed: true }),
+      custom("agent", { running: true, source: "goal" }),
+      ...turn("round"),
+      custom("goal", { ...goal({ phase: "complete", revision: 3 }), armed: false }),
+      custom("agent", { running: false, source: null }),
     );
-    await get().startGoal("Sort the files", { systemPrompt: "sys" });
-    expect(api.createGoal).toHaveBeenCalledWith("c1", { objective: "Sort the files" });
-    expect(api.runGoal.mock.calls[0]![1]).toMatchObject({ system: "sys", tools: ["read_file"] });
-    expect(get().goal).toMatchObject({ phase: "complete" });
-    expect(get().view.messages.map((m) => m.id)).toEqual(["r1", "a1"]); // 每轮提示进入视图；goal 事件不进视图
-    expect(get().isGenerating).toBe(false);
-    expect(get().goalAttached).toBe(false);
+    expect(notify).not.toHaveBeenCalledWith("LeoChat", "AI 回复完成");
+    expect(notify).toHaveBeenCalledWith("LeoChat", "目标已完成");
+    expect(get().goal).toMatchObject({ phase: "complete", armed: false });
   });
 
-  it("stop while a goal runs pauses the goal instead of cutting the stream", async () => {
+  it("reconnects after the stream drops", async () => {
     const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    api.createGoal.mockResolvedValue({ goal: goal() });
-    let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
-    api.runGoal.mockImplementation(() => stream([{ type: "custom", name: "goal", data: goal({ revision: 2, roundsStarted: 1 }) }, ...textRun("x")], gate, 1));
-    api.updateGoal.mockImplementation(async () => {
-      release();
-      return { goal: goal({ phase: "paused", revision: 3, roundsStarted: 1 }), running: false };
+    let calls = 0;
+    api.events.mockImplementation(async function* () {
+      calls++;
+      if (calls === 1) throw new Error("dropped");
+      yield custom("reset", { transcript: [user("u1", "back")] });
+      await new Promise(() => {});
     });
-    const running = get().startGoal("Sort the files");
-    await vi.waitFor(() => expect(get().goal?.revision).toBe(2));
-    get().cancelGeneration();
-    await running;
-    expect(api.updateGoal).toHaveBeenCalledWith("c1", { action: "pause", revision: 2 });
-    expect(api.abort).not.toHaveBeenCalled();
-    expect(get().goal?.phase).toBe("paused");
-  });
-
-  it("switching conversations only detaches from a running goal, and reopening attaches again", async () => {
-    const { get } = makeStore();
-    api.createConversation.mockResolvedValue(meta("c1"));
-    api.createGoal.mockResolvedValue({ goal: goal() });
-    api.runGoal.mockImplementation(() => stream(textRun("x"), new Promise<void>(() => {}), 1));
-    void get().startGoal("Sort the files");
-    await vi.waitFor(() => expect(get().goalAttached).toBe(true));
-    api.loadConversation.mockResolvedValueOnce({ meta: meta("c2"), transcript: [], goal: null, goalRunning: false });
-    await get().setCurrentConversation("c2");
-    expect(api.updateGoal).not.toHaveBeenCalled(); // 没有暂停
-    expect(api.abort).not.toHaveBeenCalled();
-    expect(get().isGenerating).toBe(false);
-    expect(get().goal).toBeNull();
-
-    api.runGoal.mockClear();
-    api.runGoal.mockImplementation(() => stream([{ type: "custom", name: "goal", data: goal({ revision: 5, roundsStarted: 3 }) }]));
-    api.loadConversation.mockResolvedValueOnce({ meta: meta("c1"), transcript: [roundMsg(1)], goal: goal({ revision: 4, roundsStarted: 3 }), goalRunning: true });
+    api.loadConversation.mockResolvedValue({ meta: meta("c1"), transcript: [], goal: null, running: false, goalArmed: false });
     await get().setCurrentConversation("c1");
-    await vi.waitFor(() => expect(api.runGoal).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(get().goal?.revision).toBe(5));
-  });
-
-  it("resume adds rounds when they ran out, then resumes and attaches", async () => {
-    const { get } = makeStore();
-    api.loadConversation.mockResolvedValueOnce({
-      meta: meta("c1"),
-      transcript: [],
-      goal: goal({ phase: "blocked", revision: 9, roundsStarted: 2, maxRounds: 2, blocker: { code: "round-limit", reason: "Used all 2 rounds." } }),
-      goalRunning: false,
-    });
-    await get().setCurrentConversation("c1");
-    api.updateGoal
-      .mockResolvedValueOnce({ goal: goal({ phase: "blocked", revision: 10, roundsStarted: 2, maxRounds: 22 }), running: false })
-      .mockResolvedValueOnce({ goal: goal({ phase: "active", revision: 11, roundsStarted: 2, maxRounds: 22 }), running: false });
-    api.runGoal.mockImplementation(() => stream([]));
-    await get().resumeGoal({ extraRounds: 20 });
-    expect(api.updateGoal.mock.calls.map((c) => c[1])).toEqual([
-      { action: "edit", revision: 9, maxRounds: 22 },
-      { action: "resume", revision: 10 },
-    ]);
-    expect(api.runGoal).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(get().view.messages.map((m) => m.id)).toEqual(["u1"]), { timeout: 4000 });
+    get().connect(null);
   });
 });
 
-describe("/loop in the store", () => {
-  it("a run the server starts (reminder) shows up through watch: user message, streaming state, then idle", async () => {
-    const { get } = makeStore();
-    let push: (e: AgentEvent) => void = () => {};
-    const queue: AgentEvent[] = [];
-    let wake: (() => void) | null = null;
-    push = (e) => {
-      queue.push(e);
-      wake?.();
-    };
-    api.watch.mockImplementation(async function* (_id: string, signal: AbortSignal) {
-      while (!signal.aborted) {
-        const e = queue.shift();
-        if (e) yield e;
-        else await new Promise<void>((r) => (wake = r));
-      }
-    });
-    api.loadConversation.mockResolvedValue({ meta: meta("c1"), transcript: [], goal: null, goalRunning: false });
-    api.listSchedules.mockResolvedValue([{ id: "s1", conversationId: "c1", title: "mail", prompt: "mail", rule: { kind: "daily", time: "09:00" }, timeZone: "Asia/Shanghai", state: "active", nextAt: 1 }]);
-    await get().setCurrentConversation("c1");
-    await vi.waitFor(() => expect(get().schedules).toHaveLength(1));
+describe("/goal and /loop", () => {
+  it("startGoal creates the goal with the run settings; pause / resume with extra rounds use the current revision", async () => {
+    const { get, patch } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    api.createGoal.mockResolvedValue({ goal: goal(), armed: true });
+    await get().startGoal("Sort the files", { systemPrompt: "sys" });
+    expect(api.createGoal).toHaveBeenCalledWith("c1", { objective: "Sort the files", settings: expect.objectContaining({ system: "sys", tools: ["read_file"] }) });
+    expect(get().goal).toMatchObject({ armed: true });
 
-    push({ type: "user_message", message: { id: "rem", role: "user", content: [{ type: "text", text: "[定时提醒] ..." }] }, via: "followUp" });
-    push({ type: "run_start", runId: "srv_run", at: 1 });
-    await vi.waitFor(() => expect(get().isGenerating).toBe(true));
-    expect(get().activeRunId).toBe("srv_run");
-    for (const e of textRun("Morning summary.", "srv_run").slice(1)) push(e);
-    await vi.waitFor(() => expect(get().isGenerating).toBe(false));
-    expect(get().view.messages.map((m) => m.id)).toEqual(["rem", "a1"]);
-    expect(api.listSchedules.mock.calls.length).toBeGreaterThanOrEqual(2); // run_end 后刷新提醒列表
+    api.updateGoal.mockResolvedValueOnce({ goal: goal({ phase: "paused", revision: 2 }), armed: false });
+    await get().pauseGoal();
+    expect(api.updateGoal.mock.calls[0]![1]).toEqual({ action: "pause", revision: 1 });
 
-    // 离开会话：停止观察
-    api.loadConversation.mockResolvedValue({ meta: meta("c2"), transcript: [], goal: null, goalRunning: false });
-    await get().setCurrentConversation("c2");
-    expect(api.watch.mock.calls.at(-1)![0]).toBe("c2");
+    patch({ goal: goal({ phase: "blocked", revision: 9, roundsStarted: 2, maxRounds: 2 }) });
+    api.updateGoal
+      .mockResolvedValueOnce({ goal: goal({ phase: "blocked", revision: 10, maxRounds: 22 }), armed: false })
+      .mockResolvedValueOnce({ goal: goal({ phase: "active", revision: 11, maxRounds: 22 }), armed: true });
+    await get().resumeGoal({ extraRounds: 20 });
+    expect(api.updateGoal.mock.calls.slice(1).map((c) => c[1])).toEqual([
+      { action: "edit", revision: 9, maxRounds: 22 },
+      { action: "resume", revision: 10, settings: expect.objectContaining({ model: "deepseek-chat" }) },
+    ]);
+    expect(get().goal).toMatchObject({ phase: "active", armed: true });
   });
 
-  it("createSchedule saves the current run settings and deleteSchedule removes it", async () => {
+  it("a stale pause (the server just started a round) re-reads the goal and retries once; a stale edit does not", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    api.createGoal.mockResolvedValue({ goal: goal(), armed: true });
+    await get().startGoal("x");
+    api.updateGoal.mockRejectedValueOnce(new Error("409")).mockResolvedValueOnce({ goal: goal({ phase: "paused", revision: 6 }), armed: false });
+    api.getGoal.mockResolvedValueOnce({ goal: goal({ revision: 5, roundsStarted: 1 }), armed: true });
+    await get().pauseGoal();
+    expect(api.updateGoal.mock.calls.map((c) => c[1])).toEqual([
+      { action: "pause", revision: 1 },
+      { action: "pause", revision: 5 },
+    ]);
+    expect(get().goal).toMatchObject({ phase: "paused", armed: false });
+
+    api.updateGoal.mockClear();
+    api.updateGoal.mockRejectedValueOnce(new Error("409"));
+    api.getGoal.mockResolvedValueOnce({ goal: goal({ phase: "paused", revision: 7 }), armed: false });
+    await get().resumeGoal({ extraRounds: 5 }); // edit 过期：不重试，也不继续 resume
+    expect(api.updateGoal).toHaveBeenCalledTimes(1);
+  });
+
+  it("createSchedule saves the run settings; deleteSchedule removes it", async () => {
     const { get } = makeStore();
     api.createConversation.mockResolvedValue(meta("c1"));
     api.createSchedule.mockImplementation(async (id: string, input: { prompt: string; rule: unknown }) => ({
-      id: "s9", conversationId: id, title: input.prompt, prompt: input.prompt, rule: input.rule, timeZone: "UTC", state: "active", nextAt: 2,
+      id: "s9",
+      conversationId: id,
+      title: input.prompt,
+      prompt: input.prompt,
+      rule: input.rule,
+      timeZone: "UTC",
+      state: "active",
+      nextAt: 2,
     }));
     api.deleteSchedule.mockResolvedValue({});
     expect(await get().createSchedule("check mail", { kind: "interval", everySeconds: 1800 }, "sys")).toBe(true);
-    expect(api.createSchedule.mock.calls[0]![1]).toMatchObject({
-      prompt: "check mail",
-      rule: { kind: "interval", everySeconds: 1800 },
-      settings: { system: "sys", model: "deepseek-chat", tools: ["read_file"] },
-    });
+    expect(api.createSchedule.mock.calls[0]![1]).toMatchObject({ prompt: "check mail", settings: { system: "sys", model: "deepseek-chat" } });
     expect(get().schedules.map((x) => x.id)).toEqual(["s9"]);
     await get().deleteSchedule("s9");
     expect(get().schedules).toEqual([]);
