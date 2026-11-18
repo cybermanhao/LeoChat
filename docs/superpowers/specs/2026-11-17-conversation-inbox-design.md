@@ -1,7 +1,7 @@
 # 会话收件箱（harness 第三期）
 
 **日期：** 2026-11-17
-**状态：** 实施中
+**状态：** 已完成（2026-11-17）
 **参考：** dsh `packages/core/agent-loop`（`src/inbox.ts`、`src/agent.ts`）、`packages/goal/goal-round-driver`、`packages/interaction/permission-presets`；Anthropic《Building always-on agents》（2026-11-13）；用户的 asset-manager（events + acked_at，只作参照）
 
 ## 1. 为什么改
@@ -71,3 +71,22 @@
 
 - 审批暂缓（文章的 deferred tool call）：dsh 的 `ask` 是一直等到有人回答；我们保留现在的 60 秒超时拒绝，以后再改成暂缓。
 - 学到的记忆：dsh 没有，只有指令文件（我们的系统提示面板对应）。
+
+## 5. 结果
+
+| 部分 | 提交 |
+|---|---|
+| node：会话日志里的收件箱记录（插入 / 领取 / 丢弃）与回放 | `9f00f3a` |
+| core：审批策略 `allow`（完全信任，不发审批请求） | `9a1c2b6` |
+| server：每个会话一个处理者（`conversation-agent.ts`）、新接口、目标改为收件箱的生产者、提醒写进收件箱、权限预设 | `9a1c2b6` |
+| server：事件流以 reset（这一轮开始前的 transcript）开头，中途连上不重复 | `f86d251` |
+| web：每个打开的会话一条事件流、收件箱栏（可撤回）、权限开关 | `8226580` |
+
+测试中发现并修复：
+- 停止时先中止、后清空收件箱，被中止的这一轮结束后会立刻跑下一条排队消息 → 改为在处理者的串行队列里先清空再中止。
+- 同一进程里两个 conversationLog 实例共用同名临时文件，互相 rename 掉（调度器同样）→ 临时文件名加随机后缀。
+- 目标刚开始新的一轮时点"暂停"，revision 过期被拒，目标继续跑 → 暂停 / 继续 / 完成 / 清除在过期时重新读取并重试一次（编辑不重试）。
+
+验证：core 99、node 25、server 27、web 16、cli 6 个测试；真实模型端到端 16 个连续两轮全部通过（含排队与撤回、完全信任下 bash 不弹审批、目标暂停与继续、定时提醒实时送达）。
+
+仍未做（见第 4 节）：审批暂缓、学到的记忆、沙箱。
