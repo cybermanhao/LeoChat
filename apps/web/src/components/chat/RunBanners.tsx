@@ -1,7 +1,6 @@
 /**
  * 运行中的横幅：工具审批、排队中的消息。数据都来自 core 的视图状态（RunViewState）。
  */
-import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { InboxView } from "../../lib/agent-api";
 import type { ViewPart } from "@leochat/core/view";
@@ -9,8 +8,6 @@ import { useChatStore } from "../../stores/chat";
 
 type ToolPart = Extract<ViewPart, { type: "tool" }>;
 
-/** server 端超时自动拒绝的时间（core-bridge 的 pendingApprovalAnswerer） */
-const APPROVAL_TIMEOUT_S = 60;
 
 function approvalPreview(part: ToolPart): string {
   const input = part.input as { command?: unknown } | undefined;
@@ -22,13 +19,6 @@ function approvalPreview(part: ToolPart): string {
 export function ApprovalBanner({ part }: { part: ToolPart }) {
   const respond = useChatStore((s) => s.respondApproval);
   const answered = useChatStore((s) => s.answeredApprovals.has(part.callId));
-  const [secondsLeft, setSecondsLeft] = useState(APPROVAL_TIMEOUT_S);
-
-  useEffect(() => {
-    if (secondsLeft <= 0) return;
-    const id = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
-    return () => clearTimeout(id);
-  }, [secondsLeft]);
 
   const btn =
     "rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
@@ -43,7 +33,7 @@ export function ApprovalBanner({ part }: { part: ToolPart }) {
             {approvalPreview(part)}
           </pre>
           {part.approvalReason && <p className="mt-1 text-xs text-muted-foreground">{part.approvalReason}</p>}
-          <p className="mt-1 text-xs text-muted-foreground">超时自动拒绝（剩余 {secondsLeft}s）</p>
+          <p className="mt-1 text-xs text-muted-foreground">等你决定；不想执行就拒绝，点停止会取消这一轮</p>
         </div>
         <div className="mt-0.5 flex flex-shrink-0 gap-2">
           <button

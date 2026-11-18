@@ -313,7 +313,7 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       try {
         await chatApi.approveToolCall(callId, approved);
       } catch (e) {
-        // 404 常见于 server 的 60 秒超时刚好先自动拒绝了；视图会随 approval_resolved 更新
+        // 404：这一轮已被停止或审批已撤回；视图会随 approval_resolved 更新
         console.warn("[approval]", e);
       }
     },

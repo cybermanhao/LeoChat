@@ -251,15 +251,20 @@ export function mcpCoreTools(sessionManager: LegacySessionManager, truncate: (s:
   );
 }
 
-/** bash 审批：沿用原来的 pendingApprovals 和 60 秒超时；超时或拒绝都按 rejected 处理 */
-export function pendingApprovalAnswerer(pending: Map<string, (approved: boolean) => void>, timeoutMs = 60_000): Answerer<unknown> {
+/**
+ * 审批（询问模式）：等到用户回答为止（dsh 的 ask：没有超时）；这一轮被中止（停止、删除会话）时撤回，结果为 cancelled。
+ * 等待期间收件箱照常收消息，这一轮结束后处理。
+ */
+export function pendingApprovalAnswerer(pending: Map<string, (approved: boolean) => void>): Answerer<unknown> {
   return (req) =>
     new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        if (pending.delete(req.callId)) resolve("rejected");
-      }, timeoutMs);
+      const onAbort = () => {
+        if (pending.delete(req.callId)) resolve("cancelled");
+      };
+      if (req.signal.aborted) return resolve("cancelled");
+      req.signal.addEventListener("abort", onAbort, { once: true });
       pending.set(req.callId, (approved) => {
-        clearTimeout(timer);
+        req.signal.removeEventListener("abort", onAbort);
         pending.delete(req.callId);
         resolve(approved ? "allowed-once" : "rejected");
       });

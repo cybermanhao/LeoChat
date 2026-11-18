@@ -259,3 +259,22 @@ describe("reset event", () => {
     expect(view.messages.filter((m) => m.parts.some((p) => p.type === "tool"))).toHaveLength(1);
   });
 });
+
+describe("approval wait (dsh ask: no timeout)", () => {
+  it("waits for an answer with no timeout, and stopping the turn withdraws the request", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const { app, pending, callTool } = makeApp(dir, [tool("b1", "bash", { command: "ls" })]);
+      const id = await newConv(app);
+      await say(app, id, "list files");
+      await vi.waitFor(() => expect(pending.has("b1")).toBe(true));
+      vi.advanceTimersByTime(10 * 60_000); // 以前 60 秒自动拒绝；现在一直等
+      expect(pending.has("b1")).toBe(true);
+      await req(app, "POST", `/conversations/${id}/stop`);
+      await vi.waitFor(() => expect(pending.has("b1")).toBe(false));
+      expect(callTool).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
