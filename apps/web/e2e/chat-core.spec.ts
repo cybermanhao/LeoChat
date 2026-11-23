@@ -60,7 +60,7 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
 
   await input(page).fill("联网搜索：DeepSeek 最新发布的模型叫什么？一句话回答并注明来源。");
   await input(page).press("Enter");
-  await expect(page.getByText("联网搜索", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("联网搜索", { exact: true }).first()).toBeVisible({ timeout: 60_000 }); // 模型可能搜索多次
   await waitIdle(page);
   const reply = messages(page).nth(1);
   // 回合结束后过程收成一行（简洁模式），点开看搜索步骤
@@ -73,15 +73,18 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
 test("Ctrl+Enter during a turn queues in the inbox bar, and a queued message can be withdrawn", async ({ page }) => {
   await page.goto("/");
   await resetStateBypassOnboarding(page);
-  await input(page).fill("从 1 数到 300，用逗号分隔，不要其他内容");
+  // 这一轮要足够长：负载高时数到 300 可能在撤回之前就结束，排队的消息被领取，撤回按钮随之消失（2026-11-23 现场确认）
+  await input(page).fill("从 1 数到 1000，用逗号分隔，不要其他内容");
   await input(page).press("Enter");
   await expect(stopButton(page)).toBeVisible({ timeout: 30_000 });
   await input(page).fill("这条稍后再说");
   await input(page).press("Control+Enter");
   const bar = page.getByTestId("inbox-bar");
   await expect(bar).toContainText("这条稍后再说", { timeout: 10_000 });
-  await bar.getByRole("button", { name: /撤回/ }).click();
-  await expect(bar).toHaveCount(0);
+  await bar.getByRole("button", { name: /撤回/ }).click({ timeout: 15_000 });
+  await expect(bar).toHaveCount(0, { timeout: 15_000 }); // 负载高时 server 处理撤回要几秒
+  // 不用等它数完，省 token；这一轮可能恰好结束（停止按钮和发送按钮是同一个 DOM 节点，结束后变成禁用的发送按钮），点不到就算了
+  await stopButton(page).click({ timeout: 5_000 }).catch(() => {});
   await waitIdle(page);
   await expect(page.locator("[data-message-id]", { hasText: "这条稍后再说" })).toHaveCount(0);
 });

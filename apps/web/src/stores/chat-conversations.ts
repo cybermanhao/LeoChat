@@ -11,6 +11,8 @@ import type { ConversationsSlice, SliceCreator } from "./chat-types";
 export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, get) => {
   /** 防止快速切换时，较早的加载结果覆盖较晚的 */
   let loadSeq = 0;
+  /** 正在新建的会话：同一时间只建一个，"新对话"之后马上发送的消息等它建好、发进同一个会话 */
+  let creating: Promise<string> | null = null;
   const blank = { view: initialViewState(), loadingConversation: false, goal: null, schedules: [], inbox: EMPTY_INBOX };
 
   return {
@@ -22,10 +24,19 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
     setInput: (input) => set({ input }),
 
     loadConversations: async () => {
+      // 记下请求开始时的当前会话：列表返回前用户可能已经新建 / 切换了会话（启动时很快发出第一条消息）
+      const startedWith = get().currentConversationId;
+      const startSeq = loadSeq;
       try {
         const data: unknown = await agentApi.listConversations();
         // 响应形状不对时按空列表处理：会话列表现在在全局侧边栏里，坏数据会让整个应用崩溃
         const conversations = Array.isArray(data) ? (data as Awaited<ReturnType<typeof agentApi.listConversations>>) : [];
+        if (get().currentConversationId !== startedWith || loadSeq !== startSeq) {
+          // 这期间换过会话：只合并列表（保留这期间新建、列表里还没有的），不动当前会话
+          // 否则会把刚建的会话当成"已不存在"清掉，页面随之断开事件流（2026-11-23 e2e 现场确认）
+          set((s) => ({ conversations: [...s.conversations.filter((c) => !conversations.some((x) => x.id === c.id)), ...conversations] }));
+          return;
+        }
         set({ conversations });
         const current = get().currentConversationId;
         if (current && conversations.some((c) => c.id === current)) {
@@ -38,13 +49,25 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
       }
     },
 
-    createConversation: async () => {
+    createConversation: () => {
+      if (creating) return creating;
+      // 立刻显示空白会话；server 建好后再切过去（这期间用户切到别的会话就不切）
       get().connect(null);
-      const meta = await agentApi.createConversation();
-      loadSeq++;
-      set((s) => ({ conversations: [meta, ...s.conversations.filter((c) => c.id !== meta.id)], currentConversationId: meta.id, ...blank }));
-      get().connect(meta.id);
-      return meta.id;
+      const seq = ++loadSeq;
+      set({ currentConversationId: null, ...blank });
+      creating = (async () => {
+        const meta = await agentApi.createConversation();
+        const stillHere = seq === loadSeq;
+        set((s) => ({
+          conversations: [meta, ...s.conversations.filter((c) => c.id !== meta.id)],
+          ...(stillHere ? { currentConversationId: meta.id } : {}),
+        }));
+        if (stillHere) get().connect(meta.id);
+        return meta.id;
+      })().finally(() => {
+        creating = null;
+      });
+      return creating;
     },
 
     setCurrentConversation: async (id) => {

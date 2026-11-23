@@ -186,6 +186,40 @@ describe("input goes to the server inbox", () => {
     expect(get().input).toBe("");
   });
 
+  it("sending right after New chat waits for that conversation instead of creating a second one", async () => {
+    // 回归（2026-11-23 手机 e2e）：新建请求还没返回时就发送，发送那边另建了一个会话，界面停在空会话上
+    const { get } = makeStore();
+    let resolveCreate!: (v: unknown) => void;
+    api.createConversation.mockReturnValue(new Promise((r) => (resolveCreate = r)));
+    const creating = get().createConversation();
+    const sending = get().sendMessage("hi");
+    resolveCreate(meta("c1"));
+    await creating;
+    await sending;
+    expect(api.createConversation).toHaveBeenCalledTimes(1);
+    expect(get().currentConversationId).toBe("c1");
+    expect(api.sendMessage.mock.calls.at(-1)![0]).toBe("c1");
+  });
+
+  it("a slow startup list that arrives after the first send does not drop the new conversation", async () => {
+    // 回归（2026-11-23 e2e）：列表请求在新建会话之前发出、之后才返回，列表里没有新会话，
+    // 旧逻辑把当前会话清空，事件流也随之停掉；之后的排队消息被发到了另一个新会话
+    const { get } = makeStore();
+    let resolveList!: (v: unknown) => void;
+    api.listConversations.mockReturnValue(new Promise((r) => (resolveList = r)));
+    const loading = get().loadConversations();
+    api.createConversation.mockResolvedValue(meta("c1"));
+    await get().sendMessage("hi");
+    resolveList([meta("old")]);
+    await loading;
+    expect(get().currentConversationId).toBe("c1");
+    expect(get().conversations.map((c) => c.id)).toEqual(["c1", "old"]);
+    // 事件流仍然连着这个会话：后续消息继续发给 c1
+    await get().queueFollowUp("later");
+    expect(api.createConversation).toHaveBeenCalledTimes(1);
+    expect(api.sendMessage.mock.calls.at(-1)![0]).toBe("c1");
+  });
+
   it("while a turn runs, Enter interjects (next-step) and Ctrl+Enter queues (next-turn); full access is sent along", async () => {
     const { get, patch } = makeStore();
     api.createConversation.mockResolvedValue(meta("c1"));

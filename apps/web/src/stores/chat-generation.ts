@@ -127,10 +127,8 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     const current = get().currentConversationId;
     if (current) return current;
     try {
-      const meta = await agentApi.createConversation();
-      set((s) => ({ conversations: [meta, ...s.conversations], currentConversationId: meta.id }));
-      get().connect(meta.id);
-      return meta.id;
+      // 和"新对话"共用同一次新建：正在建的话就等它，不会建出两个会话（2026-11-23 e2e 现场确认的竞态）
+      return await get().createConversation();
     } catch (e) {
       console.error("[chat] create conversation failed", e);
       handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
@@ -211,7 +209,13 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
         while (!ctl.signal.aborted) {
           try {
             for await (const e of agentApi.events(id, ctl.signal)) {
-              if (ctl.signal.aborted || get().currentConversationId !== id) return;
+              if (ctl.signal.aborted) return;
+              if (get().currentConversationId !== id) {
+                // 当前会话已经换了：真正断开，否则 conn 还挂着这个 id，以后再 connect(id) 会被当成"已连接"跳过
+                ctl.abort();
+                if (conn?.ctl === ctl) conn = null;
+                return;
+              }
               handle(e);
             }
           } catch {
