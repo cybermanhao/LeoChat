@@ -106,6 +106,19 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
       if (wasCurrent) await get().setCurrentConversation(remaining[0]?.id ?? null);
     },
 
+    renameConversation: async (id, title) => {
+      const name = title.trim().slice(0, 200);
+      const before = get().conversations.find((c) => c.id === id)?.title ?? "";
+      if (!name || name === before) return;
+      set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, title: name } : c)) }));
+      try {
+        await agentApi.renameConversation(id, name);
+      } catch (e) {
+        console.warn("[conversations] rename failed", e);
+        set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, title: before } : c)) }));
+      }
+    },
+
     clearAllConversations: async () => {
       get().connect(null);
       const ids = get().conversations.map((c) => c.id);

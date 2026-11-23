@@ -1,27 +1,27 @@
 /**
- * 会话顶栏（重设计 P4）：只有会话标题和右栏开关（按 dsh：右栏收起时，顶栏角上的按钮是唯一的入口）。
+ * 会话顶栏（重设计 P4）：会话标题、"⋯"菜单和右栏开关（按 dsh：右栏收起时，顶栏角上的按钮是唯一的入口）。
  * 有进行中的任务时按钮亮起并显示数量。
  */
+import { useState } from "react";
 import { PanelRightOpen } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
-import { useChatStore } from "../../stores/chat";
 import { useDockEntry, useDockStore } from "../../stores/dock";
 import { useTaskCount } from "../dock/RightDock";
 import { useIsMobile } from "../../lib/use-media";
+import { ConversationMenu, ConversationTitle } from "./ConversationMenu";
 
 export function ConversationHeader({ conversationId }: { conversationId: string }) {
-  const title = useChatStore((s) => s.conversations.find((c) => c.id === conversationId)?.title || "新对话");
   const open = useDockEntry(conversationId).open;
   const toggle = useDockStore((s) => s.toggleDock);
   const count = useTaskCount();
   const mobile = useIsMobile();
+  const [editing, setEditing] = useState(false);
   if (mobile) return null; // 手机上由 MobileTopBar 代替
 
   return (
     <div className="flex h-11 flex-none items-center gap-2 border-b border-border px-4" data-testid="conversation-header">
-      <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={title}>
-        {title}
-      </h1>
+      <ConversationTitle conversationId={conversationId} editing={editing} onDone={() => setEditing(false)} />
+      <ConversationMenu onRename={() => setEditing(true)} />
       {!open && (
         <button
           type="button"

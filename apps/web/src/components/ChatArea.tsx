@@ -30,6 +30,8 @@ import { groupTurns, reuseTurns, type Turn } from "./chat/turn/group";
 import { ContextStrip } from "./chat/ContextStrip";
 import { ConversationHeader } from "./chat/ConversationHeader";
 import { RightDock } from "./dock/RightDock";
+import { MobileChipsMenu } from "./chat/MobileChipsMenu";
+import { useIsMobile } from "../lib/use-media";
 import { SlashMenu, useSlashMenu } from "./chat/SlashMenu";
 import type { SlashCommand } from "../lib/slash-commands";
 import { useStickToBottom } from "./chat/useStickToBottom";
@@ -144,6 +146,7 @@ export function ChatArea() {
   const turns = useMemo(() => (turnsRef.current = reuseTurns(turnsRef.current, groupTurns(messages))), [messages]);
   const endLabel = view.status === "aborted" ? "已停止" : view.status === "error" ? "出错" : undefined;
   const workDetails = useChatStore((s) => s.workDetails);
+  const mobile = useIsMobile();
   const setWorkDetails = useChatStore((s) => s.setWorkDetails);
   const renderText = useCallback(
     (text: string, streaming: boolean) => (
@@ -453,9 +456,8 @@ export function ChatArea() {
   const toolbarButtonClass =
     "h-7 gap-1.5 rounded-full border border-border px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground";
 
-  const toolbar = (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex items-center gap-1 flex-wrap py-1">
+  const chips = (
+    <>
 
         {/* 模型选择 */}
         <Tooltip>
@@ -468,7 +470,7 @@ export function ChatArea() {
               onClick={() => setModelSelectorOpen(true)}
             >
               <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">
+              <span className="chip-label hidden sm:inline">
                 {currentProvider}/{currentModel.includes("/") ? currentModel.split("/").pop() : currentModel}
               </span>
             </Button>
@@ -491,7 +493,7 @@ export function ChatArea() {
                 onClick={() => setWebSearch(!webSearch)}
               >
                 <Globe className="h-4 w-4" />
-                <span className="hidden sm:inline">联网</span>
+                <span className="chip-label hidden sm:inline">联网</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
@@ -517,7 +519,7 @@ export function ChatArea() {
               }}
             >
               {permission === "full" ? <ShieldAlert className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-              <span className="hidden sm:inline">{permission === "full" ? "完全信任" : "询问"}</span>
+              <span className="chip-label hidden sm:inline">{permission === "full" ? "完全信任" : "询问"}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
@@ -541,7 +543,7 @@ export function ChatArea() {
                   onClick={() => setTempPopoverOpen(!tempPopoverOpen)}
                 >
                   <Thermometer className="h-4 w-4" />
-                  <span className="hidden sm:inline">{temperature.toFixed(1)}</span>
+                  <span className="chip-label hidden sm:inline">{temperature.toFixed(1)}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
@@ -585,7 +587,7 @@ export function ChatArea() {
                   onClick={() => setCtxPopoverOpen(!ctxPopoverOpen)}
                 >
                   <Layers className="h-4 w-4" />
-                  <span className="hidden sm:inline">{contextLevel === 10 ? "∞" : contextLevel}</span>
+                  <span className="chip-label hidden sm:inline">{contextLevel === 10 ? "∞" : contextLevel}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
@@ -629,7 +631,7 @@ export function ChatArea() {
                   onClick={() => setEpochsPopoverOpen(!epochsPopoverOpen)}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">{unlimitedEpochs ? "∞" : maxEpochs}</span>
+                  <span className="chip-label hidden sm:inline">{unlimitedEpochs ? "∞" : maxEpochs}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
@@ -675,8 +677,17 @@ export function ChatArea() {
             )}
           </div>
         )}
+    </>
+  );
 
-      </div>
+  // 手机上控件收进一个"⋯"按钮（重设计计划 §7），点开后带文字标签
+  const toolbar = (
+    <TooltipProvider delayDuration={300}>
+      {mobile ? (
+        <MobileChipsMenu>{chips}</MobileChipsMenu>
+      ) : (
+        <div className="flex items-center gap-1 flex-wrap py-1">{chips}</div>
+      )}
     </TooltipProvider>
   );
 

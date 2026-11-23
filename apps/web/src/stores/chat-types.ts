@@ -70,6 +70,8 @@ export interface ConversationsSlice {
   createConversation: () => Promise<string>;
   setCurrentConversation: (id: string | null) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  /** 重命名会话（先改本地，server 失败时改回） */
+  renameConversation: (id: string, title: string) => Promise<void>;
   clearAllConversations: () => Promise<void>;
   /** 清空当前会话：删掉它，回到空白状态 */
   clearCurrentConversation: () => Promise<void>;
