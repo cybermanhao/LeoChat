@@ -199,6 +199,9 @@ export function legacyProvider(llm: LegacyLLM, providerName?: LLMProvider): Lega
         wake?.();
       };
       signal?.addEventListener("abort", onAbort, { once: true });
+      // 已经中止的 signal 不会再触发 abort 事件：生成器的函数体是在第一次取值时才跑的，
+      // 中间（例如目标轮次刚开始就被暂停）中止了的话，不检查就会一直等上游
+      if (signal?.aborted) onAbort();
       try {
         while (true) {
           if (queue.length && !signal?.aborted) {

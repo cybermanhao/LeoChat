@@ -96,6 +96,35 @@ describe("/goal on the inbox", () => {
     await vi.waitFor(async () => expect((await getGoal(app, id)).goal!.phase).toBe("complete"), { timeout: 5000 });
   });
 
+  it("a pause that arrives while a round is still being set up aborts that round", async () => {
+    // 回归（2026-11-23 e2e）：暂停落在"已领取目标轮次、运行还没开始"的窗口里时，disarm 看不到运行，这一轮照样跑完
+    const g = gated();
+    let setupStarted!: () => void;
+    const started = new Promise<void>((r) => (setupStarted = r));
+    let releaseSetup!: () => void;
+    const setupGate = new Promise<void>((r) => (releaseSetup = r));
+    const { app } = makeApp(dir, [g.round], {
+      instructions: async () => {
+        setupStarted();
+        await setupGate;
+        return "";
+      },
+    });
+    const id = await newConv(app);
+    const l = await listen(app, id);
+    await req(app, "POST", `/conversations/${id}/goal`, { objective: "Task" });
+    await started;
+    const current = await getGoal(app, id);
+    const paused = await req(app, "PATCH", `/conversations/${id}/goal`, { action: "pause", revision: current.goal!.revision });
+    expect(paused.status).toBe(200);
+    releaseSetup();
+    // 不放行模型：这一轮必须被中止，而不是一直跑下去
+    const events = await l.until((ev) => ev.some((e) => e.type === "run_end") && agentIdle(ev.at(-1)!));
+    expect(events.find((e) => e.type === "run_end")).toMatchObject({ result: { reason: "aborted" } });
+    expect(await getGoal(app, id)).toMatchObject({ goal: { phase: "paused" }, armed: false });
+    g.release();
+  });
+
   it("stop during a goal round pauses the goal", async () => {
     const g = gated();
     const { app } = makeApp(dir, [g.round]);

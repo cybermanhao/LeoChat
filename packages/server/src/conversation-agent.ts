@@ -285,6 +285,8 @@ export class ConversationAgent<S = unknown> {
       persist: log.persistFor(id),
     });
     this.running = { handle, source, ...(goalId ? { goalId } : {}) };
+    // 准备这一轮期间（运行句柄还没有时）用户暂停了目标：disarm 当时看不到运行，这里补上中止（dsh：宿主发起的暂停中止当前轮次）
+    if (source === "goal" && !this.armed) handle.abort("goal paused");
     this.buffer = [];
     this.emit(this.statusEvent());
     // 被领取的输入先作为用户消息出现在客户端视图里

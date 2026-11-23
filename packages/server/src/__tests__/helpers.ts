@@ -21,7 +21,13 @@ export interface TestApp {
 export function makeApp(
   dir: string,
   rounds: Round[],
-  opts: { tools?: string[]; schedules?: boolean; callTool?: (name: string, args: unknown) => Promise<unknown>; instructions?: string } = {},
+  opts: {
+    tools?: string[];
+    schedules?: boolean;
+    callTool?: (name: string, args: unknown) => Promise<unknown>;
+    /** AGENTS.md 文本；传函数时每轮准备时调用（可以用来卡住一轮的准备阶段） */
+    instructions?: string | (() => Promise<string>);
+  } = {},
 ): TestApp {
   let i = 0;
   const requests: TestApp["requests"] = [];
@@ -46,7 +52,12 @@ export function makeApp(
     conversations: conversationLog(join(dir, "conversations")),
     ...(opts.schedules ? { schedulesFile: join(dir, "schedules.json") } : {}),
     ...(opts.instructions !== undefined
-      ? { instructions: async () => ({ text: opts.instructions, files: [{ path: "AGENTS.md", scope: "global", content: opts.instructions }], omitted: [] }) }
+      ? {
+          instructions: async () => {
+            const text = typeof opts.instructions === "function" ? await opts.instructions() : opts.instructions!;
+            return { text, files: [{ path: "AGENTS.md", scope: "global", content: text }], omitted: [] };
+          },
+        }
       : {}),
   } as unknown as ServerContext;
   const app = new Hono();
