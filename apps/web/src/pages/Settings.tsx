@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Github, Globe, Info, Mail, Palette, Server, Wifi, Zap } from "lucide-react";
-import { cn } from "@ai-chatbox/ui";
+import { cn, Switch } from "@ai-chatbox/ui";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useI18nStore, LOCALES } from "../stores/i18n";
 import { useChatStore } from "../stores/chat";
@@ -89,12 +89,36 @@ function Row({ title, desc, children }: { title: string; desc?: string; children
   );
 }
 
+function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: Array<[T, string]> }) {
+  return (
+    <div className="flex rounded-md border border-border overflow-hidden">
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          aria-pressed={value === v}
+          className={cn(
+            "px-3 py-1.5 text-sm transition-colors",
+            value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function GeneralSettings() {
   const { t } = useT();
   const currentLocale = useI18nStore((s) => s.currentLocale);
   const setLocale = useI18nStore((s) => s.setLocale);
   const uiMode = useChatStore((s) => s.uiMode);
   const setUiMode = useChatStore((s) => s.setUiMode);
+  const workDetails = useChatStore((s) => s.workDetails);
+  const setWorkDetails = useChatStore((s) => s.setWorkDetails);
+  const enableMarkdown = useChatStore((s) => s.enableMarkdown);
+  const setEnableMarkdown = useChatStore((s) => s.setEnableMarkdown);
 
   return (
     <div>
@@ -113,20 +137,27 @@ export function GeneralSettings() {
         </select>
       </Row>
       <Row title={t("settingsNav.uiMode")} desc={t("settingsNav.uiModeDesc")}>
-        <div className="flex rounded-md border border-border overflow-hidden">
-          {(["simple", "professional"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setUiMode(mode)}
-              className={cn(
-                "px-3 py-1.5 text-sm transition-colors",
-                uiMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted",
-              )}
-            >
-              {t(mode === "simple" ? "settingsNav.simple" : "settingsNav.professional")}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          value={uiMode}
+          onChange={setUiMode}
+          options={[
+            ["simple", t("settingsNav.simple")],
+            ["professional", t("settingsNav.professional")],
+          ]}
+        />
+      </Row>
+      <Row title={t("settingsNav.workDetails")} desc={t("settingsNav.workDetailsDesc")}>
+        <Segmented
+          value={workDetails}
+          onChange={setWorkDetails}
+          options={[
+            ["concise", t("settingsNav.concise")],
+            ["detailed", t("settingsNav.detailed")],
+          ]}
+        />
+      </Row>
+      <Row title={t("settingsNav.markdown")} desc={t("settingsNav.markdownDesc")}>
+        <Switch checked={enableMarkdown} onCheckedChange={setEnableMarkdown} aria-label={t("settingsNav.markdown")} />
       </Row>
       <Row title={t("settingsNav.onboarding")} desc={t("settingsNav.onboardingDesc")}>
         <button

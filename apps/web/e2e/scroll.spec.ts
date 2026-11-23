@@ -24,7 +24,7 @@ test("follows the stream at the bottom, stays put after the user scrolls up, and
 
   // 1. 贴底跟随：内容超过一屏后，连续采样时始终在底部附近
   // 内容比可视区域高出足够多即可（模型写的长度和速度每次不同，不用绝对高度）
-  await expect.poll(async () => { const m = await metrics(page); return m.height - m.client; }, { timeout: 90_000 }).toBeGreaterThan(700);
+  await expect.poll(async () => { const m = await metrics(page); return m.height - m.client; }, { timeout: 90_000 }).toBeGreaterThan(400); // 正文全宽后同样字数占的行更少
   const samples: number[] = [];
   for (let i = 0; i < 15; i++) {
     samples.push(distance(await metrics(page)));

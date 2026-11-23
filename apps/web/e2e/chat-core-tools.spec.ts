@@ -69,7 +69,7 @@ test("Reject is reported back to the model and the run still finishes", async ({
   await input(page).fill("请用 bash 工具执行命令 `echo should-not-run`。如果被拒绝，就回复：已取消。");
   await input(page).press("Enter");
   await expect(page.getByText("AI 请求执行")).toBeVisible({ timeout: 90_000 });
-  await page.getByRole("button", { name: "拒绝" }).click();
+  await page.getByRole("button", { name: "拒绝", exact: true }).click(); // 思考行里也可能出现"拒绝"
   await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
   await expect(page.locator("[data-message-id]").last()).toContainText("已取消");
 });

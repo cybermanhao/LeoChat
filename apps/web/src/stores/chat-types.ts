@@ -23,6 +23,8 @@ export interface SettingsSlice {
   unlimitedEpochs: boolean;
   contextLevel: number;
   uiMode: "simple" | "professional";
+  /** 工作细节（按 dsh）：concise = 已完成回合的过程收起；detailed = 全部展开 */
+  workDetails: "concise" | "detailed";
   temperature: number;
   llmConfig: LLMConfig | null;
   mcpTools: MCPTool[];
@@ -37,6 +39,7 @@ export interface SettingsSlice {
   setUnlimitedEpochs: (v: boolean) => void;
   setContextLevel: (level: number) => void;
   setUiMode: (mode: "simple" | "professional") => void;
+  setWorkDetails: (mode: "concise" | "detailed") => void;
   setTemperature: (t: number) => void;
   setLLMConfig: (config: LLMConfig) => void;
   setMCPTools: (tools: MCPTool[]) => void;

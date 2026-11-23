@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChatInput,
-  MessageActions,
   MCPQuickPanel,
   Button,
   Tooltip,
@@ -28,8 +27,9 @@ import { assembleSystemPrompt } from "../lib/prompt-assembly";
 import { executeLeoCardAction } from "../lib/card-actions";
 import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
-import { ViewMessageItem, messageText } from "./chat/ViewMessageItem";
-import { ApprovalBanner, QueuedBar } from "./chat/RunBanners";
+import { TurnView } from "./chat/turn/Turn";
+import { groupTurns, reuseTurns, type Turn } from "./chat/turn/group";
+import { PendingApprovalHint, QueuedBar } from "./chat/RunBanners";
 import { GoalBar } from "./chat/GoalBar";
 import { useStickToBottom } from "./chat/useStickToBottom";
 import { ScheduleBar } from "./chat/ScheduleBar";
@@ -113,7 +113,6 @@ export function ChatArea() {
   const currentModel = useChatStore((s) => s.currentModel);
   const setCurrentModel = useChatStore((s) => s.setCurrentModel);
   const enableMarkdown = useChatStore((s) => s.enableMarkdown);
-  const setEnableMarkdown = useChatStore((s) => s.setEnableMarkdown);
   const maxEpochs = useChatStore((s) => s.maxEpochs);
   const setMaxEpochs = useChatStore((s) => s.setMaxEpochs);
   const unlimitedEpochs = useChatStore((s) => s.unlimitedEpochs);
@@ -134,8 +133,20 @@ export function ChatArea() {
   const messages = view.messages;
   // 等待审批的工具调用（由 core 的视图状态推导，不再单独维护队列）
   const awaitingApproval = useMemo(
-    () => messages.flatMap((m) => m.parts).filter((p) => p.type === "tool" && p.state === "awaiting-approval"),
+    () => messages.flatMap((m) => m.parts).flatMap((p) => (p.type === "tool" && p.state === "awaiting-approval" ? [p.callId] : [])),
     [messages],
+  );
+  // 按回合组织（重设计 P2）；内容没变的回合沿用旧对象，流式输出时只重新渲染最后一个回合
+  const turnsRef = useRef<Turn[]>([]);
+  const turns = useMemo(() => (turnsRef.current = reuseTurns(turnsRef.current, groupTurns(messages))), [messages]);
+  const endLabel = view.status === "aborted" ? "已停止" : view.status === "error" ? "出错" : undefined;
+  const workDetails = useChatStore((s) => s.workDetails);
+  const setWorkDetails = useChatStore((s) => s.setWorkDetails);
+  const renderText = useCallback(
+    (text: string, streaming: boolean) => (
+      <ParsedMessageText content={text} isStreaming={streaming} enableMarkdown={enableMarkdown} onAction={executeAction} />
+    ),
+    [enableMarkdown, executeAction],
   );
 
   // 滚动到底部
@@ -382,6 +393,16 @@ export function ChatArea() {
       if (goalCmd) {
         const objective = goalCmd[1]?.trim();
         if (objective) void startGoal(objective, assembledPrompt ? { systemPrompt: assembledPrompt } : {});
+        return;
+      }
+      // /details [concise|detailed]：切换工作细节模式（按 dsh）
+      const details = /^\/details(?:\s+(\S+))?$/.exec(input.trim());
+      if (details) {
+        const arg = details[1];
+        const next = arg === "concise" || arg === "简洁" ? "concise" : arg === "detailed" || arg === "详细" ? "detailed" : workDetails === "detailed" ? "concise" : "detailed";
+        setWorkDetails(next);
+        setInput("");
+        showToast(next === "detailed" ? "工作细节：详细（全部展开）" : "工作细节：简洁（已完成的过程收起）");
         return;
       }
       // /loop <间隔或时间> <内容>：定时提醒（harness 第二期）
@@ -734,31 +755,18 @@ export function ChatArea() {
         data-testid="chat-scroll"
       >
         <div ref={contentRef} className="mx-auto max-w-3xl space-y-4">
-          {messages.map((message, index) => {
-            const streaming = isGenerating && index === messages.length - 1 && message.role === "assistant";
+          {turns.map((turn, index) => {
+            const isLast = index === turns.length - 1;
             return (
-              <ViewMessageItem
-                key={message.id}
-                message={message}
-                isStreaming={streaming}
+              <TurnView
+                key={turn.key}
+                turn={turn}
+                running={isGenerating && isLast}
+                detailed={workDetails === "detailed"}
+                {...(isLast && !isGenerating && endLabel ? { endLabel } : {})}
+                renderText={renderText}
                 onCardAction={executeLeoCardAction}
-                actions={
-                  message.role === "assistant" ? (
-                    <MessageActions
-                      content={messageText(message)}
-                      enableMarkdown={enableMarkdown}
-                      onMarkdownToggle={() => setEnableMarkdown(!enableMarkdown)}
-                    />
-                  ) : undefined
-                }
-                renderText={(text, partStreaming) => (
-                  <ParsedMessageText
-                    content={text}
-                    isStreaming={streaming && partStreaming}
-                    enableMarkdown={enableMarkdown}
-                    onAction={executeAction}
-                  />
-                )}
+                onEditUser={setInput}
               />
             );
           })}
@@ -784,7 +792,7 @@ export function ChatArea() {
       <QueuedBar inbox={inbox} />
 
       {/* 等待审批的工具调用，每个一条 */}
-      {awaitingApproval.map((p) => (p.type === "tool" ? <ApprovalBanner key={p.callId} part={p} /> : null))}
+      <PendingApprovalHint callIds={awaitingApproval} />
 
       {/* 定时提醒（/loop） */}
       <ScheduleBar />

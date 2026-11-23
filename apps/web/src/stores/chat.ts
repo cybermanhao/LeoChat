@@ -23,6 +23,7 @@ const PERSISTED_KEYS = [
   "unlimitedEpochs",
   "contextLevel",
   "uiMode",
+  "workDetails",
   "temperature",
 ] as const;
 

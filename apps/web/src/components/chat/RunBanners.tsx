@@ -1,7 +1,7 @@
 /**
- * 运行中的横幅：工具审批、排队中的消息。数据都来自 core 的视图状态（RunViewState）。
+ * 运行中的提示：工具审批卡片、排队中的消息。数据都来自 core 的视图状态（RunViewState）。
  */
-import { X } from "lucide-react";
+import { ShieldAlert, X } from "lucide-react";
 import type { InboxView } from "../../lib/agent-api";
 import type { ViewPart } from "@leochat/core/view";
 import { useChatStore } from "../../stores/chat";
@@ -16,49 +16,66 @@ function approvalPreview(part: ToolPart): string {
   return part.inputText ?? "";
 }
 
-export function ApprovalBanner({ part }: { part: ToolPart }) {
+/** 等待审批的工具调用：在回合的过程时间线里就地显示（重设计 P2，取代输入框上方的横幅） */
+export function ApprovalCard({ part }: { part: ToolPart }) {
   const respond = useChatStore((s) => s.respondApproval);
   const answered = useChatStore((s) => s.answeredApprovals.has(part.callId));
 
   const btn =
     "rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
   return (
-    <div className="flex-shrink-0 border-t border-primary/30 bg-primary/5 px-4 py-3">
-      <div className="mx-auto flex max-w-3xl items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">
-            AI 请求执行 <span className="font-mono">{part.name}</span>
-          </p>
-          <pre className="mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted px-3 py-2 font-mono text-xs text-foreground">
-            {approvalPreview(part)}
-          </pre>
-          {part.approvalReason && <p className="mt-1 text-xs text-muted-foreground">{part.approvalReason}</p>}
-          <p className="mt-1 text-xs text-muted-foreground">等你决定；不想执行就拒绝，点停止会取消这一轮</p>
-        </div>
-        <div className="mt-0.5 flex flex-shrink-0 gap-2">
-          <button
-            disabled={answered}
-            onClick={() => respond(part.callId, part.name, false)}
-            className={`${btn} border border-border text-muted-foreground hover:bg-muted hover:text-foreground`}
-          >
-            拒绝
-          </button>
-          <button
-            disabled={answered}
-            onClick={() => respond(part.callId, part.name, true, true)}
-            className={`${btn} border border-primary/50 text-primary hover:bg-primary/10`}
-          >
-            本次会话允许
-          </button>
-          <button
-            disabled={answered}
-            onClick={() => respond(part.callId, part.name, true)}
-            className={`${btn} bg-primary text-primary-foreground hover:bg-primary/90`}
-          >
-            {answered ? "..." : "允许"}
-          </button>
-        </div>
+    <div className="my-1.5 rounded-lg border border-primary/40 bg-primary/5 p-3" data-approval-id={part.callId}>
+      <p className="text-sm font-medium text-foreground">
+        AI 请求执行 <span className="font-mono">{part.name}</span>
+      </p>
+      <pre className="mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted px-3 py-2 font-mono text-xs text-foreground">
+        {approvalPreview(part)}
+      </pre>
+      {part.approvalReason && <p className="mt-1 text-xs text-muted-foreground">{part.approvalReason}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          disabled={answered}
+          onClick={() => respond(part.callId, part.name, true)}
+          className={`${btn} bg-primary text-primary-foreground hover:bg-primary/90`}
+        >
+          {answered ? "..." : "允许"}
+        </button>
+        <button
+          disabled={answered}
+          onClick={() => respond(part.callId, part.name, true, true)}
+          className={`${btn} border border-primary/50 text-primary hover:bg-primary/10`}
+        >
+          本次会话允许
+        </button>
+        <button
+          disabled={answered}
+          onClick={() => respond(part.callId, part.name, false)}
+          className={`${btn} border border-border text-muted-foreground hover:bg-muted hover:text-foreground`}
+        >
+          拒绝
+        </button>
+        <span className="text-xs text-muted-foreground">不想执行就拒绝，点停止会取消这一轮</span>
       </div>
+    </div>
+  );
+}
+
+/** 输入框上方的提示：有操作等待确认，点一下滚到对应的审批卡片 */
+export function PendingApprovalHint({ callIds }: { callIds: string[] }) {
+  if (!callIds.length) return null;
+  const jump = () =>
+    document.querySelector(`[data-approval-id="${CSS.escape(callIds[0]!)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  return (
+    <div className="flex-shrink-0 px-4 pt-2">
+      <button
+        type="button"
+        onClick={jump}
+        className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-primary/10"
+      >
+        <ShieldAlert className="h-3.5 w-3.5 text-primary" />
+        有 {callIds.length} 个操作等待你确认
+        <span className="ml-auto text-muted-foreground">查看</span>
+      </button>
     </div>
   );
 }

@@ -19,6 +19,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   unlimitedEpochs: false,
   contextLevel: 5,
   uiMode: "simple" as "simple" | "professional",
+  workDetails: "concise" as "concise" | "detailed",
   temperature: 0.7,
   llmConfig: null,
   mcpTools: [],
@@ -56,6 +57,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   setUnlimitedEpochs: (v) => set({ unlimitedEpochs: v }),
   setContextLevel: (level) => set({ contextLevel: Math.min(Math.max(level, 1), 10) }),
   setUiMode: (mode) => set({ uiMode: mode }),
+  setWorkDetails: (mode) => set({ workDetails: mode }),
   setTemperature: (t) => set({ temperature: Math.min(Math.max(t, 0), 2) }),
 
   initFromBackendConfig: (config) => {
