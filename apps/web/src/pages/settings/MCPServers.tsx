@@ -43,7 +43,7 @@ export function MCPServersPage() {
   };
 
   const handleEditServer = (serverId: string) => {
-    navigate(`/mcp/servers/${serverId}/edit`);
+    navigate(`/settings/mcp/servers/${serverId}/edit`);
   };
 
   const handleRefresh = async () => {
@@ -79,7 +79,7 @@ export function MCPServersPage() {
             <p className="text-xs mt-2">{t("mcp.serversDetail.emptyHint")}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {allServers.map((server) => {
               const state = serverStates[server.id];
               const isConnected = enabledServerIds.includes(server.id);

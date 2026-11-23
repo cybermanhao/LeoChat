@@ -90,7 +90,7 @@ export function Header() {
             <DropdownMenuLabel>设置</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => navigate("/mcp/servers")}
+              onClick={() => navigate("/settings/mcp/servers")}
               className="flex items-center gap-2 cursor-pointer"
             >
               <Server className="h-4 w-4" />

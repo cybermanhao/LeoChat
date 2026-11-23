@@ -18,17 +18,16 @@ async function enableBash(page: Page) {
   );
   await page.reload();
   await expect(page.getByRole("button", { name: /^MCP [1-9]/ })).toBeVisible({ timeout: 60_000 });
-  // 界面上没有到 /mcp/tools 的入口，用应用内导航过去（不刷新页面）
-  await page.evaluate(() => {
-    history.pushState({}, "", "/mcp/tools");
-    dispatchEvent(new PopStateEvent("popstate"));
-  });
+  // 设置 → MCP → 工具（应用内导航，不刷新页面）
+  await page.getByTestId("app-sidebar").getByRole("button", { name: /^设置/ }).click();
+  await page.getByRole("link", { name: "MCP", exact: true }).click();
+  await page.getByRole("link", { name: "工具", exact: true }).click();
   const row = page.locator("div", { has: page.getByText("bash", { exact: true }) }).filter({ has: page.getByRole("switch") }).last();
   const sw = row.getByRole("switch").first();
   await expect(sw).toHaveAttribute("aria-checked", "false");
   await sw.click();
   await expect(sw).toHaveAttribute("aria-checked", "true");
-  await page.getByRole("button", { name: "聊天", exact: true }).click();
+  await page.getByRole("link", { name: "回到对话" }).click();
   await expect(input(page)).toBeVisible();
 }
 

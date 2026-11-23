@@ -1,22 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
-import { Plus, FileJson, CheckCircle2, XCircle, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
-import { Button, Separator, cn } from "@ai-chatbox/ui";
+import { useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Plus, FileJson, ExternalLink, Copy, Check } from "lucide-react";
+import { Button, cn } from "@ai-chatbox/ui";
 import { useT } from "../../i18n";
-import {
-  ThreeColumnLayout,
-  LeftDrawer,
-  LeftDrawerHeader,
-  LeftDrawerContent,
-} from "../../components/layout/ThreeColumnLayout";
-import { envApi, type EnvToolStatus } from "../../lib/api";
 
-/** 清理版本字符串：去掉工具名前缀和 git hash */
-function cleanVersion(raw: string): string {
-  let v = raw.replace(/^[a-zA-Z][a-zA-Z0-9._-]*\s+/, "");
-  v = v.replace(/\s*\(.*$/, "");
-  return v.trim();
-}
+/** MCP 在设置里的路由前缀（原来是一级页面 /mcp） */
+export const MCP_BASE = "/settings/mcp";
 
 const ENV_META: Array<{
   id: string;
@@ -24,37 +13,20 @@ const ENV_META: Array<{
   installUrl: string;
   installCmd: string;
 }> = [
-  { id: "npx",    label: "npx",     installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
-  { id: "node",   label: "Node.js", installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
-  { id: "uvx",    label: "uvx",     installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
-  { id: "uv",     label: "uv",      installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
-  { id: "python", label: "Python",  installUrl: "https://www.python.org/downloads/",  installCmd: "winget install Python.Python.3" },
-  { id: "bun",    label: "Bun",     installUrl: "https://bun.sh/",                    installCmd: 'powershell -c "irm bun.sh/install.ps1 | iex"' },
-  { id: "mcp",    label: "MCP CLI", installUrl: "https://github.com/modelcontextprotocol/python-sdk", installCmd: "pip install mcp" },
+  { id: "node",   label: "Node.js / npx", installUrl: "https://nodejs.org/",                installCmd: "winget install OpenJS.NodeJS" },
+  { id: "uv",     label: "uv / uvx",      installUrl: "https://docs.astral.sh/uv/",         installCmd: "pip install uv" },
+  { id: "python", label: "Python",        installUrl: "https://www.python.org/downloads/",  installCmd: "winget install Python.Python.3" },
+  { id: "bun",    label: "Bun",           installUrl: "https://bun.sh/",                    installCmd: 'powershell -c "irm bun.sh/install.ps1 | iex"' },
+  { id: "mcp",    label: "MCP CLI",       installUrl: "https://github.com/modelcontextprotocol/python-sdk", installCmd: "pip install mcp" },
 ];
 
-function MCPSidebar() {
+/**
+ * 运行环境：启动 STDIO 服务器需要的命令行工具。
+ * 不显示"已安装 / 未安装"：服务端的环境检测接口因信息泄露风险已移除，前端无法得知真实状态，显示了反而误导。
+ */
+function EnvTable() {
   const { t } = useT();
-  const navigate = useNavigate();
-  const [tools, setTools] = useState<EnvToolStatus[]>([]);
-  const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const fetchEnv = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await envApi.check();
-      setTools(data);
-    } catch {
-      setTools([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEnv();
-  }, [fetchEnv]);
 
   const handleCopy = async (id: string, cmd: string) => {
     await navigator.clipboard.writeText(cmd);
@@ -63,105 +35,103 @@ function MCPSidebar() {
   };
 
   return (
-    <LeftDrawer>
-      <LeftDrawerHeader title="MCP 管理" />
-
-      <LeftDrawerContent>
-        <div className="p-3 space-y-4">
-          {/* 添加 MCP 按钮 */}
-          <Button
-            className="w-full gap-2"
-            onClick={() => navigate("/mcp/servers/add")}
-          >
-            <Plus className="h-4 w-4" />
-            {t("mcp.addServer")}
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => navigate("/mcp/servers/add?mode=json")}
-          >
-            <FileJson className="h-4 w-4" />
-            {t("mcp.jsonImport.fromJson")}
-          </Button>
-
-          <Separator />
-
-          {/* 环境安装 */}
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground mb-3 px-1">
-              环境安装
-            </h3>
-            <div className="space-y-1">
-              {loading ? (
-                <div className="flex items-center justify-center py-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                ENV_META.map((meta) => {
-                  const tool = tools.find((t) => t.id === meta.id);
-                  const installed = tool?.installed ?? false;
-                  const version = tool?.version;
-                  const isCopied = copiedId === meta.id;
-
-                  return (
-                    <div key={meta.id} className="px-1 py-1">
-                      <div className="flex items-center gap-2">
-                        {installed ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+    <section className="mt-8">
+      <h3 className="text-sm font-semibold text-foreground">{t("mcp.tabs.env")}</h3>
+      <div className="mt-3 rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-sm">
+          <tbody>
+            {ENV_META.map((meta) => {
+              const isCopied = copiedId === meta.id;
+              return (
+                <tr key={meta.id} className="border-b border-border last:border-b-0">
+                  <td className="px-3 py-2 font-medium text-foreground">{meta.label}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground font-mono truncate max-w-[16rem]" title={meta.installCmd}>
+                    {meta.installCmd}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        onClick={() => window.open(meta.installUrl, "_blank")}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t("settingsNav.envInstall")}
+                      </button>
+                      <button
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
+                          isCopied ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:text-foreground",
                         )}
-                        <span className="text-sm font-medium w-14 shrink-0">{meta.label}</span>
-                        {installed && version ? (
-                          <span className="flex-1 text-xs text-muted-foreground font-mono truncate">
-                            {cleanVersion(version)}
-                          </span>
-                        ) : (
-                          <span className="flex-1 text-xs text-muted-foreground">未安装</span>
-                        )}
-                        {!installed && (
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <button
-                              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                              onClick={() => window.open(meta.installUrl, "_blank")}
-                              title="打开安装页面"
-                            >
-                              <ExternalLink className="h-2.5 w-2.5" />
-                              安装
-                            </button>
-                            <button
-                              className={cn(
-                                "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] transition-colors",
-                                isCopied
-                                  ? "bg-green-500/10 text-green-600"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-                              )}
-                              onClick={() => handleCopy(meta.id, meta.installCmd)}
-                              title={meta.installCmd}
-                            >
-                              {isCopied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
-                              {isCopied ? "已复制" : "命令"}
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                        onClick={() => void handleCopy(meta.id, meta.installCmd)}
+                      >
+                        {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        {t("settingsNav.envCopy")}
+                      </button>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      </LeftDrawerContent>
-    </LeftDrawer>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
+/** 设置里的 MCP 分区：标题 + 操作 + 标签页；服务器页下方显示运行环境 */
 export function MCPSettingsLayout() {
+  const { t } = useT();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const tabs = [
+    { path: "servers", label: t("mcp.tabs.servers") },
+    { path: "tools", label: t("mcp.tabs.tools") },
+    { path: "resources", label: t("mcp.tabs.resources") },
+    { path: "prompts", label: t("mcp.tabs.prompts") },
+    { path: "stats", label: t("mcp.tabs.stats") },
+  ];
+  const onServerList = location.pathname === `${MCP_BASE}/servers` || location.pathname === `${MCP_BASE}/servers/`;
+
   return (
-    <ThreeColumnLayout leftDrawer={<MCPSidebar />}>
-      <Outlet />
-    </ThreeColumnLayout>
+    <div className="space-y-4">
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold text-foreground">MCP</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("settingsNav.mcpDesc")}</p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => navigate(`${MCP_BASE}/servers/add?mode=json`)}>
+          <FileJson className="h-4 w-4" />
+          {t("mcp.jsonImport.fromJson")}
+        </Button>
+        <Button size="sm" className="gap-1.5 shrink-0" onClick={() => navigate(`${MCP_BASE}/servers/add`)}>
+          <Plus className="h-4 w-4" />
+          {t("mcp.addServer")}
+        </Button>
+      </div>
+
+      <nav className="flex gap-1 border-b border-border">
+        {tabs.map((tab) => (
+          <NavLink
+            key={tab.path}
+            to={`${MCP_BASE}/${tab.path}`}
+            className={({ isActive }) =>
+              cn(
+                "px-3 py-2 text-sm -mb-px border-b-2 transition-colors",
+                isActive ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
+              )
+            }
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div>
+        <Outlet />
+      </div>
+
+      {onServerList && <EnvTable />}
+    </div>
   );
 }

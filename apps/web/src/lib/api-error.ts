@@ -40,7 +40,7 @@ export function handleApiError(message: string, provider?: LLMProvider): void {
   if (message.includes("401") || /unauthorized|invalid.*key|api.?key/i.test(message)) {
     showToast("API Key 无效，请在设置中检查后重试。", "destructive", {
       label: "去配置",
-      onClick: () => { window.location.href = "/settings?tab=llm"; },
+      onClick: () => { window.location.href = "/settings/model"; },
     });
     return;
   }

@@ -37,7 +37,7 @@ export function MCPServerAddPage() {
       }
 
       // 导航回服务器列表
-      navigate("/mcp/servers");
+      navigate("/settings/mcp/servers");
 
       console.log("Server added successfully:", serverId);
     } catch (error) {
@@ -48,7 +48,7 @@ export function MCPServerAddPage() {
   };
 
   const handleCancel = () => {
-    navigate("/mcp/servers");
+    navigate("/settings/mcp/servers");
   };
 
   const handleJsonImport = (servers: MCPServerConfigValidated[]) => {
@@ -62,7 +62,7 @@ export function MCPServerAddPage() {
         setAutoConnect(serverId, true);
       }
     });
-    navigate("/mcp/servers");
+    navigate("/settings/mcp/servers");
   };
 
   return (

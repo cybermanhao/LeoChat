@@ -21,7 +21,10 @@ import { AppLayout } from "./components/layout/AppLayout";
 
 // Pages
 import { KnowledgeBasePage } from "./pages/KnowledgeBase";
-import { SettingsPage } from "./pages/Settings";
+import { SettingsLayout, SettingsIndexRedirect, LegacyMcpRedirect, GeneralSettings, AboutSettings } from "./pages/Settings";
+import { AppearanceSettings } from "./pages/settings/AppearanceSettings";
+import { LLMSettings } from "./pages/settings/LLMSettings";
+import { NetworkSettings } from "./pages/settings/NetworkSettings";
 
 // MCP Pages
 import { MCPSettingsLayout } from "./pages/settings/MCPSettingsLayout";
@@ -171,23 +174,31 @@ export function App() {
               {/* Chat */}
               <Route path="/" element={<ChatLayout />} />
 
-              {/* MCP Management */}
-              <Route path="/mcp" element={<MCPSettingsLayout />}>
-                <Route index element={<Navigate to="/mcp/servers" replace />} />
-                <Route path="servers" element={<MCPServersPage />} />
-                <Route path="servers/add" element={<MCPServerAddPage />} />
-                <Route path="servers/:serverId/edit" element={<MCPServerEditPage />} />
-                <Route path="tools" element={<MCPToolsPage />} />
-                <Route path="resources" element={<MCPResourcesPage />} />
-                <Route path="prompts" element={<MCPPromptsPage />} />
-                <Route path="stats" element={<MCPStatsPage />} />
-              </Route>
-
               {/* Knowledge Base */}
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
 
-              {/* Settings */}
-              <Route path="/settings" element={<SettingsPage />} />
+              {/* Settings（MCP 并入设置：/settings/mcp/*） */}
+              <Route path="/settings" element={<SettingsLayout />}>
+                <Route index element={<SettingsIndexRedirect />} />
+                <Route path="general" element={<GeneralSettings />} />
+                <Route path="appearance" element={<AppearanceSettings />} />
+                <Route path="model" element={<LLMSettings />} />
+                <Route path="network" element={<NetworkSettings />} />
+                <Route path="about" element={<AboutSettings />} />
+                <Route path="mcp" element={<MCPSettingsLayout />}>
+                  <Route index element={<Navigate to="servers" replace />} />
+                  <Route path="servers" element={<MCPServersPage />} />
+                  <Route path="servers/add" element={<MCPServerAddPage />} />
+                  <Route path="servers/:serverId/edit" element={<MCPServerEditPage />} />
+                  <Route path="tools" element={<MCPToolsPage />} />
+                  <Route path="resources" element={<MCPResourcesPage />} />
+                  <Route path="prompts" element={<MCPPromptsPage />} />
+                  <Route path="stats" element={<MCPStatsPage />} />
+                </Route>
+              </Route>
+
+              {/* 旧的 MCP 一级页面 → 设置里的 MCP */}
+              <Route path="/mcp/*" element={<LegacyMcpRedirect />} />
             </Route>
 
             {/* Catch-all redirect */}

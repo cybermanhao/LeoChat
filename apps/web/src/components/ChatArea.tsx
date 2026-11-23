@@ -409,10 +409,10 @@ export function ChatArea() {
           mcpServerCount={mcpEnabledServerIds.length}
           onToggleServer={toggleMCPServer}
           onServerClick={(serverId) => {
-            navigate(`/mcp/servers/${serverId}/edit`);
+            navigate(`/settings/mcp/servers/${serverId}/edit`);
           }}
-          onSettingsClick={() => navigate("/mcp/servers")}
-          onAddServer={() => navigate("/mcp/servers/add")}
+          onSettingsClick={() => navigate("/settings/mcp/servers")}
+          onAddServer={() => navigate("/settings/mcp/servers/add")}
         />
 
         {/* 模型选择 */}

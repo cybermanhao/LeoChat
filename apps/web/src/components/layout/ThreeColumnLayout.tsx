@@ -10,7 +10,7 @@ interface ThreeColumnLayoutProps {
 }
 
 /**
- * 统一的三栏布局：ActivityBar + LeftDrawer + MainContent
+ * 页内的抽屉 + 主区域布局（应用级侧边栏见 AppSidebar）
  * - 高度撑满 100%
  * - 抽屉可完全收起
  * - 支持主题变化

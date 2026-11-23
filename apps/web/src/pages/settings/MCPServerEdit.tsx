@@ -79,7 +79,7 @@ export function MCPServerEditPage() {
         <p className="text-sm text-muted-foreground mb-4">
           {t("mcp.serverEdit.notFoundDesc")}
         </p>
-        <Button onClick={() => navigate("/mcp/servers")}>
+        <Button onClick={() => navigate("/settings/mcp/servers")}>
           {t("mcp.serverEdit.backToList")}
         </Button>
       </div>
@@ -156,7 +156,7 @@ export function MCPServerEditPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/mcp/servers")}
+                onClick={() => navigate("/settings/mcp/servers")}
                 className="h-9 w-9"
               >
                 <ArrowLeft className="h-4 w-4" />

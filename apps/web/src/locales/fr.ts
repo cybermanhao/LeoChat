@@ -141,7 +141,41 @@ const fr: TranslationDictionary = {
   // Sidebar
   "sidebar": {
     "mcpConnected": "MCP Connecté",
+    "newChat": "Nouvelle discussion",
+    "collapse": "Réduire la barre latérale",
+    "expand": "Déplier la barre latérale",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "last7Days": "7 derniers jours",
+    "earlier": "Plus ancien",
+    "deleteChat": "Supprimer la discussion",
+    "mcpStatus": "MCP {{count}}",
     "untitledChat": "Chat Sans Titre"
+  },
+  "settingsNav": {
+    "title": "Paramètres",
+    "general": "Général",
+    "appearance": "Apparence",
+    "model": "Modèles",
+    "mcp": "MCP",
+    "network": "Réseau",
+    "about": "À propos",
+    "language": "Langue",
+    "languageDesc": "La langue de l'interface",
+    "uiMode": "Mode d'interface",
+    "uiModeDesc": "Simple masque les contrôles avancés ; Professionnel affiche tout",
+    "simple": "Simple",
+    "professional": "Professionnel",
+    "onboarding": "Assistant de configuration",
+    "onboardingDesc": "Relancer la configuration initiale (clé API, dossier de travail, apparence)",
+    "onboardingRun": "Relancer l'assistant",
+    "aboutDesc": "LeoChat est un client d'agents IA open source.",
+    "github": "Dépôt GitHub",
+    "feedback": "E-mail de retour",
+    "mcpDesc": "Serveurs qui fournissent des outils au modèle. Les outils des serveurs connectés apparaissent dans le menu @ de la zone de saisie.",
+    "backToChat": "Retour à la discussion",
+    "envInstall": "Installer",
+    "envCopy": "Copier la commande"
   },
 
   // Models

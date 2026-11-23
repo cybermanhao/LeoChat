@@ -141,7 +141,41 @@ const ja: TranslationDictionary = {
   // Sidebar
   "sidebar": {
     "mcpConnected": "MCP 接続済み",
+    "newChat": "新しいチャット",
+    "collapse": "サイドバーを閉じる",
+    "expand": "サイドバーを開く",
+    "today": "今日",
+    "yesterday": "昨日",
+    "last7Days": "過去 7 日間",
+    "earlier": "それ以前",
+    "deleteChat": "チャットを削除",
+    "mcpStatus": "MCP {{count}}",
     "untitledChat": "無題のチャット"
+  },
+  "settingsNav": {
+    "title": "設定",
+    "general": "一般",
+    "appearance": "外観",
+    "model": "モデル",
+    "mcp": "MCP",
+    "network": "ネットワーク",
+    "about": "このアプリについて",
+    "language": "表示言語",
+    "languageDesc": "インターフェースの表示言語",
+    "uiMode": "表示モード",
+    "uiModeDesc": "シンプルは高度なコントロールを隠し、プロはすべて表示します",
+    "simple": "シンプル",
+    "professional": "プロ",
+    "onboarding": "セットアップウィザード",
+    "onboardingDesc": "初期設定（API キー、作業ディレクトリ、外観）をもう一度実行します",
+    "onboardingRun": "セットアップウィザードを再実行",
+    "aboutDesc": "LeoChat はオープンソースの AI エージェントクライアントです。",
+    "github": "GitHub リポジトリ",
+    "feedback": "フィードバック用メール",
+    "mcpDesc": "モデルにツールを提供するサーバーです。接続済みサーバーのツールは入力欄の @ メニューに表示されます。",
+    "backToChat": "チャットに戻る",
+    "envInstall": "インストール",
+    "envCopy": "コマンドをコピー"
   },
 
   // Models

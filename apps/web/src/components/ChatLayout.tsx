@@ -1,11 +1,6 @@
-import { Sidebar } from "./Sidebar";
 import { ChatArea } from "./ChatArea";
-import { ThreeColumnLayout } from "./layout/ThreeColumnLayout";
 
+/** 对话页：会话列表已经在应用侧边栏里，这里只剩对话区 */
 export function ChatLayout() {
-  return (
-    <ThreeColumnLayout leftDrawer={<Sidebar />}>
-      <ChatArea />
-    </ThreeColumnLayout>
-  );
+  return <ChatArea />;
 }

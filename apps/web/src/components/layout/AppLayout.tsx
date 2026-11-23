@@ -1,21 +1,21 @@
 import { Outlet } from "react-router-dom";
 import { TitleBar } from "./TitleBar";
-import { ActivityBar } from "./ActivityBar";
+import { AppSidebar } from "./AppSidebar";
 import { Toaster } from "../Toaster";
 
+/**
+ * 应用骨架（按 dsh 的 ui-layout）：一条侧边栏 + 主区域。
+ * 标题栏只在 Electron 里出现（拖拽区域和窗口按钮）；浏览器里由侧边栏承担品牌。
+ */
 export function AppLayout() {
+  const isElectron = typeof window !== "undefined" && !!window.electronAPI;
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-background">
-      {/* Title Bar - 固定高度，横跨整个宽度 */}
-      <TitleBar />
+      {isElectron && <TitleBar />}
 
-      {/* Main Layout: Activity Bar + Content - 占据剩余高度 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Activity Bar - 固定宽度，撑满剩余高度 */}
-        <ActivityBar />
-
-        {/* Main Content Area - 占据剩余宽度，页面内部控制滚动 */}
-        <div className="flex-1 overflow-hidden">
+        <AppSidebar />
+        <div className="flex-1 min-w-0 overflow-hidden">
           <Outlet />
         </div>
       </div>

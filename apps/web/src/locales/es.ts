@@ -141,7 +141,41 @@ const es: TranslationDictionary = {
   // Sidebar
   "sidebar": {
     "mcpConnected": "MCP Conectado",
+    "newChat": "Nuevo chat",
+    "collapse": "Contraer barra lateral",
+    "expand": "Expandir barra lateral",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "last7Days": "Últimos 7 días",
+    "earlier": "Anteriores",
+    "deleteChat": "Eliminar chat",
+    "mcpStatus": "MCP {{count}}",
     "untitledChat": "Chat Sin Título"
+  },
+  "settingsNav": {
+    "title": "Configuración",
+    "general": "General",
+    "appearance": "Apariencia",
+    "model": "Modelos",
+    "mcp": "MCP",
+    "network": "Red",
+    "about": "Acerca de",
+    "language": "Idioma",
+    "languageDesc": "El idioma de la interfaz",
+    "uiMode": "Modo de interfaz",
+    "uiModeDesc": "Simple oculta los controles avanzados; Profesional muestra todo",
+    "simple": "Simple",
+    "professional": "Profesional",
+    "onboarding": "Asistente de configuración",
+    "onboardingDesc": "Volver a ejecutar la configuración inicial (clave de API, directorio de trabajo, apariencia)",
+    "onboardingRun": "Volver a ejecutar el asistente",
+    "aboutDesc": "LeoChat es un cliente de agentes de IA de código abierto.",
+    "github": "Repositorio en GitHub",
+    "feedback": "Correo de comentarios",
+    "mcpDesc": "Servidores que le dan herramientas al modelo. Las herramientas de los servidores conectados aparecen en el menú @ del cuadro de texto.",
+    "backToChat": "Volver al chat",
+    "envInstall": "Instalar",
+    "envCopy": "Copiar comando"
   },
 
   // Models

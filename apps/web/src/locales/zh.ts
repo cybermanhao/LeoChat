@@ -145,7 +145,41 @@ const zh: TranslationDictionary = {
   // Sidebar
   "sidebar": {
     "mcpConnected": "MCP 已连接",
+    "newChat": "新对话",
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏",
+    "today": "今天",
+    "yesterday": "昨天",
+    "last7Days": "最近 7 天",
+    "earlier": "更早",
+    "deleteChat": "删除对话",
+    "mcpStatus": "MCP {{count}}",
     "untitledChat": "未命名对话"
+  },
+  "settingsNav": {
+    "title": "设置",
+    "general": "通用",
+    "appearance": "外观",
+    "model": "模型",
+    "mcp": "MCP",
+    "network": "网络",
+    "about": "关于",
+    "language": "界面语言",
+    "languageDesc": "切换界面显示的语言",
+    "uiMode": "界面模式",
+    "uiModeDesc": "简洁模式隐藏高级控件；专业模式显示全部",
+    "simple": "简洁",
+    "professional": "专业",
+    "onboarding": "初始化向导",
+    "onboardingDesc": "重新运行初始设置（API Key、工作目录、外观）",
+    "onboardingRun": "重新运行初始化向导",
+    "aboutDesc": "LeoChat 是一个开源的 AI agent 客户端。",
+    "github": "GitHub 仓库",
+    "feedback": "反馈邮件",
+    "mcpDesc": "给模型提供工具。已连接服务器的工具会出现在输入框的 @ 菜单里。",
+    "backToChat": "回到对话",
+    "envInstall": "安装",
+    "envCopy": "复制命令"
   },
 
   // Models

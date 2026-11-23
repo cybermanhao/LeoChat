@@ -101,3 +101,4 @@ apps/electron/data/
 
 # leochat CLI conversations created in the working directory
 .leochat/
+.superpowers/
