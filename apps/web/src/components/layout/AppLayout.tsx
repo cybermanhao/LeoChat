@@ -1,6 +1,8 @@
 import { Outlet } from "react-router-dom";
 import { TitleBar } from "./TitleBar";
 import { AppSidebar } from "./AppSidebar";
+import { MobileTopBar } from "./MobileTopBar";
+import { useIsMobile } from "../../lib/use-media";
 import { Toaster } from "../Toaster";
 
 /**
@@ -9,14 +11,19 @@ import { Toaster } from "../Toaster";
  */
 export function AppLayout() {
   const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+  const mobile = useIsMobile();
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-background">
       {isElectron && <TitleBar />}
 
       <div className="flex-1 flex overflow-hidden">
         <AppSidebar />
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <Outlet />
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+          {/* 手机：侧边栏是抽屉，顶上一条工具栏 */}
+          {mobile && <MobileTopBar />}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <Outlet />
+          </div>
         </div>
       </div>
 

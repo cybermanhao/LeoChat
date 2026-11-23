@@ -4,11 +4,12 @@
  * - 宽屏时对话区让出位置（dsh 的 push），窄屏时覆盖在对话上方；
  * - 标签：任务（待确认、目标、收件箱、定时提醒）和工具（本会话的工具调用，选中看完整输入输出）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { ListTodo, PanelRightClose, ShieldAlert, Wrench, X } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import type { ViewPart } from "@leochat/core/view";
 import { useChatStore } from "../../stores/chat";
+import { useIsMobile, useMediaQuery } from "../../lib/use-media";
 import { useDockEntry, useDockStore, type DockTab } from "../../stores/dock";
 import { GoalBar } from "../chat/GoalBar";
 import { QueuedBar } from "../chat/RunBanners";
@@ -21,17 +22,7 @@ type ToolPart = Extract<ViewPart, { type: "tool" }>;
 const OVERLAY_BELOW = 1100;
 export const DOCK_WIDTH = 360;
 
-export function useIsNarrow(): boolean {
-  const query = `(max-width: ${OVERLAY_BELOW - 1}px)`;
-  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setNarrow(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, [query]);
-  return narrow;
-}
+export const useIsNarrow = () => useMediaQuery(`(max-width: ${OVERLAY_BELOW - 1}px)`);
 
 /** 等待审批的工具调用 */
 function useAwaitingApproval(): ToolPart[] {
@@ -56,6 +47,7 @@ export function RightDock({ conversationId, systemPrompt }: { conversationId: st
   const setTab = useDockStore((s) => s.setTab);
   const closeDock = useDockStore((s) => s.closeDock);
   const narrow = useIsNarrow();
+  const mobile = useIsMobile();
   const open = entry.open;
 
   // 窄屏覆盖时按 Esc 关闭
@@ -75,9 +67,11 @@ export function RightDock({ conversationId, systemPrompt }: { conversationId: st
     <aside
       className={cn(
         "flex h-full flex-col border-l border-border bg-background",
-        narrow && "absolute inset-y-0 right-0 z-40 max-w-[90vw] shadow-xl",
+        narrow && "absolute inset-y-0 right-0 z-40 shadow-xl",
+        mobile && "border-l-0 shadow-none",
       )}
-      style={{ width: DOCK_WIDTH }}
+      // 手机上全屏（dsh：768px 以下全屏显示）
+      style={{ width: mobile ? "100%" : DOCK_WIDTH }}
       data-testid="right-dock"
       aria-label="右栏"
     >

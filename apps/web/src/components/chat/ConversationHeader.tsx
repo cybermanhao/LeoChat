@@ -7,12 +7,15 @@ import { cn } from "@ai-chatbox/ui";
 import { useChatStore } from "../../stores/chat";
 import { useDockEntry, useDockStore } from "../../stores/dock";
 import { useTaskCount } from "../dock/RightDock";
+import { useIsMobile } from "../../lib/use-media";
 
 export function ConversationHeader({ conversationId }: { conversationId: string }) {
   const title = useChatStore((s) => s.conversations.find((c) => c.id === conversationId)?.title || "新对话");
   const open = useDockEntry(conversationId).open;
   const toggle = useDockStore((s) => s.toggleDock);
   const count = useTaskCount();
+  const mobile = useIsMobile();
+  if (mobile) return null; // 手机上由 MobileTopBar 代替
 
   return (
     <div className="flex h-11 flex-none items-center gap-2 border-b border-border px-4" data-testid="conversation-header">

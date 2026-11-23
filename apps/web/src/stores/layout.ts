@@ -6,6 +6,9 @@ interface LayoutState {
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (value: boolean) => void;
   toggleSidebar: () => void;
+  /** 手机上侧边栏是抽屉：是否打开（不持久化） */
+  drawerOpen: boolean;
+  setDrawerOpen: (open: boolean) => void;
 }
 
 export const useLayoutStore = create<LayoutState>()(
@@ -14,6 +17,8 @@ export const useLayoutStore = create<LayoutState>()(
       sidebarCollapsed: false,
       setSidebarCollapsed: (value) => set({ sidebarCollapsed: value }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      drawerOpen: false,
+      setDrawerOpen: (open) => set({ drawerOpen: open }),
     }),
     {
       name: "leochat-layout-storage",

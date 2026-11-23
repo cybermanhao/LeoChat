@@ -23,24 +23,28 @@ const SECTIONS: Array<{ path: string; label: TranslationKey; icon: React.Compone
 export function SettingsLayout() {
   const { t } = useT();
   return (
-    <div className="h-full flex overflow-hidden bg-background">
-      <nav className="w-48 shrink-0 border-r border-border p-3 overflow-y-auto" aria-label={t("settingsNav.title")}>
+    <div className="h-full flex flex-col md:flex-row overflow-hidden bg-background">
+      {/* 手机上导航是顶部一排可横向滚动的标签（重设计 P5） */}
+      <nav
+        className="shrink-0 border-b md:border-b-0 md:border-r border-border p-2 md:p-3 md:w-48 overflow-x-auto md:overflow-y-auto"
+        aria-label={t("settingsNav.title")}
+      >
         <NavLink
           to="/"
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 mb-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="hidden md:flex items-center gap-1.5 rounded-md px-2 py-1 mb-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           {t("settingsNav.backToChat")}
         </NavLink>
-        <h1 className="px-2 pt-1 pb-3 text-base font-semibold text-foreground">{t("settingsNav.title")}</h1>
-        <div className="space-y-0.5">
+        <h1 className="hidden md:block px-2 pt-1 pb-3 text-base font-semibold text-foreground">{t("settingsNav.title")}</h1>
+        <div className="flex gap-1 md:block md:space-y-0.5">
           {SECTIONS.map(({ path, label, icon: Icon }) => (
             <NavLink
               key={path}
               to={`/settings/${path}`}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-sm transition-colors",
                   isActive ? "bg-accent text-accent-foreground font-medium" : "text-foreground/80 hover:bg-muted",
                 )
               }
@@ -52,7 +56,7 @@ export function SettingsLayout() {
         </div>
       </nav>
       <main className="flex-1 min-w-0 overflow-y-auto">
-        <div className="max-w-3xl px-8 py-6">
+        <div className="max-w-3xl px-4 py-4 md:px-8 md:py-6">
           <Outlet />
         </div>
       </main>

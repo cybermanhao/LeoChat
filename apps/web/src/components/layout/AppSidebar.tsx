@@ -5,6 +5,7 @@ import { cn } from "@ai-chatbox/ui";
 import { useChatStore } from "../../stores/chat";
 import { useMCPStore } from "../../stores/mcp";
 import { useLayoutStore } from "../../stores/layout";
+import { useIsMobile } from "../../lib/use-media";
 import { useT } from "../../i18n";
 import type { TranslationKey } from "../../lib/i18n";
 
@@ -50,8 +51,18 @@ export function AppSidebar() {
   const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
-  const collapsed = useLayoutStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
+  const mobile = useIsMobile();
+  const drawerOpen = useLayoutStore((s) => s.drawerOpen);
+  const setDrawerOpen = useLayoutStore((s) => s.setDrawerOpen);
+  // 手机上是抽屉，不收成窄条
+  const collapsed = useLayoutStore((s) => s.sidebarCollapsed) && !mobile;
+  const storeToggle = useLayoutStore((s) => s.toggleSidebar);
+  const toggleSidebar = mobile ? () => setDrawerOpen(false) : storeToggle;
+  /** 跳转后在手机上关掉抽屉 */
+  const go = (path: string) => {
+    if (mobile) setDrawerOpen(false);
+    if (location.pathname !== path) navigate(path);
+  };
   const conversations = useChatStore((s) => s.conversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
@@ -63,18 +74,20 @@ export function AppSidebar() {
 
   const newChat = () => {
     void createConversation();
-    if (location.pathname !== "/") navigate("/");
+    go("/");
   };
   const openConversation = (id: string) => {
     setCurrentConversation(id);
-    if (location.pathname !== "/") navigate("/");
+    go("/");
   };
 
-  return (
+  if (mobile && !drawerOpen) return null;
+  const aside = (
     <aside
       className={cn(
         "h-full shrink-0 bg-card border-r border-border flex flex-col overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
         collapsed ? "w-14" : "w-64",
+        mobile && "fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shadow-xl",
       )}
       data-testid="app-sidebar"
     >
@@ -82,7 +95,7 @@ export function AppSidebar() {
       <div className={cn("flex items-center gap-2 pt-3 pb-2", collapsed ? "flex-col px-2" : "px-3")}>
         <button
           className="h-7 w-7 shrink-0 rounded-md bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center"
-          onClick={collapsed ? toggleSidebar : () => navigate("/")}
+          onClick={collapsed ? toggleSidebar : () => go("/")}
           title={collapsed ? t("sidebar.expand") : "LeoChat"}
         >
           L
@@ -162,7 +175,7 @@ export function AppSidebar() {
             </button>
             <button
               className={cn(railButton, inSettings && "bg-accent text-foreground")}
-              onClick={() => navigate("/settings")}
+              onClick={() => go("/settings")}
               title={t("nav.settings")}
               aria-label={t("nav.settings")}
             >
@@ -172,7 +185,7 @@ export function AppSidebar() {
         ) : (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => navigate("/settings")}
+              onClick={() => go("/settings")}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                 inSettings ? "bg-accent text-accent-foreground" : "text-foreground/80 hover:bg-muted",
@@ -183,7 +196,7 @@ export function AppSidebar() {
             </button>
             {/* MCP 状态：输入框下不再放 MCP 面板（重设计 P3），从这里直达服务器页 */}
             <button
-              onClick={() => navigate("/settings/mcp/servers")}
+              onClick={() => go("/settings/mcp/servers")}
               title={t("sidebar.mcpConnected")}
               className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -194,5 +207,12 @@ export function AppSidebar() {
         )}
       </div>
     </aside>
+  );
+  if (!mobile) return aside;
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-background/60" onClick={() => setDrawerOpen(false)} aria-hidden />
+      {aside}
+    </>
   );
 }

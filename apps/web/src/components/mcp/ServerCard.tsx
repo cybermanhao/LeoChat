@@ -24,6 +24,8 @@ interface ServerCardProps {
   onDelete?: () => void;
   onEdit: () => void;
   onAutoConnectToggle?: () => void;
+  /** 已连接时的工具数量（没有描述时显示，代替"暂无描述"） */
+  toolCount?: number;
 }
 
 function StatusBadge({
@@ -88,6 +90,7 @@ export function ServerCard({
   onToggle,
   onDelete,
   onEdit,
+  toolCount,
 }: ServerCardProps) {
   const { t } = useT();
   const TransportIcon = server.transport === "stdio" ? Terminal : Globe;
@@ -182,9 +185,9 @@ export function ServerCard({
           <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
             {truncatedDescription}
           </p>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">暂无描述</p>
-        )}
+        ) : isConnected && toolCount !== undefined ? (
+          <p className="text-xs text-muted-foreground">{toolCount} 个工具</p>
+        ) : null}
       </div>
 
       {/* Footer: Transport, Tags */}

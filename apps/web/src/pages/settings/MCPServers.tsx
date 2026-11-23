@@ -103,6 +103,7 @@ export function MCPServersPage() {
                     isReconnecting={isReconnecting}
                     isAutoConnect={isAutoConnect}
                     error={state?.error}
+                    {...(state?.session?.tools ? { toolCount: state.session.tools.length } : {})}
                     onToggle={() => toggleServer(server.id)}
                     onDelete={
                       isCustomServer(server.id)
