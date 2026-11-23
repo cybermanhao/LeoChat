@@ -4,9 +4,11 @@
  * 回合结束后收成一行"已完成 · 思考 · 1 条命令 · 3.2 秒"，点开可再看全部步骤。
  */
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { Brain, Check, ChevronRight, Globe, Loader2, ShieldQuestion, X } from "lucide-react";
+import { Brain, Check, ChevronRight, Globe, Loader2, PanelRightOpen, ShieldQuestion, X } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import { toolOutputText } from "../../../stores/chat-generation";
+import { useChatStore } from "../../../stores/chat";
+import { useDockStore } from "../../../stores/dock";
 import { ApprovalCard } from "../RunBanners";
 import { formatMs, summarize, summaryText, type ProcessItem, type ServerToolPart, type ToolPart } from "./group";
 import { displayOutput, serverToolDescribe, toolView } from "./tool-views";
@@ -159,12 +161,24 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
 
 function ToolDetail({ part, args }: { part: ToolPart; args: Record<string, unknown> }) {
   const output = useMemo(() => displayOutput(toolOutputText(part.output)), [part.output]);
+  const conversationId = useChatStore((s) => s.currentConversationId);
+  const openDock = useDockStore((s) => s.openDock);
   const input = typeof args.command === "string" ? args.command : Object.keys(args).length ? JSON.stringify(args, null, 2) : (part.inputText ?? "");
   const pre = "max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-muted px-2.5 py-1.5 font-mono text-[11px] text-foreground";
   return (
     <div className="mb-1.5 ml-5 mt-0.5 space-y-1.5">
-      <div className="text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <span className="font-mono">{part.name}</span>
+        {conversationId && (
+          <button
+            type="button"
+            onClick={() => openDock(conversationId, "tools", part.callId)}
+            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelRightOpen className="h-3 w-3" />
+            在右栏查看
+          </button>
+        )}
       </div>
       {input && <pre className={pre}>{input}</pre>}
       {part.state === "denied" ? (

@@ -28,6 +28,8 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { TurnView } from "./chat/turn/Turn";
 import { groupTurns, reuseTurns, type Turn } from "./chat/turn/group";
 import { ContextStrip } from "./chat/ContextStrip";
+import { ConversationHeader } from "./chat/ConversationHeader";
+import { RightDock } from "./dock/RightDock";
 import { SlashMenu, useSlashMenu } from "./chat/SlashMenu";
 import type { SlashCommand } from "../lib/slash-commands";
 import { useStickToBottom } from "./chat/useStickToBottom";
@@ -774,9 +776,11 @@ export function ChatArea() {
     );
   }
 
-  // 有消息或正在生成：传统布局 - 输入框固定底部，消息区可滚动
+  // 有消息或正在生成：传统布局 - 输入框固定底部，消息区可滚动；右侧是按会话的右栏（P4）
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 overflow-hidden">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {currentConversationId && <ConversationHeader conversationId={currentConversationId} />}
       {/* Messages - 可滚动区域 */}
       <div className="relative min-h-0 flex-1">
       <div
@@ -834,6 +838,10 @@ export function ChatArea() {
         currentProvider={currentProvider}
         onSelect={handleModelSelect}
       />
+    </div>
+    {currentConversationId && (
+      <RightDock conversationId={currentConversationId} {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
+    )}
     </div>
   );
 }
