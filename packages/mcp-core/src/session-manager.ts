@@ -21,6 +21,10 @@ export interface SessionManagerEvents {
 export class SessionManager {
   private clients: Map<string, MCPClient> = new Map();
   private configs: Map<string, MCPServerConfig> = new Map();
+  /** 进行中的连接（同一个服务器的并发 connect 复用它） */
+  private connecting: Map<string, { promise: Promise<MCPSession>; configKey: string }> = new Map();
+  /** 当前连接所用的配置（配置变了才重连） */
+  private connectedConfig: Map<string, string> = new Map();
   private dispatcher: ToolDispatcher;
   private options: SessionManagerOptions;
 
@@ -56,14 +60,40 @@ export class SessionManager {
   }
 
   /**
-   * Connect to a specific server
+   * 确保已连接（按 dsh 的连接监督器：每个服务器只有一个连接，"确保已连接"是幂等的）。
+   * - 已连接且配置没变：直接返回现有会话，不断开重建（以前每次调用都会断开重连，
+   *   多个窗口或页面刷新会互相踢掉对方的连接，导致另一方读到空的工具列表）
+   * - 同一个服务器已有连接在进行中：复用那一次
+   * - 配置变了，或 force：断开后重新连接
    */
-  async connect(serverId: string): Promise<MCPSession> {
+  async connect(serverId: string, opts: { force?: boolean } = {}): Promise<MCPSession> {
     const config = this.configs.get(serverId);
     if (!config) {
       throw new Error(`Server not found: ${serverId}`);
     }
+    const configKey = JSON.stringify(config);
 
+    if (!opts.force) {
+      const inflight = this.connecting.get(serverId);
+      if (inflight && inflight.configKey === configKey) return inflight.promise;
+      const existing = this.clients.get(serverId);
+      if (existing && !inflight && existing.getSession().status === "connected" && this.connectedConfig.get(serverId) === configKey) {
+        return existing.getSession();
+      }
+    }
+
+    const promise = this.connectFresh(serverId, config, configKey);
+    const entry = { promise, configKey };
+    this.connecting.set(serverId, entry);
+    try {
+      return await promise;
+    } finally {
+      if (this.connecting.get(serverId) === entry) this.connecting.delete(serverId);
+    }
+  }
+
+  /** 断开现有连接（如果有）并新建一个 */
+  private async connectFresh(serverId: string, config: MCPServerConfig, configKey: string): Promise<MCPSession> {
     // Disconnect existing client if any
     if (this.clients.has(serverId)) {
       await this.disconnect(serverId);
@@ -106,10 +136,12 @@ export class SessionManager {
     try {
       await client.connect();
       this.dispatcher.registerClient(client);
+      this.connectedConfig.set(serverId, configKey);
       this.notifySessionChange();
       return client.getSession();
     } catch (error) {
-      this.clients.delete(serverId);
+      // 只删自己：失败时这个 id 可能已经被更新的一次连接占用
+      if (this.clients.get(serverId) === client) this.clients.delete(serverId);
       throw error;
     }
   }
@@ -122,7 +154,8 @@ export class SessionManager {
     if (client) {
       await client.disconnect();
       this.dispatcher.unregisterClient(serverId);
-      this.clients.delete(serverId);
+      if (this.clients.get(serverId) === client) this.clients.delete(serverId);
+      this.connectedConfig.delete(serverId);
       this.notifySessionChange();
     }
   }

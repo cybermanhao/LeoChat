@@ -23,7 +23,9 @@ export const createConversationsSlice: SliceCreator<ConversationsSlice> = (set, 
 
     loadConversations: async () => {
       try {
-        const conversations = await agentApi.listConversations();
+        const data: unknown = await agentApi.listConversations();
+        // 响应形状不对时按空列表处理：会话列表现在在全局侧边栏里，坏数据会让整个应用崩溃
+        const conversations = Array.isArray(data) ? (data as Awaited<ReturnType<typeof agentApi.listConversations>>) : [];
         set({ conversations });
         const current = get().currentConversationId;
         if (current && conversations.some((c) => c.id === current)) {

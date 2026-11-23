@@ -140,6 +140,12 @@ interface MCPState {
   syncWithBackend: () => Promise<void>;
 }
 
+/** 内置服务器路径解析完成（initBuiltinServers 结束时触发）；autoConnectAll 要等它 */
+let markBuiltinReady: () => void = () => {};
+const builtinReady = new Promise<void>((resolve) => {
+  markBuiltinReady = resolve;
+});
+
 export const useMCPStore = create<MCPState>()(
   persist(
     (set, get) => ({
@@ -463,6 +469,9 @@ export const useMCPStore = create<MCPState>()(
       },
 
       autoConnectAll: async () => {
+        // 等内置服务器的路径解析完：否则会用未解析的默认配置去连，服务端看到配置变化就重连，
+        // 把其它窗口 / 正在进行的回合用着的连接踢掉（解析失败时最多等 10 秒）
+        await Promise.race([builtinReady, new Promise((resolve) => setTimeout(resolve, 10_000))]);
         const { autoConnectServerIds, connectServer } = get();
         if (autoConnectServerIds.length === 0) return;
 
@@ -631,6 +640,7 @@ export const useMCPStore = create<MCPState>()(
             serverStates: validServerStates,
           };
         });
+        markBuiltinReady();
       },
 
       syncWithBackend: async () => {
