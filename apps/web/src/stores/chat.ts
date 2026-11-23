@@ -10,7 +10,7 @@ import { createGenerationSlice } from "./chat-generation";
 export type { LLMProvider, ChatState, Conversation } from "./chat-types";
 
 /** 持久化的只有设置和当前会话 id；会话内容由本地 server 的 JSONL 日志保存 */
-const PERSIST_VERSION = 2;
+const PERSIST_VERSION = 3;
 const PERSISTED_KEYS = [
   "currentConversationId",
   "providerKeys",
@@ -42,11 +42,14 @@ export const useChatStore = create<ChatState>()(
       // GUI 迁移第二步改由 server 保存，按用户决定旧会话直接丢弃，只保留设置
       migrate: (persisted, version) => {
         const data = (persisted ?? {}) as Record<string, unknown>;
+        let out = data;
         if (version < 2) {
           const { conversations: _c, currentConversationId: _id, ...settings } = data;
-          return settings as Partial<ChatState>;
+          out = settings;
         }
-        return data as Partial<ChatState>;
+        // v3（2026-11-22）：联网搜索改为默认开启；旧版本保存的 false 是旧默认值，统一打开一次
+        if (version < 3) out = { ...out, webSearch: true };
+        return out as Partial<ChatState>;
       },
       merge: (persisted, current) => {
         const data = (persisted ?? {}) as Record<string, unknown>;

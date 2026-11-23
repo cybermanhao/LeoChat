@@ -32,6 +32,7 @@ import {
   withInstructions,
 } from "@leochat/node";
 import type { LLMProvider } from "@ai-chatbox/shared";
+import { deepseekFetch, deepseekSearch } from "@leochat/deepseek";
 import type { ServerContext } from "../server.js";
 import { mcpCoreTools, pendingApprovalAnswerer } from "../core-bridge.js";
 import { selectProvider, type ProviderSource, type RunProvider } from "../providers.js";
@@ -118,15 +119,18 @@ export function createConversationRoutes(
     }
     const { provider, model } = selectProvider(llm, body.provider, body.model);
     const temperature = typeof body.temperature === "number" && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : undefined;
+    // 联网搜索（按 dsh：和模型无关）：原生 DeepSeek 用服务端 web_search（带引用）；
+    // 其它提供商挂 DeepSeek 的独立 Search / Fetch API 作为普通工具，需要配置了 DeepSeek key
+    const deepseekKey = body.webSearch === true && !provider.native ? llm.getApiKey?.("deepseek") : undefined;
     return {
       provider,
       model,
       ...(body.system ? { system: body.system } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
-      // 联网搜索是 DeepSeek 的服务端工具，只有原生 provider 支持
       ...(body.webSearch === true && provider.native ? { serverTools: ["web_search" as const] } : {}),
       // 界面操作工具在进程内（默认提供）；同名的 MCP 工具（旧版 leochat-mcp）跳过，避免重名
       tools: [
+        ...(deepseekKey ? [deepseekSearch({ apiKey: deepseekKey }), deepseekFetch({ apiKey: deepseekKey })] : []),
         ...(body.uiTools === false ? [] : uiTools({ electron: body.host === "electron" })),
         ...mcpCoreTools(context.sessionManager, truncate, allow).filter((t) => !UI_TOOL_NAMES.has(t.name)),
       ],

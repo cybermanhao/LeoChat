@@ -13,7 +13,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   currentProvider: "deepseek" as LLMProvider,
   currentModel: "deepseek-v4-flash",
   enableMarkdown: true,
-  webSearch: false,
+  webSearch: true,
   permission: "ask",
   maxEpochs: 50,
   unlimitedEpochs: false,
