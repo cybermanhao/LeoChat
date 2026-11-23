@@ -64,7 +64,7 @@ const zh: TranslationDictionary = {
     "markdown": "Markdown",
     "plainText": "纯文本",
     "markdownRendering": "Markdown 渲染",
-    "placeholderDefault": "输入消息，或使用 @tool 调用 MCP 工具...",
+    "placeholderDefault": "输入消息，输入 / 查看命令",
     "placeholderWithPrompt": "已启用系统提示...",
     "webSearch": "联网搜索",
     "temperature": "温度",

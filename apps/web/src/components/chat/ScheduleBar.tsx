@@ -1,5 +1,5 @@
 /**
- * 当前会话的定时提醒（/loop）：每个提醒一枚标签，显示规则、下次时间，可删除。
+ * 当前会话的定时提醒（/loop），上下文条里的一行：每个提醒一枚标签，显示规则、下次时间，可删除。
  */
 import { AlarmClock, X } from "lucide-react";
 import { useChatStore } from "../../stores/chat";
@@ -18,8 +18,7 @@ export function ScheduleBar() {
   const deleteSchedule = useChatStore((s) => s.deleteSchedule);
   if (!schedules.length) return null;
   return (
-    <div className="flex-shrink-0 border-t border-border bg-card px-4 py-1.5" data-testid="schedule-bar">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5" data-testid="schedule-bar">
         <AlarmClock className="h-3.5 w-3.5 text-muted-foreground" />
         {schedules.map((s) => (
           <span
@@ -39,7 +38,6 @@ export function ScheduleBar() {
             </button>
           </span>
         ))}
-      </div>
     </div>
   );
 }

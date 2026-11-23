@@ -30,6 +30,8 @@ export interface ChatInputProps {
   onSteer?: () => void;
   /** 运行中按 Ctrl/Cmd+Enter：排队，本轮结束后接着处理 */
   onQueue?: () => void;
+  /** 先于输入框处理按键（例如 / 命令菜单的上下选择、回车确认）；返回 true 表示已处理 */
+  interceptKey?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }
 
 /** 输入法组字期间（中文拼音选词等）的按键不能当作发送或停止 */
@@ -55,6 +57,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
       toolbar,
       onSteer,
       onQueue,
+      interceptKey,
     },
     ref
   ) => {
@@ -85,6 +88,10 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (isImeComposing(e)) return;
+      if (interceptKey?.(e)) {
+        e.preventDefault();
+        return;
+      }
 
       if (e.key === "Escape") {
         if (!isBusy || !onCancel || e.repeat) return;

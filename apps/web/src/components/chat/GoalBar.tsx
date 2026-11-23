@@ -1,5 +1,5 @@
 /**
- * 目标条（/goal）：显示当前目标、状态、第几轮，以及暂停 / 继续 / 完成 / 清除。
+ * 目标（/goal），上下文条里的一行：显示当前目标、状态、第几轮，以及暂停 / 继续 / 完成 / 清除。
  * 数据来自 store 的 goal（server 推送的 custom goal 事件）。
  */
 import { useState } from "react";
@@ -44,8 +44,7 @@ export function GoalBar({ systemPrompt }: { systemPrompt?: string }) {
     "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="flex-shrink-0 border-t border-border bg-card px-4 py-2" data-testid="goal-bar">
-      <div className="mx-auto flex max-w-3xl items-center gap-3">
+    <div className="flex items-center gap-3 px-3 py-1.5" data-testid="goal-bar">
         <Target className={cn("h-4 w-4 shrink-0", goal.phase === "complete" ? "text-muted-foreground" : "text-primary")} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs">
@@ -107,7 +106,6 @@ export function GoalBar({ systemPrompt }: { systemPrompt?: string }) {
             </button>
           )}
         </div>
-      </div>
     </div>
   );
 }

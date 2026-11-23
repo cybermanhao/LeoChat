@@ -64,7 +64,7 @@ const fr: TranslationDictionary = {
     "markdown": "Markdown",
     "plainText": "Texte Brut",
     "markdownRendering": "Rendu Markdown",
-    "placeholderDefault": "Tapez un message, ou utilisez @tool pour appeler des outils MCP...",
+    "placeholderDefault": "Tapez un message, / pour les commandes",
     "placeholderWithPrompt": "Prompt système activé...",
     "webSearch": "Recherche Web",
     "temperature": "Température",

@@ -66,17 +66,16 @@ export function PendingApprovalHint({ callIds }: { callIds: string[] }) {
   const jump = () =>
     document.querySelector(`[data-approval-id="${CSS.escape(callIds[0]!)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   return (
-    <div className="flex-shrink-0 px-4 pt-2">
-      <button
-        type="button"
-        onClick={jump}
-        className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-primary/10"
-      >
-        <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-        有 {callIds.length} 个操作等待你确认
-        <span className="ml-auto text-muted-foreground">查看</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={jump}
+      className="flex w-full items-center gap-2 bg-primary/5 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-primary/10"
+      data-testid="approval-hint"
+    >
+      <ShieldAlert className="h-3.5 w-3.5 text-primary" />
+      有 {callIds.length} 个操作等待你确认
+      <span className="ml-auto text-muted-foreground">查看</span>
+    </button>
   );
 }
 
@@ -91,8 +90,7 @@ export function QueuedBar({ inbox }: { inbox: InboxView }) {
   ];
   if (!rows.length) return null;
   return (
-    <div className="flex-shrink-0 border-t border-border bg-card px-4 py-2" data-testid="inbox-bar">
-      <div className="mx-auto max-w-3xl space-y-1">
+    <div className="space-y-1 px-3 py-1.5" data-testid="inbox-bar">
         {rows.map((x) => (
           <div key={x.id} className="flex items-center gap-2 text-xs">
             <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-accent-foreground">{x.label}</span>
@@ -106,7 +104,6 @@ export function QueuedBar({ inbox }: { inbox: InboxView }) {
             </button>
           </div>
         ))}
-      </div>
     </div>
   );
 }

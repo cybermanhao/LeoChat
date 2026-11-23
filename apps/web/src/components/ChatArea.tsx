@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   ChatInput,
-  MCPQuickPanel,
   Button,
   Tooltip,
   TooltipContent,
@@ -17,7 +15,7 @@ import {
   ActionCardGroup,
 } from "@ai-chatbox/ui";
 import { parseActionTags, parseCardTags } from "@ai-chatbox/shared";
-import { Sparkles, Trash2, RefreshCw, Thermometer, Layers, Globe, ShieldCheck, ShieldAlert, ArrowDown } from "lucide-react";
+import { Sparkles, RefreshCw, Thermometer, Layers, Globe, ShieldCheck, ShieldAlert, ArrowDown } from "lucide-react";
 import { useT } from "../i18n";
 import { useChatStore } from "../stores/chat";
 import { useMCPStore } from "../stores/mcp";
@@ -29,10 +27,10 @@ import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { TurnView } from "./chat/turn/Turn";
 import { groupTurns, reuseTurns, type Turn } from "./chat/turn/group";
-import { PendingApprovalHint, QueuedBar } from "./chat/RunBanners";
-import { GoalBar } from "./chat/GoalBar";
+import { ContextStrip } from "./chat/ContextStrip";
+import { SlashMenu, useSlashMenu } from "./chat/SlashMenu";
+import type { SlashCommand } from "../lib/slash-commands";
 import { useStickToBottom } from "./chat/useStickToBottom";
-import { ScheduleBar } from "./chat/ScheduleBar";
 import { parseLoopCommand } from "../lib/loop-command";
 import { showToast } from "../stores/toast";
 
@@ -93,7 +91,6 @@ const ParsedMessageText = ({
 
 export function ChatArea() {
   const { t } = useT();
-  const navigate = useNavigate();
   // 贴底滚动：贴底时跟随内容增长（每帧最多一次、不用动画），用户上滚就不再跟随
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom();
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -119,6 +116,9 @@ export function ChatArea() {
   const setUnlimitedEpochs = useChatStore((s) => s.setUnlimitedEpochs);
   const queueFollowUp = useChatStore((s) => s.queueFollowUp);
   const webSearch = useChatStore((s) => s.webSearch);
+  const deepseekAvailable = useChatStore(
+    (s) => s.currentProvider === "deepseek" || !!s.providerKeys.deepseek, // 后端有 key 时为 "backend"
+  );
   const setWebSearch = useChatStore((s) => s.setWebSearch);
   const permission = useChatStore((s) => s.permission);
   const setPermission = useChatStore((s) => s.setPermission);
@@ -164,22 +164,12 @@ export function ChatArea() {
   // MCP Store
   const mcpSources = useMCPStore((s) => s.sources);
   const mcpServerStates = useMCPStore((s) => s.serverStates);
-  const mcpConnectingServerIds = useMCPStore((s) => s.connectingServerIds);
   const mcpEnabledServerIds = useMCPStore((s) => s.enabledServerIds);
-  const toggleMCPServer = useMCPStore((s) => s.toggleServer);
   const disabledToolIds = useMCPStore((s) => s.disabledToolIds);
 
   // Chat Store - MCP Tools
   const setMCPTools = useChatStore((s) => s.setMCPTools);
 
-  // 将 connectingServerIds Set 转换为 Record<string, boolean>
-  const mcpIsConnecting = useMemo(() => {
-    const record: Record<string, boolean> = {};
-    mcpConnectingServerIds.forEach(id => {
-      record[id] = true;
-    });
-    return record;
-  }, [mcpConnectingServerIds]);
 
   // 同步 MCP 工具到 Chat Store（过滤禁用的工具）。运行时只把这份列表里的工具交给模型，
   // 所以服务器连上、工具列表到达（serverStates 变化）时也要重新同步，否则会一直是空的
@@ -382,21 +372,27 @@ export function ChatArea() {
     if (input.trim()) queueFollowUp(input, assembledPrompt);
   };
 
-  const handleSend = () => {
-    if (input.trim() && !isGenerating) {
+  const runInput = (text: string) => {
+    if (text.trim() && !isGenerating) {
       // 在用户手势中请求通知权限（首次），之后静默跳过
       if (typeof Notification !== "undefined" && Notification.permission === "default") {
         Notification.requestPermission();
       }
       // /goal <目标>：创建目标并开始自动推进（harness 第一期）
-      const goalCmd = /^\/goal(?:\s+([\s\S]*))?$/.exec(input.trim());
+      const goalCmd = /^\/goal(?:\s+([\s\S]*))?$/.exec(text.trim());
       if (goalCmd) {
         const objective = goalCmd[1]?.trim();
         if (objective) void startGoal(objective, assembledPrompt ? { systemPrompt: assembledPrompt } : {});
         return;
       }
+      // /clear：清空当前对话（不可逆，先确认；按 dsh 只留明确的入口）
+      if (text.trim() === "/clear") {
+        setInput("");
+        handleClearChat();
+        return;
+      }
       // /details [concise|detailed]：切换工作细节模式（按 dsh）
-      const details = /^\/details(?:\s+(\S+))?$/.exec(input.trim());
+      const details = /^\/details(?:\s+(\S+))?$/.exec(text.trim());
       if (details) {
         const arg = details[1];
         const next = arg === "concise" || arg === "简洁" ? "concise" : arg === "detailed" || arg === "详细" ? "detailed" : workDetails === "detailed" ? "concise" : "detailed";
@@ -406,35 +402,32 @@ export function ChatArea() {
         return;
       }
       // /loop <间隔或时间> <内容>：定时提醒（harness 第二期）
-      const loop = parseLoopCommand(input);
+      const loop = parseLoopCommand(text);
       if (loop) {
         if (!loop.ok) showToast(loop.error, "destructive");
         else void createSchedule(loop.prompt, loop.rule, assembledPrompt || undefined);
         return;
       }
-      sendMessage(input, assembledPrompt);
+      sendMessage(text, assembledPrompt);
     }
   };
+  const handleSend = () => runInput(input);
+
+  // / 命令菜单：带参数的命令补全到输入框，不带参数的直接执行
+  const pickCommand = (c: SlashCommand) => {
+    if (c.args) setInput(`/${c.name} `);
+    else runInput(`/${c.name}`);
+  };
+  const slash = useSlashMenu(input, pickCommand);
 
   // 工具栏按钮样式
-  const toolbarButtonClass = "h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground hover:text-foreground";
+  // 输入框下方的控件做成 chip（重设计 P3）
+  const toolbarButtonClass =
+    "h-7 gap-1.5 rounded-full border border-border px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground";
 
   const toolbar = (
     <TooltipProvider delayDuration={300}>
       <div className="flex items-center gap-1 flex-wrap py-1">
-        {/* MCP 服务 */}
-        <MCPQuickPanel
-          sources={mcpSources}
-          serverStates={mcpServerStates}
-          isConnecting={mcpIsConnecting}
-          mcpServerCount={mcpEnabledServerIds.length}
-          onToggleServer={toggleMCPServer}
-          onServerClick={(serverId) => {
-            navigate(`/settings/mcp/servers/${serverId}/edit`);
-          }}
-          onSettingsClick={() => navigate("/settings/mcp/servers")}
-          onAddServer={() => navigate("/settings/mcp/servers/add")}
-        />
 
         {/* 模型选择 */}
         <Tooltip>
@@ -457,8 +450,8 @@ export function ChatArea() {
           </TooltipContent>
         </Tooltip>
 
-        {/* 联网搜索：DeepSeek 原生能力，其它提供商不可用 */}
-        {currentProvider === "deepseek" && (
+        {/* 联网搜索：DeepSeek 原生能力；其它提供商在有 DeepSeek key 时借用 DeepSeek 的 Search/Fetch API（server 的 parseSettings） */}
+        {deepseekAvailable && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -474,7 +467,9 @@ export function ChatArea() {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
-              {webSearch ? "联网搜索已开启" : "开启联网搜索"}
+              {currentProvider === "deepseek"
+                ? webSearch ? "联网搜索已开启" : "开启联网搜索"
+                : webSearch ? "联网搜索已开启（使用 DeepSeek 的搜索 API）" : "开启联网搜索（使用 DeepSeek 的搜索 API）"}
             </TooltipContent>
           </Tooltip>
         )}
@@ -653,32 +648,15 @@ export function ChatArea() {
           </div>
         )}
 
-        {/* 清空对话 */}
-        {messages.length > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={toolbarButtonClass}
-                onClick={handleClearChat}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span className="hidden sm:inline">{t("chat.clear")}</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              {t("chat.clearConversation")}
-            </TooltipContent>
-          </Tooltip>
-        )}
       </div>
     </TooltipProvider>
   );
 
   const inputElement = (
+    <div className="relative">
+      {slash.open && <SlashMenu items={slash.items} index={slash.index} onHover={slash.setIndex} onPick={pickCommand} />}
     <ChatInput
+      interceptKey={slash.interceptKey}
       value={input}
       onChange={setInput}
       onSend={handleSend}
@@ -689,6 +667,7 @@ export function ChatArea() {
       placeholder={assembledPrompt ? t("chat.placeholderWithPrompt") : t("chat.placeholderDefault")}
       toolbar={toolbar}
     />
+    </div>
   );
 
   // 空状态：居中显示欢迎信息和输入框（仅在没有消息且不在生成中时显示）
@@ -788,17 +767,8 @@ export function ChatArea() {
       )}
       </div>
 
-      {/* 排队中的插话 / 后续消息 */}
-      <QueuedBar inbox={inbox} />
-
-      {/* 等待审批的工具调用，每个一条 */}
-      <PendingApprovalHint callIds={awaitingApproval} />
-
-      {/* 定时提醒（/loop） */}
-      <ScheduleBar />
-
-      {/* 目标（/goal）状态条 */}
-      <GoalBar {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
+      {/* 上下文条：等待审批 / 目标 / 收件箱 / 定时提醒，只显示最重要的一项 */}
+      <ContextStrip approvals={awaitingApproval} inbox={inbox} {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
 
       {/* Input Area - 固定在底部 */}
       <div className="flex-shrink-0 border-t p-4">

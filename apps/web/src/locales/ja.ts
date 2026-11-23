@@ -64,7 +64,7 @@ const ja: TranslationDictionary = {
     "markdown": "Markdown",
     "plainText": "プレーンテキスト",
     "markdownRendering": "Markdown レンダリング",
-    "placeholderDefault": "メッセージを入力、または @tool で MCP ツールを呼び出し...",
+    "placeholderDefault": "メッセージを入力、/ でコマンド",
     "placeholderWithPrompt": "システムプロンプト有効...",
     "webSearch": "ウェブ検索",
     "temperature": "温度",

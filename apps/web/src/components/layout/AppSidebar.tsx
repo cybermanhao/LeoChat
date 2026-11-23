@@ -170,20 +170,27 @@ export function AppSidebar() {
             </button>
           </>
         ) : (
-          <button
-            onClick={() => navigate("/settings")}
-            className={cn(
-              "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-              inSettings ? "bg-accent text-accent-foreground" : "text-foreground/80 hover:bg-muted",
-            )}
-          >
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1 text-left">{t("nav.settings")}</span>
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title={t("sidebar.mcpConnected")}>
-              <span className={cn("h-1.5 w-1.5 rounded-full", connected > 0 ? "bg-green-500" : "bg-muted-foreground/40")} />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigate("/settings")}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                inSettings ? "bg-accent text-accent-foreground" : "text-foreground/80 hover:bg-muted",
+              )}
+            >
+              <Settings className="h-4 w-4 text-muted-foreground" />
+              <span className="flex-1 text-left">{t("nav.settings")}</span>
+            </button>
+            {/* MCP 状态：输入框下不再放 MCP 面板（重设计 P3），从这里直达服务器页 */}
+            <button
+              onClick={() => navigate("/settings/mcp/servers")}
+              title={t("sidebar.mcpConnected")}
+              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", connected > 0 ? "bg-primary" : "bg-muted-foreground/40")} />
               {t("sidebar.mcpStatus", { count: connected })}
-            </span>
-          </button>
+            </button>
+          </div>
         )}
       </div>
     </aside>
