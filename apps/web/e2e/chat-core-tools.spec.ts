@@ -22,6 +22,8 @@ async function enableBash(page: Page) {
   await page.getByTestId("app-sidebar").getByRole("button", { name: /^设置/ }).click();
   await page.getByRole("link", { name: "MCP", exact: true }).click();
   await page.getByRole("link", { name: "工具", exact: true }).click();
+  // 工具列表在服务器连上之后异步到达（"MCP N" 出现不代表工具已就绪）
+  await expect(page.getByText("bash", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
   const row = page.locator("div", { has: page.getByText("bash", { exact: true }) }).filter({ has: page.getByRole("switch") }).last();
   const sw = row.getByRole("switch").first();
   await expect(sw).toHaveAttribute("aria-checked", "false");
