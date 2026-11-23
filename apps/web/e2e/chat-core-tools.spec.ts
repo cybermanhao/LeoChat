@@ -12,6 +12,15 @@ const stopButton = (page: Page) => page.getByRole("button", { name: "Stop genera
  * 让内置 leochat 服务自动连接，再在 MCP → 工具 页面里打开 bash。
  * bash 每次加载页面都会被强制禁用，只能在当前会话里手动打开；所以全程不刷新页面，用应用内导航切回聊天
  */
+/**
+ * 等一个回合跑完：先等"停止"按钮出现（回合已开始），再等它消失。
+ * 只等"消失"会在回合还没开始时立刻通过（联网默认开启后回合变慢，更容易撞上）
+ */
+async function waitForRun(page: Page) {
+  await expect(stopButton(page)).toBeVisible({ timeout: 30_000 });
+  await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
+}
+
 async function enableBash(page: Page) {
   await page.evaluate(() =>
     localStorage.setItem("leochat-mcp-storage", JSON.stringify({ state: { autoConnectServerIds: ["leochat"] }, version: 0 })),
@@ -77,7 +86,7 @@ test("UI tools run in-process: the model switches the theme without any MCP serv
 
   await input(page).fill("请调用 update_theme 工具，把界面主题切换成深绿色（dark-green）。");
   await input(page).press("Enter");
-  await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
+  await waitForRun(page);
   await expect(page.locator("html")).toHaveClass(/dark/, { timeout: 10_000 });
   const stored = await page.evaluate(() => localStorage.getItem("ai-chatbox-theme"));
   expect(stored).toContain("dark-green");
@@ -93,7 +102,7 @@ test("full access (permission preset) runs bash without an approval banner", asy
 
   await input(page).fill("请用 bash 工具执行命令 `echo leochat-full-access`，然后把输出原样告诉我。");
   await input(page).press("Enter");
-  await expect(stopButton(page)).toHaveCount(0, { timeout: 120_000 });
+  await waitForRun(page);
   await expect(page.getByText("AI 请求执行")).toHaveCount(0);
   await expect(page.locator("[data-message-id]").last()).toContainText("leochat-full-access");
 });

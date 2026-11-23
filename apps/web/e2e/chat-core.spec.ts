@@ -55,8 +55,8 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
   test.info().annotations.push({ type: "flaky", description: "model may skip the search" });
   await page.goto("/");
   await resetStateBypassOnboarding(page);
-  await page.getByRole("button", { name: "联网" }).click();
-  await expect(page.getByRole("button", { name: "联网" })).toHaveAttribute("aria-pressed", "true");
+  // 联网默认开启（2026-11-22）；按钮名只认输入框下的开关（侧边栏会话标题里也可能有"联网"）
+  await expect(page.getByRole("button", { name: "联网", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   await input(page).fill("联网搜索：DeepSeek 最新发布的模型叫什么？一句话回答并注明来源。");
   await input(page).press("Enter");
