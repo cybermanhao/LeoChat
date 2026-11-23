@@ -32,6 +32,12 @@ export interface ChatInputProps {
   onQueue?: () => void;
   /** 先于输入框处理按键（例如 / 命令菜单的上下选择、回车确认）；返回 true 表示已处理 */
   interceptKey?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /** 没有文字也能发送（例如只带附件） */
+  allowEmpty?: boolean;
+  /** 显示在输入框里、文字上方（例如待发送的附件） */
+  header?: React.ReactNode;
+  /** 粘贴（例如粘贴图片当附件） */
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 /** 输入法组字期间（中文拼音选词等）的按键不能当作发送或停止 */
@@ -58,6 +64,9 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
       onSteer,
       onQueue,
       interceptKey,
+      allowEmpty = false,
+      header,
+      onPaste,
     },
     ref
   ) => {
@@ -110,7 +119,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        if (!value.trim()) return;
+        if (!value.trim() && !allowEmpty) return;
         if (!isBusy) {
           onSend();
         } else if ((e.ctrlKey || e.metaKey) && onQueue) {
@@ -132,11 +141,15 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     return (
       <div className={cn("flex flex-col", className)}>
+        {/* 输入框顶部（待发送的附件等），和输入区域连成一个框 */}
+        {header && <div className="rounded-t-lg border border-b-0 bg-background px-2 pt-2">{header}</div>}
+
         {/* 输入区域 */}
         <div
           className={cn(
             "flex items-end gap-2 rounded-lg border bg-background p-2",
-            toolbar && "rounded-b-none border-b-0"
+            toolbar && "rounded-b-none border-b-0",
+            header && "rounded-t-none border-t-0"
           )}
         >
           {onAttach && (
@@ -159,6 +172,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={onPaste}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
@@ -214,7 +228,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
               size="icon"
               className="h-9 w-9 shrink-0"
               onClick={onSend}
-              disabled={disabled || !value.trim()}
+              disabled={disabled || (!value.trim() && !allowEmpty)}
             >
               <SendHorizontal className="h-5 w-5" />
               <span className="sr-only">Send message</span>

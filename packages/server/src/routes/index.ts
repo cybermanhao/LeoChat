@@ -8,6 +8,7 @@ import { LLMService, type LLMProvider } from "../services/llm.js";
 import { ImageProxyService } from "../services/image-proxy.js";
 import type { MCPServerConfig } from "@ai-chatbox/shared";
 import { createConversationRoutes } from "./conversations.js";
+import { createAttachmentRoutes } from "./attachments.js";
 
 // Repo root: routes/ -> src/ -> server/ -> packages/ -> root (4 levels up)
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -83,6 +84,7 @@ export function createRoutes(context: ServerContext, injectedLLM?: InstanceType<
 
   // GUI 迁移第二步：会话与运行接口（直接发 core 事件）
   app.route("/", createConversationRoutes(context, llmService, truncateResult, sanitizeLLMError));
+  app.route("/", createAttachmentRoutes(context));
 
   // Get available LLM providers
   app.get("/llm/providers", (c) => {

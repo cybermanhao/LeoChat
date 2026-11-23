@@ -1,6 +1,6 @@
 import type { LLMConfig, MCPTool } from "@ai-chatbox/shared";
 import type { RunViewState } from "@leochat/core/view";
-import type { ConversationMeta, GoalView, InboxView, ScheduleView } from "../lib/agent-api";
+import type { AttachmentMeta, ConversationMeta, GoalView, InboxView, ScheduleView } from "../lib/agent-api";
 import type { LoopRule } from "../lib/loop-command";
 
 export type LLMProvider = "deepseek" | "openrouter" | "openai" | "moonshot" | "kimi" | "google";
@@ -88,9 +88,10 @@ export interface GenerationSlice {
   /** 连上 / 断开当前会话的事件流（打开会话时连上，断线自动重连）；null 表示断开 */
   connect: (id: string | null) => void;
   /** 发送：空闲时开始新的一轮；运行中作为插话送进当前这一轮 */
-  sendMessage: (content: string, systemPrompt?: string) => Promise<void>;
+  /** 发消息（运行中是插话）；返回是否送出 */
+  sendMessage: (content: string, systemPrompt?: string, attachments?: AttachmentMeta[]) => Promise<boolean>;
   /** 排队：当前这一轮结束后处理 */
-  queueFollowUp: (content: string, systemPrompt?: string) => Promise<void>;
+  queueFollowUp: (content: string, systemPrompt?: string, attachments?: AttachmentMeta[]) => Promise<boolean>;
   /** 撤回收件箱里一条还没处理的输入 */
   withdraw: (itemId: string) => Promise<void>;
   /** 停止：中止当前这一轮并清空收件箱（目标轮次则暂停目标） */

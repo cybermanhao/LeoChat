@@ -67,6 +67,18 @@ export interface ScheduleView {
   nextAt: number | null;
 }
 
+/** 已上传的附件（与 server 的 AttachmentMeta 相同） */
+export interface AttachmentMeta {
+  id: string;
+  filename: string;
+  mediaType: string;
+  bytes: number;
+  kind: "image" | "file";
+}
+
+/** 消息里的附件引用（server 写进会话日志的形式）："attachment:<id>" */
+export const ATTACHMENT_PREFIX = "attachment:";
+
 const VITE_BACKEND_URL = typeof import.meta !== "undefined" ? import.meta.env?.VITE_BACKEND_URL : undefined;
 
 async function base(): Promise<string> {
@@ -111,7 +123,21 @@ export async function* parseEventStream(body: ReadableStream<Uint8Array>): Async
   }
 }
 
+/** 附件的地址（图片缩略图、文件下载） */
+export async function attachmentUrl(id: string): Promise<string> {
+  return `${await base()}/attachments/${encodeURIComponent(id)}`;
+}
+
 export const agentApi = {
+  /** 上传一个附件；相同内容返回同一个 id */
+  uploadAttachment: async (file: File): Promise<AttachmentMeta> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${await base()}/attachments`, { method: "POST", body: form });
+    if (res.status === 413) throw new Error("文件太大（图片最大 20 MB，其它文件最大 50 MB）");
+    if (!res.ok) throw new Error(`上传失败（${res.status}）`);
+    return (await res.json()) as AttachmentMeta;
+  },
   listConversations: () => call<{ conversations: ConversationMeta[] }>("GET", "/conversations").then((r) => r.conversations),
   createConversation: (title?: string) => call<ConversationMeta>("POST", "/conversations", title ? { title } : {}),
   loadConversation: (id: string) => call<LoadedConversation>("GET", `/conversations/${encodeURIComponent(id)}`),
@@ -119,7 +145,7 @@ export const agentApi = {
   deleteConversation: (id: string) => call<unknown>("DELETE", `/conversations/${encodeURIComponent(id)}`),
 
   /** 发一条消息：写进收件箱后立即返回。next-turn 发送 / 排队，next-step 插话（送进正在运行的这一轮） */
-  sendMessage: (conversationId: string, input: { text: string; target: "next-turn" | "next-step"; settings: RunSettings }) =>
+  sendMessage: (conversationId: string, input: { text: string; target: "next-turn" | "next-step"; settings: RunSettings; attachments?: string[] }) =>
     call<{ item: { id: string } }>("POST", `/conversations/${encodeURIComponent(conversationId)}/messages`, input),
   /** 撤回一条还没处理的输入 */
   withdraw: (conversationId: string, itemId: string) =>

@@ -6,13 +6,14 @@
  *   最终回答：无底卡、全宽；来源是末尾一排编号小标签
  *   操作（复制……）：悬停时出现
  */
-import { memo, useMemo, useState, type ReactNode } from "react";
-import { AlarmClock, Check, Copy, Paperclip, PencilLine, Target } from "lucide-react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlarmClock, Check, Copy, FileText, Paperclip, PencilLine, Target } from "lucide-react";
 import { LeoCardView, cn } from "@ai-chatbox/ui";
 import { normalizeLeoCard, type LeoCard, type LeoCardAction } from "@ai-chatbox/shared";
 import type { CardsHint, Citation } from "@leochat/core";
 import type { ViewMessage, ViewPart } from "@leochat/core/view";
 import { toolOutputText } from "../../../stores/chat-generation";
+import { ATTACHMENT_PREFIX, attachmentUrl } from "../../../lib/agent-api";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { answerText, goalRoundOf, reminderOf, splitTurn, type ToolPart, type Turn } from "./group";
 
@@ -122,13 +123,10 @@ function UserMessage({ message, onEdit }: { message: ViewMessage; onEdit?: (text
         ) : (
           text && <div className="whitespace-pre-wrap break-words">{text}</div>
         )}
-        {message.parts.map((p, i) =>
-          p.type === "image" || p.type === "file" ? (
-            <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Paperclip className="h-3 w-3" />
-              {p.type === "file" ? (p.block.filename ?? p.block.fileId) : "图片"}
-            </div>
-          ) : null,
+        {message.parts.some((p) => p.type === "image" || p.type === "file") && (
+          <div className={cn("flex flex-wrap items-start justify-end gap-1.5", text && "mt-2")}>
+            {message.parts.map((p, i) => (p.type === "image" || p.type === "file" ? <UserAttachment key={i} part={p} /> : null))}
+          </div>
         )}
       </div>
       {!reminder && text && (
@@ -142,6 +140,53 @@ function UserMessage({ message, onEdit }: { message: ViewMessage; onEdit?: (text
         </div>
       )}
     </div>
+  );
+}
+
+/** 附件引用（server 写进日志的 "attachment:<id>"）对应的地址 */
+function useAttachmentHref(ref: string | undefined): string | undefined {
+  const id = ref?.startsWith(ATTACHMENT_PREFIX) ? ref.slice(ATTACHMENT_PREFIX.length) : undefined;
+  const [href, setHref] = useState<string>();
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void attachmentUrl(id).then((u) => alive && setHref(u));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  return id ? href : undefined;
+}
+
+/** 用户消息里的附件：图片显示缩略图，其它文件显示文件名，点开下载 */
+function UserAttachment({ part }: { part: Extract<ViewPart, { type: "image" | "file" }> }) {
+  const ref = part.type === "image" ? (part.block.source.kind === "url" ? part.block.source.value : undefined) : part.block.fileId;
+  const href = useAttachmentHref(ref);
+  if (part.type === "image") {
+    const src = href ?? (part.block.source.kind === "base64" ? `data:${part.block.source.mediaType ?? "image/png"};base64,${part.block.source.value}` : undefined);
+    if (!src) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Paperclip className="h-3 w-3" />图片</span>;
+    return (
+      <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border" data-attachment="image">
+        <img src={src} alt="" className="max-h-48 max-w-[16rem] object-contain" />
+      </a>
+    );
+  }
+  const name = part.block.filename ?? "文件";
+  const body = (
+    <>
+      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="truncate">{name}</span>
+    </>
+  );
+  const cls = "inline-flex max-w-[16rem] items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
+  return href ? (
+    <a href={href} download={name} className={cn(cls, "hover:bg-accent")} data-attachment="file" title={name}>
+      {body}
+    </a>
+  ) : (
+    <span className={cls} data-attachment="file" title={name}>
+      {body}
+    </span>
   );
 }
 

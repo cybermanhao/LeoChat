@@ -162,3 +162,10 @@
   - `/` 命令菜单（`lib/slash-commands.ts` + `chat/SlashMenu`）：按组列出 /goal /loop /details /clear，↑↓ 选择，Enter / Tab 确认。原计划里的"`/` `@` 保持现有功能"不成立——之前没有这两个菜单，`@tool` 的提示文字是误导，已改。`@` 菜单暂不做。
   - 顺带修了暂停目标的竞态：暂停落在"目标轮次已领取、运行还没开始"的窗口里时，那一轮不会被中止；以及 core-bridge 对已经中止的 signal 永远等下去。
   - 附件（⊕，按 dsh 的 attachment：图片存本地后发给模型，其它文件只读保存、给模型路径）拆成 P3b 单独做。
+- **P3b 附件（2026-11-23）**：按 dsh 的 attachment / attachment-local。
+  - server：`attachments.ts` 按内容 sha256 存在 `<dataDir>/attachments`，相同内容只存一份、读时校验；`POST /api/attachments`（图片 ≤20 MB，其它 ≤50 MB）、`GET /api/attachments/:id`（只有 PNG/JPEG/WebP/GIF 内联显示，其它一律当下载，SVG 不算图片）。
+  - 会话日志里只存引用 `attachment:<id>`，不存 base64、不存路径；每轮发请求前由 `withAttachments` 换成内容：能看图的模型 → base64 图片；原生 DeepSeek 的文件 → 上传到 Files API 换 `file_id`（PDF/Word/PPT 用 text_recognition，其它用 user_data），按账号缓存；读不了时换成一行说明，不悄悄丢掉。
+  - 和 dsh 不同的一点：dsh 的普通文件只给模型路径、让它用文件工具读；LeoChat 默认没有文件工具，所以文档交给 DeepSeek Files 直接读。
+  - `deepseek-v4-flash` 计为能看图（服务端路由到 V4.1 Flash，见 docs/research/deepseek-app-api-2026-11.md）。
+  - 前端：输入框的回形针、粘贴、拖放都能加附件；上传中按回车会等上传完再发，有失败的就不发并提示；用户气泡里图片显示缩略图，文件可下载。
+  - 没做：附件的独立 OCR 按钮（Files 已经在上传时解析文档）；非 DeepSeek 提供商的图片 / 文件输入（目前给一行说明）。

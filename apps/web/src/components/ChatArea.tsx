@@ -31,6 +31,7 @@ import { ContextStrip } from "./chat/ContextStrip";
 import { SlashMenu, useSlashMenu } from "./chat/SlashMenu";
 import type { SlashCommand } from "../lib/slash-commands";
 import { useStickToBottom } from "./chat/useStickToBottom";
+import { AttachmentChips, useAttachments } from "./chat/useAttachments";
 import { parseLoopCommand } from "../lib/loop-command";
 import { showToast } from "../stores/toast";
 
@@ -365,15 +366,40 @@ export function ChatArea() {
   }, [clearCurrentConversation]);
 
   // 运行中：Enter 插话，Ctrl/Cmd+Enter 排队
-  const handleSteer = () => {
-    if (input.trim()) sendMessage(input, assembledPrompt);
+  // 附件（P3b）：上传完成的随消息发出，发送成功后清空
+  const attachments = useAttachments();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  /** 发出文字和附件：附件还在上传就等它传完再发；有上传失败的就不发，让用户先处理 */
+  const deliver = (text: string, send: typeof sendMessage) => {
+    if (!text.trim() && !attachments.items.length) return;
+    // 附件和文字一样一按就从输入框拿走；等它们传完再发，失败就整组放回
+    const taken = attachments.take();
+    if (taken.length) setInput("");
+    void (async () => {
+      const { ready, failed } = await attachments.settled(taken);
+      if (failed.length) {
+        attachments.restore(taken);
+        setInput(text);
+        showToast(`附件上传失败：${failed.join("、")}。移除后再发送`, "destructive");
+        return;
+      }
+      if (!text.trim() && !ready.length) return;
+      const ok = await send(text, assembledPrompt, ready);
+      if (ok) attachments.release(taken);
+      else attachments.restore(taken); // 没送出去：附件放回输入框（文字由 store 放回）
+    })();
   };
-  const handleQueue = () => {
-    if (input.trim()) queueFollowUp(input, assembledPrompt);
+  const handleSteer = () => deliver(input, sendMessage);
+  const handleQueue = () => deliver(input, queueFollowUp);
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files);
+    if (!files.length) return; // 普通文字照常粘贴
+    e.preventDefault();
+    attachments.add(files);
   };
 
   const runInput = (text: string) => {
-    if (text.trim() && !isGenerating) {
+    if ((text.trim() || attachments.items.length > 0) && !isGenerating) {
       // 在用户手势中请求通知权限（首次），之后静默跳过
       if (typeof Notification !== "undefined" && Notification.permission === "default") {
         Notification.requestPermission();
@@ -408,7 +434,7 @@ export function ChatArea() {
         else void createSchedule(loop.prompt, loop.rule, assembledPrompt || undefined);
         return;
       }
-      sendMessage(text, assembledPrompt);
+      deliver(text, sendMessage);
     }
   };
   const handleSend = () => runInput(input);
@@ -653,10 +679,35 @@ export function ChatArea() {
   );
 
   const inputElement = (
-    <div className="relative">
+    <div
+      className="relative"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        attachments.add(Array.from(e.dataTransfer.files));
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        data-testid="attachment-input"
+        onChange={(e) => {
+          attachments.add(Array.from(e.target.files ?? []));
+          e.target.value = ""; // 允许再次选同一个文件
+        }}
+      />
       {slash.open && <SlashMenu items={slash.items} index={slash.index} onHover={slash.setIndex} onPick={pickCommand} />}
     <ChatInput
       interceptKey={slash.interceptKey}
+      onAttach={() => fileInputRef.current?.click()}
+      onPaste={handlePaste}
+      allowEmpty={attachments.items.length > 0}
+      header={attachments.items.length ? <AttachmentChips items={attachments.items} onRemove={attachments.remove} /> : undefined}
       value={input}
       onChange={setInput}
       onSend={handleSend}

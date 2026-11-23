@@ -9,7 +9,7 @@ import { processToolResultForUICommands, executeUICommand } from "../lib/ui-comm
 import type { CommandName } from "../lib/ui-commands";
 import { LEO_ACTION_EVENT } from "../lib/card-events";
 import { handleApiError } from "../lib/api-error";
-import { agentApi, type GoalAction, type GoalView, type InboxView, type RunSettings } from "../lib/agent-api";
+import { agentApi, type AttachmentMeta, type GoalAction, type GoalView, type InboxView, type RunSettings } from "../lib/agent-api";
 import { chatApi } from "../lib/api";
 import { sendOSNotification } from "../lib/os-notification";
 import { showToast } from "./toast";
@@ -138,23 +138,32 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     }
   }
 
-  async function post(content: string, target: "next-turn" | "next-step", systemPrompt?: string) {
+  /** 发出一条消息；成功返回 true（失败时文字放回输入框，附件由调用方保留） */
+  async function post(content: string, target: "next-turn" | "next-step", systemPrompt?: string, attachments: AttachmentMeta[] = []): Promise<boolean> {
     const text = content.trim();
-    if (!text) return;
+    if (!text && !attachments.length) return false;
     const id = await ensureConversation();
-    if (!id) return;
+    if (!id) return false;
+    const title = text || attachments.map((a) => a.filename).join("、");
     set((s) => ({
       input: "",
       conversations: s.conversations.map((c) =>
-        c.id === id ? { ...c, title: c.title || text.replace(/\s+/g, " ").slice(0, 40), updatedAt: Date.now() } : c,
+        c.id === id ? { ...c, title: c.title || title.replace(/\s+/g, " ").slice(0, 40), updatedAt: Date.now() } : c,
       ),
     }));
     try {
-      await agentApi.sendMessage(id, { text: content, target, settings: runSettings(get(), systemPrompt) });
+      await agentApi.sendMessage(id, {
+        text: content,
+        target,
+        settings: runSettings(get(), systemPrompt),
+        ...(attachments.length ? { attachments: attachments.map((a) => a.id) } : {}),
+      });
+      return true;
     } catch (e) {
       console.error("[chat] send failed", e);
       set({ input: content }); // 没送出去：放回输入框
       handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
+      return false;
     }
   }
 
@@ -214,9 +223,9 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
       })();
     },
 
-    sendMessage: (content, systemPrompt) => post(content, get().isGenerating ? "next-step" : "next-turn", systemPrompt),
+    sendMessage: (content, systemPrompt, attachments) => post(content, get().isGenerating ? "next-step" : "next-turn", systemPrompt, attachments),
 
-    queueFollowUp: (content, systemPrompt) => post(content, "next-turn", systemPrompt),
+    queueFollowUp: (content, systemPrompt, attachments) => post(content, "next-turn", systemPrompt, attachments),
 
     withdraw: async (itemId) => {
       const id = get().currentConversationId;

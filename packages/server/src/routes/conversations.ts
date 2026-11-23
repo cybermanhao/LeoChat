@@ -32,7 +32,17 @@ import {
   withInstructions,
 } from "@leochat/node";
 import type { LLMProvider } from "@ai-chatbox/shared";
-import { deepseekFetch, deepseekSearch } from "@leochat/deepseek";
+import { createHash } from "node:crypto";
+import { deepseekFetch, deepseekFiles, deepseekSearch } from "@leochat/deepseek";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  attachmentBlock,
+  filePurpose,
+  isAttachmentId,
+  withAttachments,
+  type AttachmentMeta,
+  type ResolveOptions,
+} from "../attachments.js";
 import type { ServerContext } from "../server.js";
 import { mcpCoreTools, pendingApprovalAnswerer } from "../core-bridge.js";
 import { selectProvider, type ProviderSource, type RunProvider } from "../providers.js";
@@ -105,6 +115,26 @@ export function createConversationRoutes(
     return p;
   };
 
+  /** 附件怎么交给这个模型：能看图就发图片；原生 DeepSeek 把文档上传到 Files API（file_id 按账号缓存） */
+  function attachmentOptions(provider: RunProvider, model: string): ResolveOptions {
+    const vision = provider.capabilities(model).vision;
+    const key = provider.native ? llm.getApiKey?.("deepseek") : undefined;
+    if (!key || !context.attachments) return { vision };
+    const store = context.attachments;
+    const account = createHash("sha256").update(key).digest("hex").slice(0, 16);
+    const files = deepseekFiles({ apiKey: key });
+    return {
+      vision,
+      uploadFile: async (meta, data, signal) => {
+        const cached = await store.remoteId(meta.id, account);
+        if (cached) return cached;
+        const up = await files.upload(new Blob([new Uint8Array(data)], { type: meta.mediaType }), meta.filename, filePurpose(meta), signal ? { signal } : {});
+        await store.setRemoteId(meta.id, account, up.id);
+        return up.id;
+      },
+    };
+  }
+
   /** 校验运行设置；不合法时返回错误文字 */
   function parseSettings(body: RunSettingsBody): RunSettings | string {
     if (body.system !== undefined && (typeof body.system !== "string" || body.system.length > MAX_SYSTEM)) return "invalid system prompt";
@@ -118,6 +148,7 @@ export function createConversationRoutes(
       allow = new Set(body.tools as string[]);
     }
     const { provider, model } = selectProvider(llm, body.provider, body.model);
+    if (context.attachments) withAttachments(provider, context.attachments, attachmentOptions(provider, model));
     const temperature = typeof body.temperature === "number" && body.temperature >= 0 && body.temperature <= 2 ? body.temperature : undefined;
     // 联网搜索（按 dsh：和模型无关）：原生 DeepSeek 用服务端 web_search（带引用）；
     // 其它提供商挂 DeepSeek 的独立 Search / Fetch API 作为普通工具，需要配置了 DeepSeek key
@@ -283,9 +314,21 @@ export function createConversationRoutes(
   app.post("/conversations/:id/messages", async (c) => {
     const id = c.req.param("id");
     if (!SAFE_ID.test(id)) return c.json({ error: "Invalid id" }, 400);
-    const body = await readJson<{ text?: unknown; target?: unknown; settings?: RunSettingsBody }>(c);
-    if (!body || typeof body.text !== "string" || !body.text.trim()) return c.json({ error: "text is required" }, 400);
+    const body = await readJson<{ text?: unknown; target?: unknown; settings?: RunSettingsBody; attachments?: unknown }>(c);
+    if (!body || typeof body.text !== "string") return c.json({ error: "text is required" }, 400);
     if (body.text.length > MAX_TEXT) return c.json({ error: "text too long" }, 400);
+    // 附件（P3b）：只收已上传的 id，最多 MAX_ATTACHMENTS_PER_MESSAGE 个
+    const ids = body.attachments ?? [];
+    if (!Array.isArray(ids) || ids.length > MAX_ATTACHMENTS_PER_MESSAGE || !ids.every((x) => typeof x === "string" && isAttachmentId(x))) {
+      return c.json({ error: "invalid attachments" }, 400);
+    }
+    const metas: AttachmentMeta[] = [];
+    for (const aid of ids as string[]) {
+      const m = await context.attachments?.meta(aid);
+      if (!m) return c.json({ error: "unknown attachment" }, 400);
+      metas.push(m);
+    }
+    if (!body.text.trim() && !metas.length) return c.json({ error: "text is required" }, 400);
     const target = body.target === "next-step" ? "next-step" : body.target === undefined || body.target === "next-turn" ? "next-turn" : null;
     if (!target) return c.json({ error: "invalid target" }, 400);
     const settings = body.settings && typeof body.settings === "object" ? settingsBodyOf(body.settings) : {};
@@ -294,8 +337,10 @@ export function createConversationRoutes(
     const conversations = await log();
     const conv = await conversations.load(id);
     if (!conv) return c.json({ error: "Not found" }, 404);
-    if (!conv.meta.title) await conversations.setTitle(id, body.text.trim().replace(/\s+/g, " ").slice(0, 40));
-    const item = await (await agentReady(id)).insert(target, userMessage(body.text), "user", settings);
+    const title = body.text.trim() || metas.map((m) => m.filename).join("、");
+    if (!conv.meta.title) await conversations.setTitle(id, title.replace(/\s+/g, " ").slice(0, 40));
+    const content = [...(body.text.trim() ? [{ type: "text" as const, text: body.text }] : []), ...metas.map(attachmentBlock)];
+    const item = await (await agentReady(id)).insert(target, userMessage(content), "user", settings);
     return c.json({ item: { id: item.id, target } }, 202);
   });
 

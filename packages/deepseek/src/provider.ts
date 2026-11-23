@@ -52,7 +52,8 @@ const IGNORED_WITH_SERVER_TOOLS = [
 ];
 
 export function deepseekCapabilities(model: string): Capabilities {
-  const vision = model === "deepseek-flash";
+  // V4.1 Flash 原生多模态（2026-09-10）；deepseek-v4-flash / deepseek-v4-flash-vision-exp 被服务端路由到它
+  const vision = model === "deepseek-flash" || model.startsWith("deepseek-v4-flash");
   return {
     contextWindow: 1_000_000,
     maxOutput: 384_000,

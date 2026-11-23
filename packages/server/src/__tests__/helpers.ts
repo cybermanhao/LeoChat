@@ -1,5 +1,6 @@
 /** 路由测试共用：假的 LLM（按脚本逐轮回答）、请求、读会话事件流 */
 import { vi } from "vitest";
+import { attachmentStore } from "../attachments.js";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { conversationLog } from "@leochat/node";
@@ -27,6 +28,8 @@ export function makeApp(
     callTool?: (name: string, args: unknown) => Promise<unknown>;
     /** AGENTS.md 文本；传函数时每轮准备时调用（可以用来卡住一轮的准备阶段） */
     instructions?: string | (() => Promise<string>);
+    /** 开启附件存储（<dir>/attachments） */
+    attachments?: boolean;
   } = {},
 ): TestApp {
   let i = 0;
@@ -51,6 +54,7 @@ export function makeApp(
     pendingApprovals: pending,
     conversations: conversationLog(join(dir, "conversations")),
     ...(opts.schedules ? { schedulesFile: join(dir, "schedules.json") } : {}),
+    ...(opts.attachments ? { attachments: attachmentStore(join(dir, "attachments")) } : {}),
     ...(opts.instructions !== undefined
       ? {
           instructions: async () => {
