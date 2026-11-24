@@ -24,7 +24,7 @@ test("an image goes to the model and stays in the message after reload", async (
   await page.goto("/");
   await resetStateBypassOnboarding(page);
   await page.getByTestId("attachment-input").setInputFiles(fixture("red.png"));
-  await expect(page.getByTestId("pending-attachments")).toContainText("red.png");
+  await expect(page.getByTestId("pending-attachments").getByRole("img", { name: "red.png" })).toBeVisible(); // 图片只显示缩略图（dsh）
   await input(page).fill("这张图是什么颜色？只回答颜色。");
   await input(page).press("Enter");
   await expect(page.getByTestId("pending-attachments")).toHaveCount(0);
@@ -33,6 +33,31 @@ test("an image goes to the model and stays in the message after reload", async (
 
   await page.reload();
   await expect(page.locator("[data-attachment=image] img").first()).toBeVisible({ timeout: 30_000 });
+
+  // 点缩略图看原图，Esc 关闭（dsh 的灯箱）
+  await page.locator("[data-attachment=image]").first().click();
+  await expect(page.getByTestId("lightbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("lightbox")).toHaveCount(0);
+});
+
+test("dragging a file over the window shows the drop overlay; dropping adds it to the rail", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  const dt = await page.evaluateHandle(() => {
+    const d = new DataTransfer();
+    d.items.add(new File(["暗号：拖放测试"], "dropped.txt", { type: "text/plain" }));
+    return d;
+  });
+  await page.dispatchEvent("body", "dragenter", { dataTransfer: dt });
+  await expect(page.getByTestId("drop-overlay")).toBeVisible();
+  await page.dispatchEvent("body", "drop", { dataTransfer: dt });
+  await expect(page.getByTestId("drop-overlay")).toHaveCount(0);
+  const rail = page.getByTestId("pending-attachments");
+  await expect(rail).toContainText("dropped.txt");
+  await expect(rail).toContainText(/TXT · \d+ B/);
+  await rail.getByRole("button", { name: "移除附件 dropped.txt" }).click({ force: true }); // 悬停才显示
+  await expect(rail).toHaveCount(0);
 });
 
 test("a text file goes to the model through DeepSeek Files", async ({ page }) => {

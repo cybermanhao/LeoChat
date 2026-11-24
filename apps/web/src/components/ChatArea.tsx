@@ -36,7 +36,8 @@ import { useComposerFit } from "./chat/useComposerFit";
 import { SlashMenu, useSlashMenu } from "./chat/SlashMenu";
 import type { SlashCommand } from "../lib/slash-commands";
 import { useStickToBottom } from "./chat/useStickToBottom";
-import { AttachmentChips, useAttachments } from "./chat/useAttachments";
+import { AttachmentRail, useAttachments } from "./chat/useAttachments";
+import { DropOverlay } from "./chat/DropOverlay";
 import { parseLoopCommand } from "../lib/loop-command";
 import { showToast } from "../stores/toast";
 
@@ -696,17 +697,8 @@ export function ChatArea() {
   );
 
   const inputElement = (
-    <div
-      className="relative"
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
-      }}
-      onDrop={(e) => {
-        if (!e.dataTransfer.files.length) return;
-        e.preventDefault();
-        attachments.add(Array.from(e.dataTransfer.files));
-      }}
-    >
+    <div className="relative">
+      <DropOverlay onFiles={attachments.add} />
       <input
         ref={fileInputRef}
         type="file"
@@ -724,7 +716,11 @@ export function ChatArea() {
       onAttach={() => fileInputRef.current?.click()}
       onPaste={handlePaste}
       allowEmpty={attachments.items.length > 0}
-      header={attachments.items.length ? <AttachmentChips items={attachments.items} onRemove={attachments.remove} /> : undefined}
+      header={
+        attachments.items.length ? (
+          <AttachmentRail items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} />
+        ) : undefined
+      }
       value={input}
       onChange={setInput}
       onSend={handleSend}

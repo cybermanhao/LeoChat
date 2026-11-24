@@ -6,14 +6,15 @@
  *   最终回答：无底卡、全宽；来源是末尾一排编号小标签
  *   操作（复制……）：悬停时出现
  */
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlarmClock, Check, Copy, FileText, Paperclip, PencilLine, Target } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlarmClock, Check, Copy, FileText, Paperclip, PencilLine, Target, X } from "lucide-react";
 import { LeoCardView, cn } from "@ai-chatbox/ui";
 import { normalizeLeoCard, type LeoCard, type LeoCardAction } from "@ai-chatbox/shared";
 import type { CardsHint, Citation } from "@leochat/core";
 import type { ViewMessage, ViewPart } from "@leochat/core/view";
 import { toolOutputText } from "../../../stores/chat-generation";
 import { ATTACHMENT_PREFIX, attachmentUrl } from "../../../lib/agent-api";
+import { fileCaption } from "../useAttachments";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { answerText, goalRoundOf, reminderOf, splitTurn, type ToolPart, type Turn } from "./group";
 
@@ -125,7 +126,11 @@ function UserMessage({ message, onEdit }: { message: ViewMessage; onEdit?: (text
         )}
         {message.parts.some((p) => p.type === "image" || p.type === "file") && (
           <div className={cn("flex flex-wrap items-start justify-end gap-1.5", text && "mt-2")}>
-            {message.parts.map((p, i) => (p.type === "image" || p.type === "file" ? <UserAttachment key={i} part={p} /> : null))}
+            {message.parts.map((p, i) =>
+              p.type === "image" || p.type === "file" ? (
+                <UserAttachment key={i} part={p} lone={message.parts.filter((q) => q.type === "image" || q.type === "file").length === 1} />
+              ) : null,
+            )}
           </div>
         )}
       </div>
@@ -158,27 +163,55 @@ function useAttachmentHref(ref: string | undefined): string | undefined {
   return id ? href : undefined;
 }
 
-/** 用户消息里的附件：图片显示缩略图，其它文件显示文件名，点开下载 */
-function UserAttachment({ part }: { part: Extract<ViewPart, { type: "image" | "file" }> }) {
+/**
+ * 用户消息里的附件（按 dsh 的 ui-attachment）：只有一张图时按长边 240px 显示（不放大）；
+ * 有多个附件时图片是 64px 方块、文件是 240×64 的卡片。点图片在灯箱里看原图，文件点开下载。
+ */
+function UserAttachment({ part, lone }: { part: Extract<ViewPart, { type: "image" | "file" }>; lone: boolean }) {
   const ref = part.type === "image" ? (part.block.source.kind === "url" ? part.block.source.value : undefined) : part.block.fileId;
   const href = useAttachmentHref(ref);
+  const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
   if (part.type === "image") {
     const src = href ?? (part.block.source.kind === "base64" ? `data:${part.block.source.mediaType ?? "image/png"};base64,${part.block.source.value}` : undefined);
     if (!src) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Paperclip className="h-3 w-3" />图片</span>;
     return (
-      <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border" data-attachment="image">
-        <img src={src} alt="" className="max-h-48 max-w-[16rem] object-contain" />
-      </a>
+      <>
+        <button
+          ref={opener}
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="查看原图"
+          className={cn("block overflow-hidden rounded-lg border border-border", !lone && "h-16 w-16")}
+          data-attachment="image"
+        >
+          <img src={src} alt="" className={lone ? "max-h-60 max-w-60 object-contain" : "h-full w-full object-cover"} />
+        </button>
+        {open && (
+          <Lightbox
+            src={src}
+            onClose={() => {
+              setOpen(false);
+              opener.current?.focus(); // 关闭后焦点回到打开它的缩略图
+            }}
+          />
+        )}
+      </>
     );
   }
   const name = part.block.filename ?? "文件";
   const body = (
     <>
-      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="truncate">{name}</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/80 to-primary text-primary-foreground">
+        <FileText className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 text-left">
+        <span className="block truncate text-xs font-medium text-foreground">{name}</span>
+        <span className="block text-[11px] text-muted-foreground">{fileCaption(name)}</span>
+      </span>
     </>
   );
-  const cls = "inline-flex max-w-[16rem] items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground";
+  const cls = "flex h-16 w-60 items-center gap-2.5 rounded-2xl border border-border bg-background px-3";
   return href ? (
     <a href={href} download={name} className={cn(cls, "hover:bg-accent")} data-attachment="file" title={name}>
       {body}
@@ -187,6 +220,38 @@ function UserAttachment({ part }: { part: Extract<ViewPart, { type: "image" | "f
     <span className={cls} data-attachment="file" title={name}>
       {body}
     </span>
+  );
+}
+
+/** 看原图：Esc、点遮罩或关闭按钮关闭 */
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="原图"
+      data-testid="lightbox"
+    >
+      <img src={src} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+      <button
+        ref={closeRef}
+        type="button"
+        onClick={onClose}
+        aria-label="关闭"
+        className="absolute right-4 top-4 rounded-full border border-border bg-card p-2 text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
