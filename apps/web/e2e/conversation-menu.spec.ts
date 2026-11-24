@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { resetStateBypassOnboarding } from "./helpers";
 
 /**
- * 会话"⋯"菜单（重命名、删除）和手机上收起的输入控件（重设计计划 §3 / §5 / §7）。
+ * 会话"⋯"菜单（重命名、删除）和窄宽度下的输入控件（按 dsh：排不下时模型只显示图标）。
  * 需要运行中的 server：LEOCHAT_E2E_LIVE=1 npx playwright test e2e/conversation-menu.spec.ts
  */
 test.skip(!process.env.LEOCHAT_E2E_LIVE, "needs a running server; set LEOCHAT_E2E_LIVE=1");
@@ -52,14 +52,17 @@ test("rename from the ⋯ menu survives a reload; delete removes the conversatio
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("composer controls fold into ⋯ and show their labels when opened", async ({ page }) => {
+  test("composer controls that do not fit show the model as an icon only (dsh), the others keep their labels", async ({ page }) => {
     await page.goto("/");
     await resetStateBypassOnboarding(page);
-    await expect(page.getByRole("button", { name: "联网", exact: true })).toHaveCount(0);
-    await page.getByTestId("mobile-chips-menu").click();
-    const web = page.getByRole("button", { name: "联网", exact: true });
-    await expect(web).toBeVisible();
-    await expect(web).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("联网", { exact: true })).toBeVisible(); // 文字标签显示出来
+    const controls = page.getByTestId("composer-controls");
+    await expect(controls.getByText("联网", { exact: true })).toBeVisible();
+    await expect(controls.getByText("询问", { exact: true })).toBeVisible();
+    // 390px 下完整的模型名放不下一行：只剩图标，按钮名字仍是模型名
+    const model = controls.getByRole("button", { name: /^deepseek\// });
+    await expect(model).toBeVisible();
+    await expect(model).not.toContainText("deepseek");
+    const box = await controls.boundingBox();
+    expect(box!.height).toBeLessThan(48); // 一行
   });
 });

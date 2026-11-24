@@ -9,8 +9,6 @@ import { resetStateBypassOnboarding } from "./helpers";
  */
 test.skip(!process.env.LEOCHAT_E2E_LIVE, "needs a live model; set LEOCHAT_E2E_LIVE=1");
 test.setTimeout(180_000);
-// 模型偶尔会把这张 64px 的纯红图说成别的颜色（单独重复 4 次都对，2026-11-24）；允许重试一次
-test.describe.configure({ retries: 1 });
 
 const input = (page: Page) => page.locator("textarea").first();
 const stopButton = (page: Page) => page.getByRole("button", { name: "Stop generating" });

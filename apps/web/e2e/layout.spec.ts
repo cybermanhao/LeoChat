@@ -28,8 +28,13 @@ test("below 1024px the sidebar collapses to a rail, can be expanded, and opening
   await expect(page.getByTestId("right-dock")).toBeVisible();
   await expect.poll(() => sidebarWidth(page)).toBeLessThan(80);
 
+  // 900px 时右栏也是让出位置（dsh 的 push），对话区至少 400px
+  const dockBox = await page.getByTestId("right-dock").boundingBox();
+  expect(dockBox!.width).toBeGreaterThanOrEqual(300);
+  expect(dockBox!.x).toBeGreaterThanOrEqual(56 + 400 - 2);
+
   // 回到宽屏：恢复用户自己的设置（默认展开）
-  await page.keyboard.press("Escape"); // 窄屏右栏是覆盖层，Esc 关闭
+  await page.getByTestId("right-dock").getByRole("button", { name: "收起右栏" }).click();
   await page.setViewportSize({ width: 1400, height: 760 });
   await expect.poll(() => sidebarWidth(page)).toBeGreaterThan(200);
 

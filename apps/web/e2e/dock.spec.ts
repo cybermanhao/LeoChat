@@ -27,6 +27,18 @@ test("the Tasks button lights up with a reminder, and the panel stays open acros
   await expect(dock(page)).toContainText("定时提醒");
   await expect(dock(page)).toContainText("看一眼邮箱");
 
+  // 拖左边缘调宽（dsh：用户拖出来的宽度优先，拖动时没有过渡）。先等展开动画结束（右边缘贴到窗口右侧、位置不再变）
+  const viewportWidth = page.viewportSize()!.width;
+  await expect.poll(async () => { const b = (await dock(page).boundingBox())!; return Math.round(b.x + b.width); }).toBe(viewportWidth);
+  await page.waitForTimeout(350);
+  const before = (await dock(page).boundingBox())!;
+  const handle = (await page.getByTestId("dock-resize").boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 120, handle.y + 200, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await dock(page).boundingBox())!.width).toBeLessThan(before.width - 100);
+
   // 按会话记住
   await page.reload();
   await expect(dock(page)).toContainText("看一眼邮箱", { timeout: 15_000 });
