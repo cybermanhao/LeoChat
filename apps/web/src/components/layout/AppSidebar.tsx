@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PanelLeftClose, PanelLeftOpen, SquarePen, Settings, Trash2 } from "lucide-react";
 import { cn } from "@ai-chatbox/ui";
 import { useChatStore } from "../../stores/chat";
 import { useMCPStore } from "../../stores/mcp";
 import { useLayoutStore } from "../../stores/layout";
-import { useIsMobile } from "../../lib/use-media";
+import { useDockEntry } from "../../stores/dock";
+import { useIsMobile, useMediaQuery } from "../../lib/use-media";
 import { useT } from "../../i18n";
 import type { TranslationKey } from "../../lib/i18n";
 
@@ -54,10 +55,22 @@ export function AppSidebar() {
   const mobile = useIsMobile();
   const drawerOpen = useLayoutStore((s) => s.drawerOpen);
   const setDrawerOpen = useLayoutStore((s) => s.setDrawerOpen);
-  // 手机上是抽屉，不收成窄条
-  const collapsed = useLayoutStore((s) => s.sidebarCollapsed) && !mobile;
+  // dsh（ui-layout）：窗口窄于 1024px 时自动收成 56px 窄条；用户仍可以手动展开，回到宽屏恢复自己的设置
+  const narrow = useMediaQuery("(max-width: 1023px)");
+  const [expandedWhileNarrow, setExpandedWhileNarrow] = useState(false);
+  useEffect(() => {
+    if (!narrow) setExpandedWhileNarrow(false);
+  }, [narrow]);
+  // dsh：打开右栏会收起手动展开的侧边栏（窄屏时两边抢空间）
+  const dockOpen = useDockEntry(useChatStore((s) => s.currentConversationId)).open;
+  useEffect(() => {
+    if (dockOpen) setExpandedWhileNarrow(false);
+  }, [dockOpen]);
+  const storeCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const storeToggle = useLayoutStore((s) => s.toggleSidebar);
-  const toggleSidebar = mobile ? () => setDrawerOpen(false) : storeToggle;
+  // 手机上是抽屉，不收成窄条
+  const collapsed = !mobile && (narrow ? !expandedWhileNarrow : storeCollapsed);
+  const toggleSidebar = mobile ? () => setDrawerOpen(false) : narrow ? () => setExpandedWhileNarrow((v) => !v) : storeToggle;
   /** 跳转后在手机上关掉抽屉 */
   const go = (path: string) => {
     if (mobile) setDrawerOpen(false);

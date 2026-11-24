@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { resetStateBypassOnboarding } from "./helpers";
+import { enableBash, resetStateBypassOnboarding } from "./helpers";
 
 /**
  * GUI 迁移第二步的端到端检查：前端直接渲染 core 事件，会话由本地 server 保存。
@@ -70,21 +70,28 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
   await expect(reply.locator('a[href^="http"]').first()).toBeVisible();
 });
 
-test("Ctrl+Enter during a turn queues in the inbox bar, and a queued message can be withdrawn", async ({ page }) => {
+test("Ctrl+Enter during a turn queues behind the pending approval (+1 in the strip), and can be withdrawn from the Tasks tab", async ({ page }) => {
   await page.goto("/");
   await resetStateBypassOnboarding(page);
-  // 这一轮要足够长：负载高时数到 300 可能在撤回之前就结束，排队的消息被领取，撤回按钮随之消失（2026-11-23 现场确认）
-  await input(page).fill("从 1 数到 1000，用逗号分隔，不要其他内容");
+  // 让这一轮停在等待审批上：这一轮一直进行中，排队的消息会留在收件箱里，不取决于模型写得多快
+  //（用"数到 300"时，负载下这一轮 3 秒多就结束，排队的消息还没来得及撤回就被领取了；2026-11-24 现场确认）
+  await enableBash(page);
+  await input(page).fill("请用 bash 工具执行命令 `echo leochat-queue-test`。");
   await input(page).press("Enter");
-  await expect(stopButton(page)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("AI 请求执行")).toBeVisible({ timeout: 90_000 });
+  await expect(stopButton(page)).toBeVisible();
+
   await input(page).fill("这条稍后再说");
   await input(page).press("Control+Enter");
-  const bar = page.getByTestId("inbox-bar");
-  await expect(bar).toContainText("这条稍后再说", { timeout: 10_000 });
-  await bar.getByRole("button", { name: /撤回/ }).click({ timeout: 15_000 });
-  await expect(bar).toHaveCount(0, { timeout: 15_000 }); // 负载高时 server 处理撤回要几秒
-  // 不用等它数完，省 token；这一轮可能恰好结束（停止按钮和发送按钮是同一个 DOM 节点，结束后变成禁用的发送按钮），点不到就算了
-  await stopButton(page).click({ timeout: 5_000 }).catch(() => {});
+  // 上下文条只显示最重要的一项：等待审批排在收件箱前面，排队的消息收在"+1"里，点开是右栏的"任务"
+  await page.getByTestId("context-strip").getByRole("button", { name: "+1" }).click({ timeout: 15_000 });
+  const bar = page.getByTestId("right-dock").getByTestId("inbox-bar");
+  await expect(bar).toContainText("这条稍后再说", { timeout: 15_000 });
+  await bar.getByRole("button", { name: /撤回/ }).click();
+  await expect(bar).toHaveCount(0, { timeout: 15_000 });
+
+  // 拒绝执行，这一轮结束；撤回的消息不会出现在对话里
+  await page.getByRole("button", { name: "拒绝", exact: true }).click();
   await waitIdle(page);
   await expect(page.locator("[data-message-id]", { hasText: "这条稍后再说" })).toHaveCount(0);
 });
