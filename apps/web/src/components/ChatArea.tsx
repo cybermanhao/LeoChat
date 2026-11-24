@@ -27,7 +27,9 @@ import { ModelSelector } from "./ModelSelector";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { TurnView } from "./chat/turn/Turn";
 import { groupTurns, reuseTurns, type Turn } from "./chat/turn/group";
+import type { ViewPart } from "@leochat/core/view";
 import { ContextStrip } from "./chat/ContextStrip";
+import { ApprovalPanel } from "./chat/RunBanners";
 import { ConversationHeader } from "./chat/ConversationHeader";
 import { RightDock } from "./dock/RightDock";
 import { useComposerFit } from "./chat/useComposerFit";
@@ -137,7 +139,10 @@ export function ChatArea() {
   const messages = view.messages;
   // 等待审批的工具调用（由 core 的视图状态推导，不再单独维护队列）
   const awaitingApproval = useMemo(
-    () => messages.flatMap((m) => m.parts).flatMap((p) => (p.type === "tool" && p.state === "awaiting-approval" ? [p.callId] : [])),
+    () =>
+      messages
+        .flatMap((m) => m.parts)
+        .filter((p): p is Extract<ViewPart, { type: "tool" }> => p.type === "tool" && p.state === "awaiting-approval"),
     [messages],
   );
   // 按回合组织（重设计 P2）；内容没变的回合沿用旧对象，流式输出时只重新渲染最后一个回合
@@ -833,11 +838,15 @@ export function ChatArea() {
       </div>
 
       {/* 上下文条：等待审批 / 目标 / 收件箱 / 定时提醒，只显示最重要的一项 */}
-      <ContextStrip approvals={awaitingApproval} inbox={inbox} {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
+      <ContextStrip inbox={inbox} {...(assembledPrompt ? { systemPrompt: assembledPrompt } : {})} />
 
       {/* Input Area - 固定在底部 */}
       <div className="flex-shrink-0 border-t p-4">
-        <div className="mx-auto max-w-3xl">{inputElement}</div>
+        <div className="mx-auto max-w-3xl">
+          {/* 按 dsh（ui-approval）：等待审批时审批面板接管输入框；原输入框留着（草稿不丢），只是藏起来 */}
+          {awaitingApproval[0] && <ApprovalPanel part={awaitingApproval[0]} more={awaitingApproval.length - 1} />}
+          <div className={cn(awaitingApproval.length > 0 && "hidden")}>{inputElement}</div>
+        </div>
       </div>
 
       {/* Dialogs */}

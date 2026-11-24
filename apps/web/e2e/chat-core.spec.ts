@@ -70,28 +70,43 @@ test("web search (DeepSeek native) shows the search and its sources", async ({ p
   await expect(reply.locator('a[href^="http"]').first()).toBeVisible();
 });
 
-test("Ctrl+Enter during a turn queues behind the pending approval (+1 in the strip), and can be withdrawn from the Tasks tab", async ({ page }) => {
+test("a message queued during a turn waits in the inbox while the turn awaits approval, and can be withdrawn", async ({ page }) => {
   await page.goto("/");
   await resetStateBypassOnboarding(page);
   // 让这一轮停在等待审批上：这一轮一直进行中，排队的消息会留在收件箱里，不取决于模型写得多快
-  //（用"数到 300"时，负载下这一轮 3 秒多就结束，排队的消息还没来得及撤回就被领取了；2026-11-24 现场确认）
   await enableBash(page);
   await input(page).fill("请用 bash 工具执行命令 `echo leochat-queue-test`。");
   await input(page).press("Enter");
-  await expect(page.getByText("AI 请求执行")).toBeVisible({ timeout: 90_000 });
-  await expect(stopButton(page)).toBeVisible();
-
+  await expect(input(page)).toHaveValue("");
+  // 审批面板会接管输入框（dsh 的 ui-approval），所以在它出现之前排队
   await input(page).fill("这条稍后再说");
   await input(page).press("Control+Enter");
-  // 上下文条只显示最重要的一项：等待审批排在收件箱前面，排队的消息收在"+1"里，点开是右栏的"任务"
-  await page.getByTestId("context-strip").getByRole("button", { name: "+1" }).click({ timeout: 15_000 });
-  const bar = page.getByTestId("right-dock").getByTestId("inbox-bar");
+
+  await expect(page.getByTestId("approval-panel")).toBeVisible({ timeout: 90_000 });
+  const bar = page.getByTestId("context-strip").getByTestId("inbox-bar");
   await expect(bar).toContainText("这条稍后再说", { timeout: 15_000 });
   await bar.getByRole("button", { name: /撤回/ }).click();
   await expect(bar).toHaveCount(0, { timeout: 15_000 });
 
   // 拒绝执行，这一轮结束；撤回的消息不会出现在对话里
-  await page.getByRole("button", { name: "拒绝", exact: true }).click();
+  await page.getByTestId("approval-panel").getByRole("button", { name: "拒绝", exact: true }).click();
   await waitIdle(page);
   await expect(page.locator("[data-message-id]", { hasText: "这条稍后再说" })).toHaveCount(0);
+});
+
+test("the approval panel takes over the composer: Enter on the request allows it", async ({ page }) => {
+  await page.goto("/");
+  await resetStateBypassOnboarding(page);
+  await enableBash(page);
+  await input(page).fill("请用 bash 工具执行命令 `echo leochat-enter-approve`，然后把输出原样告诉我。");
+  await input(page).press("Enter");
+  const panel = page.getByTestId("approval-panel");
+  await expect(panel).toBeVisible({ timeout: 90_000 });
+  await expect(input(page)).toBeHidden(); // 输入框被接管（还挂载着，草稿不丢）
+  await expect(panel.locator('[aria-label^="AI 请求执行 bash"]')).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(panel).toHaveCount(0, { timeout: 30_000 });
+  await expect(input(page)).toBeVisible();
+  await waitIdle(page);
+  await expect(page.locator("[data-message-id]").last()).toContainText("leochat-enter-approve");
 });

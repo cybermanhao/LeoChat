@@ -9,7 +9,6 @@ import { cn } from "@ai-chatbox/ui";
 import { toolOutputText } from "../../../stores/chat-generation";
 import { useChatStore } from "../../../stores/chat";
 import { useDockStore } from "../../../stores/dock";
-import { ApprovalCard } from "../RunBanners";
 import { formatMs, summarize, summaryText, type ProcessItem, type ServerToolPart, type ToolPart } from "./group";
 import { displayOutput, serverToolDescribe, toolView } from "./tool-views";
 
@@ -153,7 +152,6 @@ const ToolRow = memo(function ToolRow({ part }: { part: ToolPart }) {
           <StatusIcon state={part.state} />
         </span>
       </button>
-      {part.state === "awaiting-approval" && <ApprovalCard part={part} />}
       {open && <ToolDetail part={part} args={args} />}
     </div>
   );
