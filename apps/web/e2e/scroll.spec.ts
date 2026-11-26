@@ -46,5 +46,6 @@ test("follows the stream at the bottom, stays put after the user scrolls up, and
   await page.getByRole("button", { name: /回到底部/ }).click();
   await expect.poll(async () => distance(await metrics(page)), { timeout: 5_000 }).toBeLessThan(120);
   await expect(page.getByRole("button", { name: /回到底部/ })).toHaveCount(0);
-  if (await stopButton(page).count()) await stopButton(page).click(); // 还在生成就停掉，省 token
+  // 还在生成就停掉，省 token；可能恰好结束（停止按钮和发送按钮是同一个 DOM 节点，结束后变成禁用的发送按钮），点不到就算了
+  if (await stopButton(page).count()) await stopButton(page).click({ timeout: 5_000 }).catch(() => {});
 });

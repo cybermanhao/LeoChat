@@ -16,6 +16,7 @@ import { toolOutputText } from "../../../stores/chat-generation";
 import { ATTACHMENT_PREFIX, attachmentUrl } from "../../../lib/agent-api";
 import { fileCaption } from "../useAttachments";
 import { ProcessTimeline } from "./ProcessTimeline";
+import { useSmoothText } from "./useSmoothText";
 import { answerText, goalRoundOf, reminderOf, splitTurn, type ToolPart, type Turn } from "./group";
 
 export interface TurnViewProps {
@@ -68,10 +69,16 @@ export const TurnView = memo(function TurnView({ turn, running, detailed, endLab
   );
 });
 
+/** 正文：流式输出时逐字平滑显示（useSmoothText），结束后立刻显示全部 */
+function AnswerText({ text, streaming, renderText }: { text: string; streaming: boolean; renderText: TurnViewProps["renderText"] }) {
+  const shown = useSmoothText(text, streaming);
+  return <div className="text-sm leading-relaxed">{renderText(shown, streaming)}</div>;
+}
+
 function AnswerPart({ part, renderText, streaming }: { part: ViewPart; renderText: TurnViewProps["renderText"]; streaming: boolean }) {
   switch (part.type) {
     case "text":
-      return part.text ? <div className="text-sm leading-relaxed">{renderText(part.text, streaming && part.streaming)}</div> : null;
+      return part.text ? <AnswerText text={part.text} streaming={streaming && part.streaming} renderText={renderText} /> : null;
     case "image":
       return part.block.source.kind === "file_id" ? (
         <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground"><Paperclip className="h-3 w-3" />图片</div>
