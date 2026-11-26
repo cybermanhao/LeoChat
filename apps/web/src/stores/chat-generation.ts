@@ -136,33 +136,51 @@ export const createGenerationSlice: SliceCreator<GenerationSlice> = (set, get) =
     }
   }
 
+  /**
+   * 发出的消息排成一队，按用户发送的先后送到 server。
+   * 否则新会话还在创建时连发两条，两个请求都在等同一个会话，谁先到 server 不确定，顺序会颠倒（2026-11-26 e2e 现场确认）
+   */
+  let sendQueue: Promise<unknown> = Promise.resolve();
+
   /** 发出一条消息；成功返回 true（失败时文字放回输入框，附件由调用方保留） */
-  async function post(content: string, target: "next-turn" | "next-step", systemPrompt?: string, attachments: AttachmentMeta[] = []): Promise<boolean> {
+  function post(content: string, target: "next-turn" | "next-step", systemPrompt?: string, attachments: AttachmentMeta[] = []): Promise<boolean> {
     const text = content.trim();
-    if (!text && !attachments.length) return false;
-    const id = await ensureConversation();
-    if (!id) return false;
-    const title = text || attachments.map((a) => a.filename).join("、");
-    set((s) => ({
-      input: "",
-      conversations: s.conversations.map((c) =>
-        c.id === id ? { ...c, title: c.title || title.replace(/\s+/g, " ").slice(0, 40), updatedAt: Date.now() } : c,
-      ),
-    }));
-    try {
-      await agentApi.sendMessage(id, {
-        text: content,
-        target,
-        settings: runSettings(get(), systemPrompt),
-        ...(attachments.length ? { attachments: attachments.map((a) => a.id) } : {}),
-      });
-      return true;
-    } catch (e) {
-      console.error("[chat] send failed", e);
-      set({ input: content }); // 没送出去：放回输入框
-      handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
-      return false;
-    }
+    if (!text && !attachments.length) return Promise.resolve(false);
+    // 输入框立刻清空（和按下回车同时），真正的发送排队进行
+    set({ input: "" });
+    /** 没送出去：文字放回输入框；用户这期间又打了字就不覆盖 */
+    const putBack = () => {
+      if (!get().input) set({ input: content });
+    };
+    const run = sendQueue.then(async () => {
+      const id = await ensureConversation();
+      if (!id) {
+        putBack();
+        return false;
+      }
+      const title = text || attachments.map((a) => a.filename).join("、");
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.id === id ? { ...c, title: c.title || title.replace(/\s+/g, " ").slice(0, 40), updatedAt: Date.now() } : c,
+        ),
+      }));
+      try {
+        await agentApi.sendMessage(id, {
+          text: content,
+          target,
+          settings: runSettings(get(), systemPrompt),
+          ...(attachments.length ? { attachments: attachments.map((a) => a.id) } : {}),
+        });
+        return true;
+      } catch (e) {
+        console.error("[chat] send failed", e);
+        putBack();
+        handleApiError(e instanceof Error ? e.message : String(e), get().currentProvider);
+        return false;
+      }
+    });
+    sendQueue = run.catch(() => undefined);
+    return run;
   }
 
   /**

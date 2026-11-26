@@ -186,6 +186,46 @@ describe("input goes to the server inbox", () => {
     expect(get().input).toBe("");
   });
 
+  it("two messages sent while the conversation is still being created reach the server in the order they were sent", async () => {
+    // 回归（2026-11-26 e2e）：两个请求都在等同一个会话，第二条可能先到，模型先回答了它
+    const { get } = makeStore();
+    let resolveCreate!: (v: unknown) => void;
+    api.createConversation.mockReturnValue(new Promise((r) => (resolveCreate = r)));
+    // 模拟网络：每个请求要一会儿才到 server；记录到达顺序和同时在路上的请求数
+    const arrived: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    api.sendMessage.mockImplementation((_id: string, input: { text: string }) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      // 第一条走得慢：如果两条同时在路上，第二条会先到
+      const delay = input.text === "first" ? 30 : 5;
+      return new Promise((r) =>
+        setTimeout(() => {
+          arrived.push(input.text);
+          inFlight--;
+          r({ item: { id: input.text } });
+        }, delay),
+      );
+    });
+    const first = get().sendMessage("first");
+    const second = get().queueFollowUp("second");
+    expect(get().input).toBe(""); // 输入框立刻清空
+    resolveCreate(meta("c1"));
+    await Promise.all([first, second]);
+    expect(api.createConversation).toHaveBeenCalledTimes(1);
+    expect(maxInFlight).toBe(1);
+    expect(arrived).toEqual(["first", "second"]);
+  });
+
+  it("if the conversation cannot be created the text goes back into the input", async () => {
+    const { get } = makeStore();
+    api.createConversation.mockRejectedValue(new Error("down"));
+    await get().sendMessage("keep me");
+    expect(get().input).toBe("keep me");
+    expect(api.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("sending right after New chat waits for that conversation instead of creating a second one", async () => {
     // 回归（2026-11-23 手机 e2e）：新建请求还没返回时就发送，发送那边另建了一个会话，界面停在空会话上
     const { get } = makeStore();
